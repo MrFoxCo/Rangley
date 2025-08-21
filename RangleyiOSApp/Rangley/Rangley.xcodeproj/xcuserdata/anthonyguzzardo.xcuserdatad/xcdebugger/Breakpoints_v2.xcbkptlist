@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Bucket
+   uuid = "1A34CBFB-0E7E-4665-BF8B-3D8EBCF11BC3"
+   type = "1"
+   version = "2.0">
+   <Breakpoints>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            uuid = "C4A66BF1-09AE-4C8B-BEB5-56F7A6A75EDB"
+            shouldBeEnabled = "Yes"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "MeetMate/Lib/Database/TableSchema.swift"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "185"
+            endingLineNumber = "185"
+            landmarkName = "unknown"
+            landmarkType = "0">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            uuid = "4B39B230-296E-492E-9D16-1B3E0F1A9847"
+            shouldBeEnabled = "Yes"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "Chibuya/Lib/Models/LocationInfo.swift"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "19"
+            endingLineNumber = "19"
+            landmarkName = "init(Coordinate:RegionCoordinate:RegionRadius:Name:ThoroughFare:SubThoroughFare:Locality:SubLocality:AdministrativeArea:SubAdministrativeArea:PostalCode:Country:IsoCountryCode:TimeZone:InlandWater:Ocean:)"
+            landmarkType = "7">
+            <Locations>
+               <Location
+                  uuid = "4B39B230-296E-492E-9D16-1B3E0F1A9847 - fcebe8c2b0a32f6c"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "Chibuya.LocationInfo.__allocating_init(Coordinate: Chibuya.Coordinate, RegionCoordinate: Chibuya.Coordinate, RegionRadius: Swift.Double, Name: Swift.String, ThoroughFare: Swift.String, SubThoroughFare: Swift.String, Locality: Swift.String, SubLocality: Swift.String, AdministrativeArea: Swift.String, SubAdministrativeArea: Swift.String, PostalCode: Swift.String, Country: Swift.String, IsoCountryCode: Swift.String, TimeZone: Swift.String, InlandWater: Swift.String, Ocean: Swift.String) -&gt; Chibuya.LocationInfo"
+                  moduleName = "Chibuya.debug.dylib"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/anthonyguzzardo/Developer/Personal/GitHub/Chibuya/Chibuya/Lib/Models/LocationInfo.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "0"
+                  endingLineNumber = "0">
+               </Location>
+               <Location
+                  uuid = "4B39B230-296E-492E-9D16-1B3E0F1A9847 - 4953141f88b47c27"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "Chibuya.LocationInfo.init(Coordinate: Chibuya.Coordinate, RegionCoordinate: Chibuya.Coordinate, RegionRadius: Swift.Double, Name: Swift.String, ThoroughFare: Swift.String, SubThoroughFare: Swift.String, Locality: Swift.String, SubLocality: Swift.String, AdministrativeArea: Swift.String, SubAdministrativeArea: Swift.String, PostalCode: Swift.String, Country: Swift.String, IsoCountryCode: Swift.String, TimeZone: Swift.String, InlandWater: Swift.String, Ocean: Swift.String) -&gt; Chibuya.LocationInfo"
+                  moduleName = "Chibuya.debug.dylib"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/anthonyguzzardo/Developer/Personal/GitHub/Chibuya/Chibuya/Lib/Models/LocationInfo.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "22"
+                  endingLineNumber = "22">
+               </Location>
+            </Locations>
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            uuid = "3871DB91-1B8A-4DF2-9014-25A5B5BFF885"
+            shouldBeEnabled = "Yes"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "Rangle/Lib/Models/MeetCard.swift"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "28"
+            endingLineNumber = "28"
+            landmarkName = "body"
+            landmarkType = "24">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            uuid = "EBBA8D73-0921-4560-8A53-88F0BFC70C16"
+            shouldBeEnabled = "Yes"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "Rangley/Lib/DatabaseSchema/RangleySchema.swift"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "74"
+            endingLineNumber = "74"
+            landmarkName = "lookupTables"
+            landmarkType = "24">
+         </BreakpointContent>
+      </BreakpointProxy>
+   </Breakpoints>
+</Bucket>

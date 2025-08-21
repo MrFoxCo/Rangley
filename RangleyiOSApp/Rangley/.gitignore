@@ -1,0 +1,11 @@
+appsettings.json
+
+# Ignore Database folder and all contents
+*/DatabaseSchema/*
+DatabaseManager.swift
+
+# Ignore app settings
+appsettings.json
+
+.env
+

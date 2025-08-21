@@ -1,0 +1,7 @@
+DELETE FROM tbMeets;
+DELETE FROM tbMeetAddresses;
+DELETE FROM tbMeetIDs;
+DELETE FROM sqlite_sequence WHERE name IN ('tbMeets', 'tbMeetAddresses', 'tbMeetIDs');
+
+DELETE FROM tbMeetChangeStamps;
+DELETE FROM sqlite_sequence WHERE name IN ('tbMeetChangeStamps');

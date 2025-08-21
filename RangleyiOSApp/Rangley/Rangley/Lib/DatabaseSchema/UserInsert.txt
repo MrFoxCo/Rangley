@@ -1,0 +1,27 @@
+INSERT INTO tbUsers(UserID) VALUES(0);
+
+INSERT INTO tbUsers
+(
+      UserID
+     ,FirstName
+) VALUES
+(
+     1
+    ,'Admin'
+);
+
+
+
+INSERT INTO tbUsers
+(
+     FirstName
+    ,LastName
+    ,CellPhone
+    ,Email
+) VALUES
+(
+     'Anthony'
+    ,'Guzzardo'
+    ,'7737060003'
+    ,'agguzzy91@gmail.com'
+);
