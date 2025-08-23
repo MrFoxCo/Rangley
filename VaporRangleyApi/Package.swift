@@ -3,36 +3,37 @@ import PackageDescription
 
 let package = Package(
     name: "VaporRangleyApi",
-    platforms: [
-       .macOS(.v13)
-    ],
+    platforms: [.macOS(.v13)],
     dependencies: [
-        // 💧 A server-side Swift web framework.
         .package(url: "https://github.com/vapor/vapor.git", from: "4.115.0"),
-        // 🔵 Non-blocking, event-driven networking for Swift. Used for custom executors
-        .package(url: "https://github.com/apple/swift-nio.git", from: "2.65.0"),
+        .package(url: "https://github.com/vapor/fluent.git", from: "4.10.0"),
+        .package(url: "https://github.com/vapor/fluent-postgres-driver.git", from: "2.10.0"),
+        .package(url: "https://github.com/vapor/sql-kit.git", from: "3.0.0")
     ],
     targets: [
-        .executableTarget(
-            name: "VaporRangleyApi",
+        .target( // ← library target becomes the App module
+            name: "App",
             dependencies: [
                 .product(name: "Vapor", package: "vapor"),
-                .product(name: "NIOCore", package: "swift-nio"),
-                .product(name: "NIOPosix", package: "swift-nio"),
+                .product(name: "Fluent", package: "fluent"),
+                .product(name: "FluentPostgresDriver", package: "fluent-postgres-driver"),
+                .product(name: "SQLKit", package: "sql-kit"),
             ],
-            swiftSettings: swiftSettings
+            path: "Sources/App",
+            swiftSettings: [.enableUpcomingFeature("ExistentialAny")]
+        ),
+        .executableTarget( // ← tiny runner
+            name: "Run",
+            dependencies: ["App"],
+            path: "Sources/Run",
+            swiftSettings: [.enableUpcomingFeature("ExistentialAny")]
         ),
         .testTarget(
-            name: "VaporRangleyApiTests",
-            dependencies: [
-                .target(name: "VaporRangleyApi"),
-                .product(name: "VaporTesting", package: "vapor"),
+            name: "AppTests",
+            dependencies: ["App",
+                .product(name: "VaporTesting", package: "vapor")
             ],
-            swiftSettings: swiftSettings
+            swiftSettings: [.enableUpcomingFeature("ExistentialAny")]
         )
     ]
 )
-
-var swiftSettings: [SwiftSetting] { [
-    .enableUpcomingFeature("ExistentialAny"),
-] }
