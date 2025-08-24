@@ -11,7 +11,7 @@ let package = Package(
         .package(url: "https://github.com/vapor/sql-kit.git", from: "3.0.0")
     ],
     targets: [
-        .target( // ← library target becomes the App module
+        .target(
             name: "App",
             dependencies: [
                 .product(name: "Vapor", package: "vapor"),
@@ -22,16 +22,20 @@ let package = Package(
             path: "Sources/App",
             swiftSettings: [.enableUpcomingFeature("ExistentialAny")]
         ),
-        .executableTarget( // ← tiny runner
+        .executableTarget(
             name: "Run",
             dependencies: ["App"],
             path: "Sources/Run",
-            swiftSettings: [.enableUpcomingFeature("ExistentialAny")]
+            swiftSettings: [
+                .enableUpcomingFeature("ExistentialAny"),
+                .unsafeFlags(["-cross-module-optimization"], .when(configuration: .release))
+            ]
         ),
         .testTarget(
             name: "AppTests",
-            dependencies: ["App",
-                .product(name: "VaporTesting", package: "vapor")
+            dependencies: [
+                "App",
+                .product(name: "XCTVapor", package: "vapor")
             ],
             swiftSettings: [.enableUpcomingFeature("ExistentialAny")]
         )
