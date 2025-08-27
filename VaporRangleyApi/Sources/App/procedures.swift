@@ -28,7 +28,7 @@ protocol PgCallable {
     associatedtype Output: Content & Sendable
     static var name: RangleyProcName { get }
     static func query(_ input: Input) -> SQLQueryString
-    static func decode(_ row: SQLRow) throws -> Output
+    static func decode(_ row: any SQLRow) throws -> Output
 }
 
 extension PgCallable {
@@ -63,7 +63,7 @@ enum Proc {
         static func query(_ i: IUserReq) -> SQLQueryString {
             // IN args first; pass NULL for each INOUT to receive as columns
             """
-            CALL \(name.rawValue)(
+            CALL \(unsafeRaw: name.rawValue)(
                 \(bind: i.username),
                 \(bind: i.first_name),
                 \(bind: i.last_name),
@@ -75,7 +75,7 @@ enum Proc {
             """
         }
 
-        static func decode(_ row: SQLRow) throws -> IUserRes {
+        static func decode(_ row: any SQLRow) throws -> IUserRes {
             try .init(
                 num_inserted: row.decode(column: "num_inserted", as: Int.self),
                 new_user_id:  row.decode(column: "new_user_id",  as: Int.self)
@@ -106,7 +106,7 @@ enum Proc {
 
         static func query(_ i: IMeetReq) -> SQLQueryString {
             """
-            CALL \(name.rawValue)(
+            CALL \(unsafeRaw: name.rawValue)(
                 \(bind: i.host_user_id),
                 \(bind: i.category_id),
                 \(bind: i.title),
@@ -119,7 +119,7 @@ enum Proc {
             """
         }
 
-        static func decode(_ row: SQLRow) throws -> IMeetRes {
+        static func decode(_ row: any SQLRow) throws -> IMeetRes {
             try .init(
                 num_inserted: row.decode(column: "num_inserted", as: Int.self),
                 new_meet_id:  row.decode(column: "new_meet_id",  as: Int64.self)
