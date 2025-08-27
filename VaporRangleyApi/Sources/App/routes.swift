@@ -1,22 +1,24 @@
+//
+//  routes.swift
+//  VaporRangleyApi
+//
+//  Created by Anthony Guzzardo on 8/27/25.
+//
 import Vapor
+import Fluent
 import SQLKit
 
 public func routes(_ app: Application) throws {
-    app.get("health") { _ in "ok" }
-
-    // Always returns 200 text/plain with details; never throws.
     app.get("dbdiag") { req async -> String in
-        var lines: [String] = []
-        lines.append("dbdiag:")
+        let c = req.application.config
+        var lines = [
+            "dbdiag:",
+            "host:\(c.dbHost) port:\(c.dbPort) name:\(c.dbName) user:\(c.dbUser)"
+        ]
 
-        let host = Environment.get("DB_HOST") ?? "(unset)"
-        let port = Environment.get("DB_PORT") ?? "5432"
-        let name = Environment.get("DB_NAME") ?? "(unset)"
-        let user = Environment.get("DB_USER") ?? "(unset)"
-        lines.append("env host=\(host) port=\(port) db=\(name) user=\(user)")
-
+        // req.db is a Fluent Database; SQLKit adds .sql() if you import SQLKit
         guard let sql = req.db as? (any SQLDatabase) else {
-            lines.append("adapter:error req.db is not SQLDatabase (driver/config missing)")
+            lines.append("adapter:error req.db is not SQLDatabase")
             return lines.joined(separator: "\n")
         }
 
@@ -24,7 +26,7 @@ public func routes(_ app: Application) throws {
             _ = try await sql.raw("select 1 as one").first()
             lines.append("query:ok select 1")
         } catch {
-            lines.append("query:error \(String(describing: error))")
+            lines.append("query:error \(error)")
         }
 
         return lines.joined(separator: "\n")

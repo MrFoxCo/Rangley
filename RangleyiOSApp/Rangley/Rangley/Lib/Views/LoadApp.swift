@@ -9,7 +9,7 @@ struct LoadApp: View {
             Image("RangleySticker")
                 .resizable()
                 .frame(width: 220, height: 220)
-                .shadow(color: Color(hex: "#FFFFFF").opacity(0.6), radius: 25) // subtle cream glow
+                .shadow(color: Color(hex: "#000000").opacity(0.6), radius: 25) // subtle cream glow
             
             Spacer()
             
@@ -23,8 +23,8 @@ struct LoadApp: View {
         .background(
             LinearGradient(
                 gradient: Gradient(colors: [
-                    Color(hex: "#EBD5A3"), // pale sandy beige
-                    Color(hex: "#C9A66B")  // richer desert sand
+                    Color(hex: "000000"),
+                    Color(hex: "#000000")
                 ]),
                 startPoint: .top,
                 endPoint: .bottom
