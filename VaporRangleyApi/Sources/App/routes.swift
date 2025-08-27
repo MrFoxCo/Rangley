@@ -34,8 +34,40 @@ public func routes(_ app: Application) throws {
 
         return lines.joined(separator: "\n")
     }
+    
+    
+    // MARK: - VIEW (fn_* ) or GET ROUTES
 
-    // MARK: - INSERTS (i_*)
+    // GET /v/meets  -> all meet card data
+    app.get("v", "meets") { req async throws -> [Func.MeetCardData] in
+        guard let sql = req.db as? (any SQLDatabase)
+        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+        return try await Func.ViewMeets.fetchAll(on: sql)
+    }
+
+    // GET /v/user/:user_id  -> single user values
+    app.get("v", "user", ":user_id") { req async throws -> Func.ViewUserOut in
+        guard let sql = req.db as? (any SQLDatabase)
+        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+        let id = try req.parameters.get("user_id").flatMap(Int64.init)
+            ?? { throw Abort(.badRequest, reason: "user_id must be Int64") }()
+        return try await Func.ViewUser.call(on: sql, .init(user_id: id))
+    }
+
+    // GET /v/meet-categories -> all categories
+    app.get("v", "meet-categories") { req async throws -> [Func.ViewMeetCategory] in
+        guard let sql = req.db as? (any SQLDatabase)
+        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+        return try await Func.ViewMeetCategories.fetchAll(on: sql)
+    }
+
+    // MARK: - END VIEW (fn_* ) or GET ROUTES
+
+    
+    
+    
+    
+    // MARK: - INSERTS (i_*) or POST ROUTES
 
     // i_user -> returns (num_inserted, new_user_id)
     app.post("i", "user"){ req async throws -> Proc.InsertUserOut in
@@ -92,7 +124,12 @@ public func routes(_ app: Application) throws {
         return try await Proc.InsertUpdatedMeet.call(on: sql, body)
     }
 
-    // MARK: - MODIFIES (m_*)
+    
+    
+    // MARK: - END INSERTS (i_*) or POST ROUTES
+    
+    
+    // MARK: - MODIFIES (m_*) or DELETE/PATCH ROUTES
 
     // m_user -> no OUT/INOUT (no row)
     app.post("m", "user") { req async throws -> OkResponse in
@@ -103,4 +140,8 @@ public func routes(_ app: Application) throws {
         try await Proc.ModifyUser.exec(on: sql, body)
         return OkResponse(ok: true)
     }
+    
+    // MARK: - END MODIFIES (m_*) or DELETE/PATCH ROUTES
+
+
 }
