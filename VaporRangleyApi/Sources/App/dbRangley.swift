@@ -136,7 +136,7 @@ enum Proc
     
     struct InsertMeetCoordinateResult: Content, Sendable
     {
-        let new_meet_coordinate_id: Int64
+        let new_meet_coordinate_id: Int64?
     }
     
     enum InsertMeetCoordinate: PgCallableRow
@@ -158,7 +158,7 @@ enum Proc
         static func decode(_ row: any SQLRow) throws -> InsertMeetCoordinateResult
         {
             try .init(
-                new_meet_coordinate_id: row.decode(column: "new_meet_coordinate_id", as: Int64.self)
+                new_meet_coordinate_id: row.decode(column: "new_meet_coordinate_id", as: Int64?.self)
             )
         }
     }
@@ -167,12 +167,12 @@ enum Proc
     struct InsertMeetIdParams: Content, Sendable
     {
         let meet_coordinate_id  : Int64
-        let created_by_user_id: Int64
+        let created_by_user_id  : Int64
     }
     
     struct InsertMeetIdResult: Content, Sendable
     {
-        let new_meet_id: Int64
+        let new_meet_id: Int64?
     }
     
     enum InsertMeetId: PgCallableRow
@@ -190,10 +190,9 @@ enum Proc
             """
         }
         
-        static func decode(_ row: any SQLRow) throws -> InsertMeetIdResult
-        {
+        static func decode(_ row: any SQLRow) throws -> InsertMeetIdResult {
             try .init(
-                new_meet_id: row.decode(column: "new_meet_id", as: Int64.self)
+                new_meet_id: row.decode(column: "new_meet_id", as: Int64?.self)
             )
         }
     }
@@ -213,7 +212,7 @@ enum Proc
     }
     struct InsertMeetResult: Content, Sendable
     {
-        let is_success: Int64
+        let is_success: Int?
     }
     enum InsertMeet: PgCallableNoRow
     {
@@ -222,21 +221,21 @@ enum Proc
         {
             """
             CALL \(unsafeRaw: procName.rawValue)(
-                \(bind: o.is_success),
-                \(bind: i.meet_id),
-                \(bind: i.change_stamp),
-                \(bind: i.name),
-                \(bind: i.description),
-                \(bind: i.change_reason),
-                \(bind: i.meet_category_id),
-                \(bind: i.max_capacity)
+                \(bind: o.is_success)::int,
+                \(bind: i.meet_id)::int8,
+                \(bind: i.change_stamp)::int8,
+                \(bind: i.name)::varchar(50),
+                \(bind: i.description)::varchar(50),
+                \(bind: i.change_reason)::varchar(50),
+                \(bind: i.meet_category_id)::int2,
+                \(bind: i.max_capacity)::int4
             );
             """
         }
-        static func decode(_ row: any SQLRow) throws -> InsertMeetIdResult
+        static func decode(_ row: any SQLRow) throws -> InsertMeetResult
         {
             try .init(
-                new_meet_id: row.decode(column: "new_meet_id", as: Int64.self)
+                is_success: row.decode(column: "is_success", as: Int?.self)
             )
         }
     }
@@ -252,7 +251,7 @@ enum Proc
     
     struct InsertMeetChangeStampResult: Content, Sendable
     {
-        let new_change_stamp: Int64
+        let new_change_stamp: Int64?
     }
     
     enum InsertMeetChangeStamp: PgCallableRow
@@ -270,7 +269,7 @@ enum Proc
         }
         static func decode(_ row: any SQLRow) throws -> InsertMeetChangeStampResult {
             try .init(
-                new_change_stamp: row.decode(column: "new_change_stamp", as: Int64.self)
+                new_change_stamp: row.decode(column: "new_change_stamp", as: Int64?.self)
             )
         }
     }
@@ -291,7 +290,7 @@ enum Proc
     
     struct InsertUpdatedMeetResult: Content, Sendable
     {
-        let num_inserted: Int
+        let num_inserted: Int?
     }
     
     enum InsertUpdatedMeet: PgCallableRow
@@ -317,7 +316,7 @@ enum Proc
         static func decode(_ row: any SQLRow) throws -> InsertUpdatedMeetResult
         {
             try .init(
-                num_inserted: row.decode(column: "num_inserted", as: Int.self)
+                num_inserted: row.decode(column: "num_inserted", as: Int?.self)
             )
         }
     }

@@ -82,30 +82,40 @@ public func routes(_ app: Application) throws {
     // i/meet-coordinate -> (new_meet_coordinate_id)
     app.post("i","meet-coordinate") { req async throws -> Proc.InsertMeetCoordinateResult in
         let body = try req.content.decode(Proc.InsertMeetCoordinateParams.self)
+        
         guard body.region_radius > 0 else { throw Abort(.badRequest, reason: "region_radius must be > 0") }
+        
         guard let sql = req.db as? (any SQLDatabase)
         else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
-        return try await Proc.InsertMeetCoordinate.call(on: sql, body, .init(new_meet_coordinate_id: 0))
+        
+        return try await Proc.InsertMeetCoordinate.call(on: sql, body, .init(new_meet_coordinate_id: nil))
     }
 
     // i/meet-id -> (new_meet_id)
     app.post("i","meet-id") { req async throws -> Proc.InsertMeetIdResult in
         let body = try req.content.decode(Proc.InsertMeetIdParams.self)
+        
         guard body.meet_coordinate_id > 0, body.created_by_user_id > 0
         else { throw Abort(.badRequest, reason: "meet_coordinate_id and created_by_user_id are required") }
+        
         guard let sql = req.db as? (any SQLDatabase)
         else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
-        return try await Proc.InsertMeetId.call(on: sql, body, .init(new_meet_id: 0))
+        
+        return try await Proc.InsertMeetId.call(on: sql, body, .init(new_meet_id: nil))
     }
 
     // i/meet -> no row (stays the same)
     app.post("i","meet") { req async throws -> OkResponse in
         let body = try req.content.decode(Proc.InsertMeetParams.self)
+        
         guard body.meet_id != nil, body.name != nil, body.meet_category_id != nil
         else { throw Abort(.badRequest, reason: "meet_id, name, and meet_category_id are required") }
+        
         guard let sql = req.db as? (any SQLDatabase)
         else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
-        try await Proc.InsertMeet.exec(on: sql, body, .init(is_success: 0))
+        
+        try await Proc.InsertMeet.exec(on: sql, body, .init(is_success: nil))
+        
         return OkResponse(ok: true)
     }
 
@@ -114,7 +124,7 @@ public func routes(_ app: Application) throws {
         let body = try req.content.decode(Proc.InsertMeetChangeStampParams.self)
         guard let sql = req.db as? (any SQLDatabase)
         else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
-        return try await Proc.InsertMeetChangeStamp.call(on: sql, body, .init(new_change_stamp: 0))
+        return try await Proc.InsertMeetChangeStamp.call(on: sql, body, .init(new_change_stamp: nil))
     }
 
     // i/updated-meet -> (num_inserted)
@@ -122,7 +132,7 @@ public func routes(_ app: Application) throws {
         let body = try req.content.decode(Proc.InsertUpdatedMeetIn.self)
         guard let sql = req.db as? (any SQLDatabase)
         else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
-        return try await Proc.InsertUpdatedMeet.call(on: sql, body, .init(num_inserted: 0))
+        return try await Proc.InsertUpdatedMeet.call(on: sql, body, .init(num_inserted: nil))
     }
 
 
@@ -147,3 +157,35 @@ public func routes(_ app: Application) throws {
 
 
 }
+
+/**
+ ROUTE TESTING
+ 
+ curl -sS -X POST https://api.mrfoxco.com/i/meet-coordinate \
+   -H "Content-Type: application/json" \
+   -d '{
+     "latitude": 41.9484,
+     "longitude": -87.6553,
+     "region_latitude": 41.9484,
+     "region_longitude": -87.6553,
+     "region_radius": 2
+   }'
+ curl -sS -X POST https://api.mrfoxco.com/i/meet-id \
+   -H "Content-Type: application/json" \
+   -d '{
+     "meet_coordinate_id": 1,
+     "created_by_user_id": 2
+   }'
+ curl -sS -X POST https://api.mrfoxco.com/i/meet \
+   -H "Content-Type: application/json" \
+   -d '{
+     "meet_id": 1,
+     "change_stamp": 0,
+     "name": "Cubs Rooftop Meetup",
+     "description": "Hangout and watch the game from the rooftops",
+     "change_reason": "initial insert",
+     "meet_category_id": 1
+   }'
+ 
+ 
+ */
