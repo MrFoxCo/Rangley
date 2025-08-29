@@ -1,32 +1,51 @@
-//
-//  configure.swift
-//  VaporRangleyApi
-//
-//  Created by Anthony Guzzardo on 8/27/25.
-//
-
 import Vapor
 import Fluent
 import FluentPostgresDriver
+import NIOSSL
+
+@discardableResult
+private func requireEnv(_ k: String) -> String {
+    guard let v = Environment.get(k), !v.isEmpty else { fatalError("Missing ENV \(k)") }
+    return v
+}
 
 public func configure(_ app: Application) throws {
-    app.config = .init(
-        dbHost: Environment.get("DB_HOST") ?? "(unset)",
-        dbPort: Int(Environment.get("DB_PORT") ?? "5432") ?? 5432,
-        dbName: Environment.get("DB_NAME") ?? "(unset)",
-        dbUser: Environment.get("DB_USER") ?? "(unset)"
+    let dbHost = requireEnv("DB_HOST")
+    let dbPort = Int(Environment.get("DB_PORT") ?? "5432") ?? 5432
+    let dbName = requireEnv("DB_NAME")
+    let dbUser = requireEnv("DB_USER")
+    let dbPass = requireEnv("DB_PASSWORD")
+
+    app.config = .init(dbHost: dbHost, dbPort: dbPort, dbName: dbName, dbUser: dbUser)
+
+    // --- TLS for RDS (uses the bundle you COPY'd in your Dockerfile) ---
+    var tls = TLSConfiguration.makeClientConfiguration()
+    tls.certificateVerification = .fullVerification
+    tls.trustRoots = .file("/etc/ssl/certs/rds-global-bundle.pem")
+    let sslContext = try NIOSSLContext(configuration: tls)
+
+    // --- New SQLPostgresConfiguration API ---
+    let pg = SQLPostgresConfiguration(
+        hostname: dbHost,
+        port: dbPort,
+        username: dbUser,
+        password: dbPass,
+        database: dbName,
+        tls: .require(sslContext)
     )
 
-    app.databases.use(.postgres(
-        configuration: .init(
-            hostname: app.config.dbHost,
-            port: app.config.dbPort,
-            username: app.config.dbUser,
-            password: Environment.get("DB_PASSWORD") ?? "",
-            database: app.config.dbName,
-            tls: .prefer(try! .init(configuration: .clientDefault)) // or .disable
-        )
-    ), as: .psql)
+    // New signature uses encoding/decoding contexts
+    app.databases.use(
+        .postgres(
+            configuration: pg,
+            maxConnectionsPerEventLoop: 10,
+            connectionPoolTimeout: .seconds(10),
+            encodingContext: .default,
+            decodingContext: .default,
+            sqlLogLevel: app.environment == .production ? .warning : .debug
+        ),
+        as: .psql
+    )
 
     try routes(app)
 }

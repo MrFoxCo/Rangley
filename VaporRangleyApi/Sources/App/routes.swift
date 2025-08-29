@@ -46,14 +46,16 @@ public func routes(_ app: Application) throws {
     }
 
     // GET /v/user/:user_id  -> single user values
-    app.get("v", "user", ":user_id") { req async throws -> Func.ViewUserOut in
+    app.get("v","user",":user_id") { req async throws -> [Func.ViewUserResult] in
         guard let sql = req.db as? (any SQLDatabase)
         else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
-        let id = try req.parameters.get("user_id").flatMap(Int64.init)
-            ?? { throw Abort(.badRequest, reason: "user_id must be Int64") }()
-        return try await Func.ViewUser.call(on: sql, .init(user_id: id))
+        guard let id = req.parameters.get("user_id").flatMap(Int64.init)
+        else { throw Abort(.badRequest, reason: "user_id must be Int64") }
+        return try await Func.ViewUser.fetchAll(on: sql, .init(user_id: id))
     }
 
+
+    
     // GET /v/meet-categories -> all categories
     app.get("v", "meet-categories") { req async throws -> [Func.ViewMeetCategory] in
         guard let sql = req.db as? (any SQLDatabase)
@@ -69,60 +71,60 @@ public func routes(_ app: Application) throws {
     
     // MARK: - INSERTS (i_*) or POST ROUTES
 
-    // i_user -> returns (num_inserted, new_user_id)
-    app.post("i", "user"){ req async throws -> Proc.InsertUserOut in
-        let body = try req.content.decode(Proc.InsertUserIn.self)
+    // i/user -> (num_inserted, new_user_id)
+    app.post("i","user") { req async throws -> Proc.InsertUserResult in
+        let body = try req.content.decode(Proc.InsertUserParams.self)
         guard let sql = req.db as? (any SQLDatabase)
         else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
-        
-        return try await Proc.InsertUser.call(on: sql, body)
+        return try await Proc.InsertUser.call(on: sql, body, .init(num_inserted: 0, new_user_id: 0))
     }
 
-    // i_meet -> no OUT/INOUT (no row)
-    app.post("i", "meet") { req async throws -> OkResponse in
-        let body = try req.content.decode(Proc.InsertMeetIn.self)
+    // i/meet-coordinate -> (new_meet_coordinate_id)
+    app.post("i","meet-coordinate") { req async throws -> Proc.InsertMeetCoordinateResult in
+        let body = try req.content.decode(Proc.InsertMeetCoordinateParams.self)
+        guard body.region_radius > 0 else { throw Abort(.badRequest, reason: "region_radius must be > 0") }
         guard let sql = req.db as? (any SQLDatabase)
-            else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
-        
-        try await Proc.InsertMeet.exec(on: sql, body)
+        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+        return try await Proc.InsertMeetCoordinate.call(on: sql, body, .init(new_meet_coordinate_id: 0))
+    }
+
+    // i/meet-id -> (new_meet_id)
+    app.post("i","meet-id") { req async throws -> Proc.InsertMeetIdResult in
+        let body = try req.content.decode(Proc.InsertMeetIdParams.self)
+        guard body.meet_coordinate_id > 0, body.created_by_user_id > 0
+        else { throw Abort(.badRequest, reason: "meet_coordinate_id and created_by_user_id are required") }
+        guard let sql = req.db as? (any SQLDatabase)
+        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+        return try await Proc.InsertMeetId.call(on: sql, body, .init(new_meet_id: 0))
+    }
+
+    // i/meet -> no row (stays the same)
+    app.post("i","meet") { req async throws -> OkResponse in
+        let body = try req.content.decode(Proc.InsertMeetParams.self)
+        guard body.meet_id != nil, body.name != nil, body.meet_category_id != nil
+        else { throw Abort(.badRequest, reason: "meet_id, name, and meet_category_id are required") }
+        guard let sql = req.db as? (any SQLDatabase)
+        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+        try await Proc.InsertMeet.exec(on: sql, body, .init(is_success: 0))
         return OkResponse(ok: true)
     }
 
-    // i_meet_change_stamp -> returns (new_change_stamp)
-    app.post("i", "meet-change-stamp") { req async throws -> Proc.InsertMeetChangeStampOut in
-        let body = try req.content.decode(Proc.InsertMeetChangeStampIn.self)
+    // i/meet-change-stamp -> (new_change_stamp)
+    app.post("i","meet-change-stamp") { req async throws -> Proc.InsertMeetChangeStampResult in
+        let body = try req.content.decode(Proc.InsertMeetChangeStampParams.self)
         guard let sql = req.db as? (any SQLDatabase)
         else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
-        
-        return try await Proc.InsertMeetChangeStamp.call(on: sql, body)
+        return try await Proc.InsertMeetChangeStamp.call(on: sql, body, .init(new_change_stamp: 0))
     }
 
-    // i_meet_coordinate -> returns (new_meet_coordinate_id)
-    app.post("i", "meet-coordinate") { req async throws -> Proc.InsertMeetCoordinateOut in
-        let body = try req.content.decode(Proc.InsertMeetCoordinateIn.self)
-        guard let sql = req.db as? (any SQLDatabase)
-        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
-        
-        return try await Proc.InsertMeetCoordinate.call(on: sql, body)
-    }
-
-    // i_meet_id -> returns (new_meet_id)
-    app.post("i", "meet-id") { req async throws -> Proc.InsertMeetIdOut in
-        let body = try req.content.decode(Proc.InsertMeetIdIn.self)
-        guard let sql = req.db as? (any SQLDatabase)
-        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
-        
-        return try await Proc.InsertMeetId.call(on: sql, body)
-    }
-
-    // i_updated_meet -> returns (num_inserted)
-    app.post("i", "updated-meet") { req async throws -> Proc.InsertUpdatedMeetOut in
+    // i/updated-meet -> (num_inserted)
+    app.post("i","updated-meet") { req async throws -> Proc.InsertUpdatedMeetResult in
         let body = try req.content.decode(Proc.InsertUpdatedMeetIn.self)
         guard let sql = req.db as? (any SQLDatabase)
         else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
-        
-        return try await Proc.InsertUpdatedMeet.call(on: sql, body)
+        return try await Proc.InsertUpdatedMeet.call(on: sql, body, .init(num_inserted: 0))
     }
+
 
     
     
@@ -137,7 +139,7 @@ public func routes(_ app: Application) throws {
         guard let sql = req.db as? (any SQLDatabase)
         else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
         
-        try await Proc.ModifyUser.exec(on: sql, body)
+        try await Proc.ModifyUser.exec(on: sql, body, .init(is_success: 0))
         return OkResponse(ok: true)
     }
     

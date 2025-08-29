@@ -7,16 +7,17 @@ struct Run {
         var env = try Environment.detect()
         try LoggingSystem.bootstrap(from: &env)
 
+        // New async factory (replaces deprecated Application(env))
         let app = try await Application.make(env)
 
-        // schedule async shutdown safely
+        // Graceful async shutdown
         defer { Task { try? await app.asyncShutdown() } }
 
+        // Listen on all interfaces; honor PORT env (ECS/Heroku-style)
         app.http.server.configuration.hostname = "0.0.0.0"
-        app.http.server.configuration.port =
-            Int(Environment.get("PORT") ?? "8080") ?? 8080
+        app.http.server.configuration.port = Environment.get("PORT").flatMap(Int.init) ?? 8080
 
-        try configure(app)
-        try await app.execute()
+        try configure(app)          // your existing (sync) configure() still works
+        try await app.execute()     // async run loop
     }
 }
