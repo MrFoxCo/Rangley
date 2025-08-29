@@ -201,41 +201,49 @@ enum Proc
     // MARK: i_meet (no OUT) -> no row
     struct InsertMeetParams: Content, Sendable
     {
-        let meet_id         : Int64?   // p_meet_id
-        let change_stamp    : Int64?    // p_change_stamp (DEFAULT 0 on PG side, but pass explicit)
-        let meet_statu_id   : Int32?
-        let name            : String?   // p_name
-        let description     : String?   // p_description
-        let change_reason   : String?   // p_change_reason
-        let meet_category_id: Int32?    // p_meet_category_id
-        let max_capacity    : Int32?
+        let meet_id             : Int64   // p_meet_id
+        let name                : String   // p_name
+        let description         : String?   // p_description
+        let change_reason       : String?   // p_change_reason
+        let meet_category_id    : Int32?    // p_meet_category_id
+        let max_capacity        : Int32?
+        let dttm_start_utc      : Date
+        let dttm_end_utc        : Date
     }
     struct InsertMeetResult: Content, Sendable
     {
-        let is_success: Int?
+        let num_inserted: Int?
     }
-    enum InsertMeet: PgCallableNoRow
+    enum InsertMeet: PgCallableRow
     {
         static let procName: RangleyProcName = .i_meet
         static func query(_ i: InsertMeetParams, _ o : InsertMeetResult) -> SQLQueryString
         {
             """
-            CALL \(unsafeRaw: procName.rawValue)(
-                \(bind: o.is_success)::int,
-                \(bind: i.meet_id)::int8,
-                \(bind: i.change_stamp)::int8,
-                \(bind: i.name)::varchar(50),
-                \(bind: i.description)::varchar(50),
-                \(bind: i.change_reason)::varchar(50),
-                \(bind: i.meet_category_id)::int2,
-                \(bind: i.max_capacity)::int4
+            CALL \(unsafeRaw: procName.rawValue)
+            (
+                -- out
+                 \(bind: o.num_inserted)::int
+                
+                -- required
+            
+                ,\(bind: i.meet_id)
+                ,\(bind: i.name)
+                ,\(bind: i.dttm_start_utc)
+                ,\(bind: i.dttm_end_utc)
+            
+                -- optional params with defaults
+                ,\(bind: i.description)::varchar(50)    -- ''
+                ,\(bind: i.change_reason)::varchar(50)  -- ''
+                ,\(bind: i.meet_category_id)::int2      -- 1 = 'Activity'
+                ,\(bind: i.max_capacity)::int4          -- 2
             );
             """
         }
         static func decode(_ row: any SQLRow) throws -> InsertMeetResult
         {
             try .init(
-                is_success: row.decode(column: "is_success", as: Int?.self)
+                num_inserted: row.decode(column: "num_inserted", as: Int?.self)
             )
         }
     }
@@ -276,16 +284,17 @@ enum Proc
     
     
     // MARK: i_updated_meet (INOUT num_inserted) -> row
-    struct InsertUpdatedMeetIn: Content, Sendable
+    struct InsertUpdatedMeetParams: Content, Sendable
     {
-        let meet_id             : Int64?
-        let change_stamp        : Int64?
-        let meet_status_id      : Int32?
-        let name                : String?
+        let meet_id             : Int64
+        let change_stamp        : Int64
+        let name                : String
         let description         : String?
         let change_reason       : String?
         let meet_category_id    : Int32?
         let max_capacity        : Int32? // PG default 2 if nil
+        let dttm_start_utc      : Date
+        let dttm_end_utc        : Date
     }
     
     struct InsertUpdatedMeetResult: Content, Sendable
@@ -297,19 +306,28 @@ enum Proc
     {
         static let procName: RangleyProcName = .i_updated_meet
         
-        static func query(_ i: InsertUpdatedMeetIn, _ o : InsertUpdatedMeetResult ) -> SQLQueryString
+        static func query(_ i: InsertUpdatedMeetParams, _ o : InsertUpdatedMeetResult ) -> SQLQueryString
         {
             """
-            CALL \(unsafeRaw: procName.rawValue)(
-                \(bind: i.meet_id),
-                \(bind: i.change_stamp),
-                \(bind: i.meet_status_id),
-                \(bind: i.name),
-                \(bind: i.description),
-                \(bind: i.change_reason),
-                \(bind: i.meet_category_id),
-                \(bind: i.max_capacity),
-                \(bind: o.num_inserted)
+            CALL \(unsafeRaw: procName.rawValue)
+            (
+                -- out
+                 \(bind: o.num_inserted)::int
+                
+                -- required
+            
+                ,\(bind: i.meet_id)
+                ,\(bind: i.change_stamp)
+                ,\(bind: i.name)
+                ,\(bind: i.dttm_start_utc)
+                ,\(bind: i.dttm_end_utc)
+            
+                -- optional params with defaults
+                ,\(bind: i.description)::varchar(50)    -- ''
+                ,\(bind: i.change_reason)::varchar(50)  -- ''
+                ,\(bind: i.meet_category_id)::int2      -- 1 = 'Activity'
+                ,\(bind: i.max_capacity)::int4          -- 2
+
             );
             """
         }
@@ -346,7 +364,7 @@ enum Proc
     
     struct ModifyUserResult: Content, Sendable
     {
-        let is_success : Int
+        let num_affected : Int?
     }
     
     
@@ -362,9 +380,15 @@ enum Proc
                 \(bind: i.last_name),
                 \(bind: i.cellphone),
                 \(bind: i.email),
-                \(bind: o.is_success)
+                \(bind: o.num_affected)
             );
             """
+        }
+        static func decode(_ row: any SQLRow) throws -> ModifyUserResult
+        {
+            try .init(
+                num_affected: row.decode(column: "num_affected", as: Int?.self)
+            )
         }
     }
     
