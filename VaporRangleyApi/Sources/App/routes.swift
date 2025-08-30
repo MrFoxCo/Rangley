@@ -123,29 +123,25 @@ public func routes(_ app: Application) throws {
         return try await Proc.InsertMeetId.call(on: sql, body, .init(new_meet_id: nil))
     }
 
-    // i/meet -> no row (stays the same)
-    // i/meet -> no row returned; we just exec the CALL
-    app.post("i","meet") { req async throws -> Proc.InsertMeetResult in
+    // i/meet -> returns (num_inserted)
+    app.post("i","meet") {  req async throws -> Proc.InsertMeetResult in
+        
         let body = try req.content.decode(Proc.InsertMeetParams.self)
-
-        guard body.meet_id > 0 else { throw Abort(.badRequest, reason: "meet_id must be > 0") }
         guard !body.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw Abort(.badRequest, reason: "name is required")
         }
+        guard body.meet_id > 0
+        else { throw Abort(.badRequest, reason: "meet id invalid or null") }
         guard body.dttm_start_utc < body.dttm_end_utc else {
             throw Abort(.badRequest, reason: "dttm_start_utc must be before dttm_end_utc")
         }
-        guard let sql = req.db as? any SQLDatabase else {
-            throw Abort(.failedDependency, reason: "Database is not SQLDatabase")
-        }
-
-        let res = try await Proc.InsertMeet.call(on: sql, body, .init(num_inserted: nil))
-        req.logger.info("i/meet result num_inserted=\(res.num_inserted ?? -1)")
-        return res
+        
+        guard let sql = req.db as? (any SQLDatabase)
+        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+        
+        return try await Proc.InsertMeet.call(on: sql, body, .init(num_inserted: nil))
     }
-
-
-
+    
     // i/meet-change-stamp -> (new_change_stamp)
     app.post("i","meet-change-stamp") { req async throws -> Proc.InsertMeetChangeStampResult in
         let body = try req.content.decode(Proc.InsertMeetChangeStampParams.self)
@@ -154,24 +150,23 @@ public func routes(_ app: Application) throws {
         return try await Proc.InsertMeetChangeStamp.call(on: sql, body, .init(new_change_stamp: nil))
     }
 
-    app.post("i","updated-meet") { req async throws -> Proc.InsertUpdatedMeetResult in
+    // i/meet -> returns (num_inserted)
+    app.post("i","updated-meet") {  req async throws -> Proc.InsertUpdatedMeetResult in
+        
         let body = try req.content.decode(Proc.InsertUpdatedMeetParams.self)
-
-        guard body.meet_id > 0 else { throw Abort(.badRequest, reason: "meet_id must be > 0") }
-        guard body.change_stamp > 0 else { throw Abort(.badRequest, reason: "meet_id must be > 0") }
         guard !body.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw Abort(.badRequest, reason: "name is required")
         }
+        guard body.meet_id > 0
+        else { throw Abort(.badRequest, reason: "meet id invalid or null") }
         guard body.dttm_start_utc < body.dttm_end_utc else {
             throw Abort(.badRequest, reason: "dttm_start_utc must be before dttm_end_utc")
         }
-        guard let sql = req.db as? any SQLDatabase else {
-            throw Abort(.failedDependency, reason: "Database is not SQLDatabase")
-        }
-
-        let res = try await Proc.InsertUpdatedMeet.call(on: sql, body, .init(num_inserted: nil))
-        req.logger.info("i/meet result num_inserted=\(res.num_inserted ?? -1)")
-        return res
+        
+        guard let sql = req.db as? (any SQLDatabase)
+        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+        
+        return try await Proc.InsertUpdatedMeet.call(on: sql, body, .init(num_inserted: nil))
     }
 
 
@@ -215,30 +210,34 @@ public func routes(_ app: Application) throws {
      "meet_coordinate_id": 1,
      "created_by_user_id": 2
    }'
+ 
+ curl -sS -X POST https://api.mrfoxco.com/i/meet \
+  -H "Content-Type: application/json" \
+  -d '{
+     "meet_id": 1,
+     "name": "Cubs Rooftop Meetup",
+     "dttm_start_utc": "2025-09-29T18:00:00Z",
+     "dttm_end_utc": "2025-09-29T21:00:00Z"
+     }'
+ 
  curl -sS -X POST https://api.mrfoxco.com/i/meet \
    -H "Content-Type: application/json" \
    -d '{
      "meet_id": 1,
      "name": "Cubs Rooftop Meetup",
+    "dttm_start_utc": "2025-09-29T18:00:00Z",
+    "dttm_end_utc": "2025-09-29T21:00:00Z",
      "description": "Hangout and watch the game from the rooftops",
      "change_reason": "initial insert",
-     "meet_category_id": 1
- "dttm_start_utc": "2025-09-29T18:00:00Z",
- "dttm_end_utc": "2025-09-29T21:00:00Z"
+     "meet_category_id": 1,
+     "max_capacity" : 2
    }'
  
  // no defaults
- curl -sS -X POST https://api.mrfoxco.com/i/meet \
-   -H "Content-Type: application/json" \
-   -d '{
-     "meet_id": 1,
-     "name": "Cubs Rooftop Meetup",
- "dttm_start_utc": "2025-09-29T18:00:00Z",
- "dttm_end_utc": "2025-09-29T21:00:00Z"
- }'
+
 
  In PostgreSQL you must supply an argument for every parameter without a default, including OUT.
  The OUT placeholders aren’t evaluated (typical is NULL), and the procedure returns a single row containing the OUT/INOUT values.
- PostgreSQL
+
  
  */

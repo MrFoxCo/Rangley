@@ -35,6 +35,7 @@ protocol PgCallableRow
 {
     associatedtype Input: Sendable
     associatedtype Output: Content & Sendable
+    
     static var procName: RangleyProcName { get }
     static func query(_ input: Input, _ output : Output) -> SQLQueryString
     static func decode(_ row: any SQLRow) throws -> Output
@@ -201,54 +202,49 @@ enum Proc
     // MARK: i_meet (no OUT) -> no row
     struct InsertMeetParams: Content, Sendable
     {
+        // required
         let meet_id             : Int64   // p_meet_id
         let name                : String   // p_name
-        let description         : String?   // p_description
-        let change_reason       : String?   // p_change_reason
-        let meet_category_id    : Int32?    // p_meet_category_id
-        let max_capacity        : Int32?
         let dttm_start_utc      : Date
         let dttm_end_utc        : Date
+        
+        // optional
+        let description         : String?   // p_description
+        let change_reason       : String?   // p_change_reason
+        let meet_category_id    : Int16?    // p_meet_category_id
+        let max_capacity        : Int32?
+
     }
     struct InsertMeetResult: Content, Sendable
     {
-        let num_inserted: Int?
+        let num_inserted: Int32?
     }
-    enum InsertMeet: PgCallableRow
-    {
+    
+    enum InsertMeet: PgCallableRow {
         static let procName: RangleyProcName = .i_meet
-        static func query(_ i: InsertMeetParams, _ o : InsertMeetResult) -> SQLQueryString
-        {
+
+        static func query(_ i: InsertMeetParams, _ o: InsertMeetResult) -> SQLQueryString {
             """
             CALL \(unsafeRaw: procName.rawValue)
             (
-                -- out
-                 \(bind: o.num_inserted)::int
-                
-                -- required
-            
-                ,\(bind: i.meet_id)
-                ,\(bind: i.name)
-                ,\(bind: i.dttm_start_utc)
-                ,\(bind: i.dttm_end_utc)
-            
-                -- optional params with defaults
-                ,\(bind: i.description)::varchar(50)    -- ''
-                ,\(bind: i.change_reason)::varchar(50)  -- ''
-                ,\(bind: i.meet_category_id)::int2      -- 1 = 'Activity'
-                ,\(bind: i.max_capacity)::int4          -- 2
+                 \(bind: o.num_inserted)::int4
+                ,\(bind: i.meet_id)::int8
+                ,\(bind: i.name)::varchar(50)
+                ,\(bind: i.dttm_start_utc)::timestamptz
+                ,\(bind: i.dttm_end_utc)::timestamptz
+                ,COALESCE(\(bind: i.description)::varchar(50), ''::varchar(50))
+                ,COALESCE(\(bind: i.change_reason)::varchar(50), ''::varchar(50))
+                ,COALESCE(\(bind: i.meet_category_id)::int2, 1::int2)   -- <- avoids NULL + matches int2
+                ,COALESCE(\(bind: i.max_capacity)::int4, 2::int4)
             );
             """
         }
-        static func decode(_ row: any SQLRow) throws -> InsertMeetResult
-        {
-            try .init(
-                num_inserted: row.decode(column: "num_inserted", as: Int?.self)
-            )
+
+        static func decode(_ row: any SQLRow) throws -> InsertMeetResult {
+            try .init(num_inserted: row.decode(column: "num_inserted", as: Int32?.self))
         }
     }
-    
-    
+
     
     // MARK: i_meet_change_stamp (OUT new_change_stamp) -> row
     struct InsertMeetChangeStampParams: Content, Sendable
@@ -286,20 +282,24 @@ enum Proc
     // MARK: i_updated_meet (INOUT num_inserted) -> row
     struct InsertUpdatedMeetParams: Content, Sendable
     {
+        // required
         let meet_id             : Int64
         let change_stamp        : Int64
         let name                : String
-        let description         : String?
-        let change_reason       : String?
-        let meet_category_id    : Int32?
-        let max_capacity        : Int32? // PG default 2 if nil
         let dttm_start_utc      : Date
         let dttm_end_utc        : Date
+
+        // optional
+        let description         : String?
+        let change_reason       : String?
+        let meet_category_id    : Int16?
+        let max_capacity        : Int32? // PG default 2 if nil
+
     }
     
     struct InsertUpdatedMeetResult: Content, Sendable
     {
-        let num_inserted: Int?
+        let num_inserted: Int32?
     }
     
     enum InsertUpdatedMeet: PgCallableRow
@@ -311,31 +311,21 @@ enum Proc
             """
             CALL \(unsafeRaw: procName.rawValue)
             (
-                -- out
-                 \(bind: o.num_inserted)::int
-                
-                -- required
-            
-                ,\(bind: i.meet_id)
-                ,\(bind: i.change_stamp)
-                ,\(bind: i.name)
-                ,\(bind: i.dttm_start_utc)
-                ,\(bind: i.dttm_end_utc)
-            
-                -- optional params with defaults
-                ,\(bind: i.description)::varchar(50)    -- ''
-                ,\(bind: i.change_reason)::varchar(50)  -- ''
-                ,\(bind: i.meet_category_id)::int2      -- 1 = 'Activity'
-                ,\(bind: i.max_capacity)::int4          -- 2
-
+                 \(bind: o.num_inserted)::int4
+                ,\(bind: i.meet_id)::int8
+                ,\(bind: i.change_stamp)::int8
+                ,\(bind: i.name)::varchar(50)
+                ,\(bind: i.dttm_start_utc)::timestamptz
+                ,\(bind: i.dttm_end_utc)::timestamptz
+                ,COALESCE(\(bind: i.description)::varchar(50), ''::varchar(50))
+                ,COALESCE(\(bind: i.change_reason)::varchar(50), ''::varchar(50))
+                ,COALESCE(\(bind: i.meet_category_id)::int2, 1::int2)   -- <- avoids NULL + matches int2
+                ,COALESCE(\(bind: i.max_capacity)::int4, 2::int4)
             );
             """
         }
-        static func decode(_ row: any SQLRow) throws -> InsertUpdatedMeetResult
-        {
-            try .init(
-                num_inserted: row.decode(column: "num_inserted", as: Int?.self)
-            )
+        static func decode(_ row: any SQLRow) throws -> InsertUpdatedMeetResult {
+            try .init(num_inserted: row.decode(column: "num_inserted", as: Int32?.self))
         }
     }
     
