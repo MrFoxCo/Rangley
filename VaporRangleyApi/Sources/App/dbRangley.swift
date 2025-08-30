@@ -167,7 +167,6 @@ enum Proc
     // MARK: i_meet_id (OUT new_meet_id) -> row
     struct InsertMeetIdParams: Content, Sendable
     {
-        let meet_coordinate_id  : Int64
         let created_by_user_id  : Int64
     }
     
@@ -184,9 +183,9 @@ enum Proc
         {
             """
             CALL \(unsafeRaw: procName.rawValue)(
-                \(bind: i.meet_coordinate_id),
-                \(bind: i.created_by_user_id),
-                \(bind: o.new_meet_id)
+                 \(bind: o.new_meet_id)
+                ,\(bind: i.created_by_user_id)
+
             );
             """
         }
@@ -204,6 +203,7 @@ enum Proc
     {
         // required
         let meet_id             : Int64   // p_meet_id
+        let meet_coordinate_id  : Int64
         let name                : String   // p_name
         let dttm_start_utc      : Date
         let dttm_end_utc        : Date
@@ -229,6 +229,7 @@ enum Proc
             CALL \(unsafeRaw: procName.rawValue)
             (
                  \(bind: o.num_inserted)::int4
+                ,\(bind: i.meet_coordinate_id)::int8
                 ,\(bind: i.meet_id)::int8
                 ,\(bind: i.name)::varchar(50)
                 ,\(bind: i.dttm_start_utc)::timestamptz
@@ -287,6 +288,8 @@ enum Proc
         // required
         let meet_id             : Int64
         let change_stamp        : Int64
+        let meet_coordinate_id  : Int64
+        let meet_status_id      : Int64
         let name                : String
         let dttm_start_utc      : Date
         let dttm_end_utc        : Date
@@ -316,6 +319,8 @@ enum Proc
                  \(bind: o.num_inserted)::int4
                 ,\(bind: i.meet_id)::int8
                 ,\(bind: i.change_stamp)::int8
+                ,\(bind: i.meet_coordinate_id)::int8
+                ,\(bind: i.meet_status_id)::int2
                 ,\(bind: i.name)::varchar(50)
                 ,\(bind: i.dttm_start_utc)::timestamptz
                 ,\(bind: i.dttm_end_utc)::timestamptz

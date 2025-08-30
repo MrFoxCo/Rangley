@@ -114,7 +114,7 @@ public func routes(_ app: Application) throws {
     app.post("i","meet-id") { req async throws -> Proc.InsertMeetIdResult in
         let body = try req.content.decode(Proc.InsertMeetIdParams.self)
         
-        guard body.meet_coordinate_id > 0, body.created_by_user_id > 0
+        guard body.created_by_user_id > 0
         else { throw Abort(.badRequest, reason: "meet_coordinate_id and created_by_user_id are required") }
         
         guard let sql = req.db as? (any SQLDatabase)
@@ -142,6 +142,7 @@ public func routes(_ app: Application) throws {
         return try await Proc.InsertMeet.call(on: sql, body, .init(num_inserted: nil))
     }
     
+    // WORKS BUT SAYS PERMISSION DENIED FOR SOME REASON???
     // i/meet-change-stamp -> (new_change_stamp)
     app.post("i","meet-change-stamp") { req async throws -> Proc.InsertMeetChangeStampResult in
         let body = try req.content.decode(Proc.InsertMeetChangeStampParams.self)
@@ -198,6 +199,11 @@ public func routes(_ app: Application) throws {
 
 /**
  ROUTE TESTING
+ curl -sS -X POST https://api.mrfoxco.com/i/meet-id \
+   -H "Content-Type: application/json" \
+   -d '{
+     "created_by_user_id": 2
+   }'
  
  curl -sS -X POST https://api.mrfoxco.com/i/meet-coordinate \
    -H "Content-Type: application/json" \
@@ -208,21 +214,56 @@ public func routes(_ app: Application) throws {
      "region_longitude": -87.6553,
      "region_radius": 2
    }'
- curl -sS -X POST https://api.mrfoxco.com/i/meet-id \
-   -H "Content-Type: application/json" \
-   -d '{
-     "meet_coordinate_id": 1,
-     "created_by_user_id": 2
-   }'
+
  
  curl -sS -X POST https://api.mrfoxco.com/i/meet \
   -H "Content-Type: application/json" \
   -d '{
      "meet_id": 1,
+     "meet_coordinate_id": 1,
      "name": "Cubs Rooftop Meetup",
      "dttm_start_utc": "2025-09-29T18:00:00Z",
      "dttm_end_utc": "2025-09-29T21:00:00Z"
      }'
+ 
+ // with legal meet_status_id
+ curl -sS -X POST https://api.mrfoxco.com/i/meet-change-stamp \
+   -H "Content-Type: application/json" \
+   -d '{
+     "meet_id": 1,
+   }'
+ curl -sS -X POST https://api.mrfoxco.com/i/meet-coordinate \
+   -H "Content-Type: application/json" \
+   -d '{
+     "latitude": 41.830017,
+     "longitude": –87.634598,
+     "region_latitude": 41.830017,
+     "region_longitude": –87.634598,
+     "region_radius": 2
+   }'
+ 
+ 
+ curl -sS -X POST https://api.mrfoxco.com/i/updated-meet \
+  -H "Content-Type: application/json" \
+  -d '{
+     "meet_id": 1,
+     "change_stamp" : 1,
+     "meet_status_id": 2,
+     "name": "White Sox Rooftop Meetup",
+     "dttm_start_utc": "2025-10-29T18:00:00Z",
+     "dttm_end_utc": "2025-10-29T21:00:00Z"
+     }'
+ 
+
+ 
+ // with legal meet_status_id
+ curl -sS -X POST https://api.mrfoxco.com/i/meet-change-stamp \
+   -H "Content-Type: application/json" \
+   -d '{
+     "meet_id": 1
+   }'
+ 
+ 
  
  curl -sS -X POST https://api.mrfoxco.com/i/meet \
    -H "Content-Type: application/json" \
