@@ -145,6 +145,10 @@ public func routes(_ app: Application) throws {
     // i/meet-change-stamp -> (new_change_stamp)
     app.post("i","meet-change-stamp") { req async throws -> Proc.InsertMeetChangeStampResult in
         let body = try req.content.decode(Proc.InsertMeetChangeStampParams.self)
+        
+        guard body.meet_id > 0
+        else { throw Abort(.badRequest, reason: "Meet ID is invalid or not provided") }
+        
         guard let sql = req.db as? (any SQLDatabase)
         else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
         return try await Proc.InsertMeetChangeStamp.call(on: sql, body, .init(new_change_stamp: nil))

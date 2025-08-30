@@ -220,7 +220,8 @@ enum Proc
         let num_inserted: Int32?
     }
     
-    enum InsertMeet: PgCallableRow {
+    enum InsertMeet: PgCallableRow
+    {
         static let procName: RangleyProcName = .i_meet
 
         static func query(_ i: InsertMeetParams, _ o: InsertMeetResult) -> SQLQueryString {
@@ -250,7 +251,7 @@ enum Proc
     struct InsertMeetChangeStampParams: Content, Sendable
     {
         let meet_id         : Int64
-        let meet_status_id  : Int32
+        let meet_status_id  : Int16? // optional
     }
     
     struct InsertMeetChangeStampResult: Content, Sendable
@@ -264,10 +265,11 @@ enum Proc
         static func query(_ i: InsertMeetChangeStampParams, _ o : InsertMeetChangeStampResult) -> SQLQueryString {
             // OUT params are NOT passed
             """
-            CALL \(unsafeRaw: procName.rawValue)(
-                \(bind: i.meet_id),
-                \(bind: i.meet_status_id),
-                \(bind: o.new_change_stamp)
+            CALL \(unsafeRaw: procName.rawValue)
+            (
+                 \(bind: o.new_change_stamp)
+                ,\(bind: i.meet_id)
+                ,COALESCE(\(bind: i.meet_status_id)::int2, 0::int2)   -- <- avoids NULL + matches int2
             );
             """
         }
