@@ -283,17 +283,23 @@ enum Proc
     enum InsertMeetChangeStamp: PgCallableRow
     {
         static let procName: RangleyProcName = .i_meet_change_stamp
-        static func query(_ i: InsertMeetChangeStampParams, _ o : InsertMeetChangeStampResult) -> SQLQueryString {
+        static func query(_ i: InsertMeetChangeStampParams, _ o : InsertMeetChangeStampResult) -> SQLQueryString
+        {
             // OUT params are NOT passed
             """
             CALL \(unsafeRaw: procName.rawValue)
             (
+                -- OUT
                  \(bind: o.new_change_stamp)
+            
+                -- REQUIRED
                 ,\(bind: i.meet_id)
             );
             """
         }
-        static func decode(_ row: any SQLRow) throws -> InsertMeetChangeStampResult {
+        
+        static func decode(_ row: any SQLRow) throws -> InsertMeetChangeStampResult
+        {
             try .init(
                 new_change_stamp: row.decode(column: "new_change_stamp", as: Int64?.self)
             )
@@ -315,7 +321,7 @@ enum Proc
         let dttm_end_utc        : Date
 
         // optional
-        let meet_status_id      : Int64?
+        let meet_status_id      : Int16?
         let description         : String?
         let change_reason       : String?
         let meet_category_id    : Int16?
@@ -357,7 +363,8 @@ enum Proc
             );
             """
         }
-        static func decode(_ row: any SQLRow) throws -> InsertUpdatedMeetResult {
+        static func decode(_ row: any SQLRow) throws -> InsertUpdatedMeetResult
+        {
             try .init(num_inserted: row.decode(column: "num_inserted", as: Int32?.self))
         }
     }
@@ -485,9 +492,9 @@ enum Func
     // vw_meet_card_data-style payload (assumes rangley_fn_v_meets() returns these columns)
     struct ViewMeetsReults: Content, Sendable
     {
-        let meet_id            : Int32
-        let change_stamp       : Int32
-        let meet_status_id     : Int32
+        let meet_id            : Int64
+        let change_stamp       : Int64
+        let meet_status_id     : Int16
         let latitude           : Double
         let longitude          : Double
         let region_latitude    : Double
@@ -499,7 +506,7 @@ enum Func
         let category_name      : String
         let description        : String
         let max_capacity       : Int32
-        let created_by_user_id : Int32
+        let created_by_user_id : Int64
         let first_name         : String
         let last_name          : String
     }
@@ -518,9 +525,9 @@ enum Func
         static func decode(_ r: any SQLRow) throws -> ViewMeetsReults
         {
             try .init(
-                meet_id             : r.decode(column: "meet_id",            as: Int32.self)
-                ,change_stamp       : r.decode(column: "change_stamp",       as: Int32.self)
-                ,meet_status_id     : r.decode(column: "meet_status_id",     as: Int32.self)
+                 meet_id            : r.decode(column: "meet_id",            as: Int64.self)
+                ,change_stamp       : r.decode(column: "change_stamp",       as: Int64.self)
+                ,meet_status_id     : r.decode(column: "meet_status_id",     as: Int16.self)
                 ,latitude           : r.decode(column: "latitude",           as: Double.self)
                 ,longitude          : r.decode(column: "longitude",          as: Double.self)
                 ,region_latitude    : r.decode(column: "region_latitude",    as: Double.self)
@@ -532,18 +539,22 @@ enum Func
                 ,category_name      : r.decode(column: "category_name",      as: String.self)
                 ,description        : r.decode(column: "description",        as: String.self)
                 ,max_capacity       : r.decode(column: "max_capacity",       as: Int32.self)
-                ,created_by_user_id : r.decode(column: "created_by_user_id", as: Int32.self)
+                ,created_by_user_id : r.decode(column: "created_by_user_id", as: Int64.self)
                 ,first_name         : r.decode(column: "first_name",         as: String.self)
                 ,last_name          : r.decode(column: "last_name",          as: String.self)
             )
         }
 
         // convenience
-        static func fetchAll(on db: any SQLDatabase) async throws -> [ViewMeetsReults] {
+        static func fetchAll(on db: any SQLDatabase) async throws -> [ViewMeetsReults]
+        {
             try await fetchAll(on: db, In())
         }
     }
 
+    
+    
+    
     struct ViewUserParam: Content, Sendable
     {
         let user_id: Int64
@@ -579,6 +590,8 @@ enum Func
         }
     }
 
+    
+    
     struct ViewMeetCategoriesResults: Content, Sendable
     {
         let meet_category_id: Int32
@@ -595,7 +608,8 @@ enum Func
             "SELECT * FROM \(unsafeRaw: funcName.rawValue)();"
         }
 
-        static func decode(_ r: any SQLRow) throws -> ViewMeetCategoriesResults {
+        static func decode(_ r: any SQLRow) throws -> ViewMeetCategoriesResults
+        {
             try .init(
                 meet_category_id: r.decode(column: "meet_category_id", as: Int32.self),
                 name            : r.decode(column: "name",             as: String.self)
