@@ -8,7 +8,8 @@ let package = Package(
         .package(url: "https://github.com/vapor/vapor.git", from: "4.115.0"),
         .package(url: "https://github.com/vapor/fluent.git", from: "4.10.0"),
         .package(url: "https://github.com/vapor/fluent-postgres-driver.git", from: "2.10.0"),
-        .package(url: "https://github.com/vapor/sql-kit.git", from: "3.0.0")
+        .package(url: "https://github.com/vapor/sql-kit.git", from: "3.0.0"),
+        .package(url: "https://github.com/vapor/jwt.git", from: "5.0.0")   // ← add this
     ],
     targets: [
         .target(
@@ -18,6 +19,7 @@ let package = Package(
                 .product(name: "Fluent", package: "fluent"),
                 .product(name: "FluentPostgresDriver", package: "fluent-postgres-driver"),
                 .product(name: "SQLKit", package: "sql-kit"),
+                .product(name: "JWT", package: "jwt")     
             ],
             path: "Sources/App",
             swiftSettings: [.enableUpcomingFeature("ExistentialAny")]

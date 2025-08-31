@@ -82,7 +82,6 @@ enum Proc
     
 
     // MARK: - INSERT USER NOT TESTED
-
     
     /// Contains Insert Params and Results
     enum InsertUser: PgCallableRow
@@ -127,9 +126,8 @@ enum Proc
             )
         }
     }
+    
     // MARK: - END INSERT USER NOT TESTED
-    
-    
     
     
     // MARK: - INSERT MEET ID WORKING
@@ -175,8 +173,6 @@ enum Proc
     
     // MARK: - END INSERT MEET ID WORKING
 
-    
-    
     
     // MARK: - INSERT MEET COORDINATE WORKING
     
@@ -226,8 +222,6 @@ enum Proc
     }
 
     // MARK: - END INSERT MEET COORDINATE WORKING
-    
-    
     
     
     // MARK: - INSERT MEET WORKING
@@ -289,8 +283,6 @@ enum Proc
     // MARK: - END INSERT MEET WORKING
     
     
-    
-    
     // MARK: - INSERT CHANGE STAMP WORKING
     
     /// Contains Insert Params and Results
@@ -332,9 +324,6 @@ enum Proc
     }
     
     // MARK: - END INSERT CHANGE STAMP WORKING
-    
-    
-    
     
     
     // MARK: INSERT UPDATED MEET WORKING
@@ -400,6 +389,8 @@ enum Proc
     }
     
     // MARK: - END INSERT UPDATED MEET WORKING
+    
+    
     
     // MARK: - END PROCEDURES RELATED TO MEETS DATA
     
@@ -526,8 +517,6 @@ enum Func
 {
     // MARK: - VIEWS
 
-
-
     enum ViewMeets: PgFunctionRows
     {
         static let funcName: RangleyFunc = .v_meets
@@ -591,10 +580,6 @@ enum Func
         }
     }
 
-    
-    
-    
-
 
     enum ViewUser: PgFunctionRows
     {
@@ -632,8 +617,6 @@ enum Func
         }
     }
 
-    
-    
 
     enum ViewMeetCategories: PgFunctionRows
     {

@@ -10,53 +10,52 @@ import SQLKit
 
 private struct OkResponse: Content { let ok: Bool }
 
-public func routes(_ app: Application) throws {
+public func routes(_ app: Application) throws
+{
     app.get("health") { _ in "ok" }
 
-    app.get("dbdiag")
-    {
-        req async -> String in
-        
-        let c = req.application.config
-        
-        var lines = [
-            "dbdiag:",
-            "host:\(c.dbHost) port:\(c.dbPort) name:\(c.dbName) user:\(c.dbUser)"
-        ]
-
-        guard let sql = req.db as? (any SQLDatabase) else {
-            lines.append("adapter:error req.db is not SQLDatabase")
-            return lines.joined(separator: "\n")
-        }
-
-        do {
-            _ = try await sql.raw("select 1 as one").first()
-            lines.append("query:ok select 1")
-        } catch {
-            lines.append("query:error \(error)")
-        }
-
-        return lines.joined(separator: "\n")
-    }
     
-    // TODO: !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    // TODO: !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    // TODO: !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    // TODO: !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    // TODO: !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    // TODO: !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  
+//    app.get("dbdiag")
+//    {
+//        req async -> String in
+//        
+//        let c = req.application.config
+//        
+//        var lines = [
+//            "dbdiag:",
+//            "host:\(c.dbHost) port:\(c.dbPort) name:\(c.dbName) user:\(c.dbUser)"
+//        ]
+//
+//        guard let sql = req.db as? (any SQLDatabase) else {
+//            lines.append("adapter:error req.db is not SQLDatabase")
+//            return lines.joined(separator: "\n")
+//        }
+//
+//        do {
+//            _ = try await sql.raw("select 1 as one").first()
+//            lines.append("query:ok select 1")
+//        } catch {
+//            lines.append("query:error \(error)")
+//        }
+//
+//        return lines.joined(separator: "\n")
+//    }
+    
+    
     // TODO: !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     // TODO: !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     // TODO: CLEANUP THESE ALL ADD BETTER LOGGING TOO
     // TODO: !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     // TODO: !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    // TODO: !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    // TODO: !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    // TODO: !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    // TODO: !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    // TODO: !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    // TODO: !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
     
+    // protected group
+    let issuer = "https://cognito-idp.<region>.amazonaws.com/<userPoolId>"
+    let jwks   = URI(string: "\(issuer)/.well-known/jwks.json")
+    let audience = "<your app client id>"
+
+    let auth = app.grouped(CognitoJWTMiddleware(jwksURL: jwks, issuer: issuer, audience: audience))
 
     
     
@@ -210,10 +209,11 @@ public func routes(_ app: Application) throws {
         return try await Proc.InsertUpdatedMeet.call(on: sql, body, .init(num_inserted: nil))
     }
 
-
-    
     
     // MARK: - END INSERTS (i_*) or POST ROUTES
+    
+    
+    
     
     
     // MARK: - MODIFIES (m_*) or DELETE/PATCH ROUTES
@@ -327,3 +327,4 @@ public func routes(_ app: Application) throws {
 
  
  */
+
