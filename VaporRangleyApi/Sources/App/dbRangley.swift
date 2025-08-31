@@ -14,14 +14,15 @@ import SQLKit
 enum RangleyProcName: String
 {
     case i_user              = "rangley.rangley_i_user"
-    case i_meet              = "rangley.rangley_i_meet"
-    case i_meet_change_stamp = "rangley.rangley_i_meet_change_stamp"
-    case i_meet_coordinate   = "rangley.rangley_i_meet_coordinate"
     case i_meet_id           = "rangley.rangley_i_meet_id"
+    case i_meet_coordinate   = "rangley.rangley_i_meet_coordinate"
+    case i_meet              = "rangley.rangley_i_meet"
+    case i_meet_change_stamp = "rangley.rangley_i_change_stamp"
     case i_updated_meet      = "rangley.rangley_i_updated_meet"
     case m_user              = "rangley.rangley_m_user"
 }
 
+// Essentially these are views because postgres doesn't allow procedural views in an easy way
 enum RangleyFunc: String
 {
     case v_user              = "rangley.rangley_fn_v_user_by_user_id"
@@ -77,8 +78,7 @@ extension PgCallableNoRow
 enum Proc
 {
 
-
-    // MARK: - INSERT
+    // MARK: - INSERTS
     
     // MARK: i_user (INOUT num_inserted, INOUT new_user_id) -> row
     struct InsertUserParams: Content, Sendable
@@ -123,47 +123,14 @@ enum Proc
         }
     }
     
-
-
-    // MARK: i_meet_coordinate (OUT new_meet_coordinate_id) -> row
-    struct InsertMeetCoordinateParams: Content, Sendable
-    {
-        let latitude            : Double
-        let longitude           : Double
-        let region_latitude     : Double
-        let region_longitude    : Double
-        let region_radius       : Double
-    }
     
-    struct InsertMeetCoordinateResult: Content, Sendable
-    {
-        let new_meet_coordinate_id: Int64?
-    }
     
-    enum InsertMeetCoordinate: PgCallableRow
-    {
-        static let procName: RangleyProcName = .i_meet_coordinate
-        static func query(_ i: InsertMeetCoordinateParams, _ o : InsertMeetCoordinateResult) -> SQLQueryString
-        {
-            """
-            CALL \(unsafeRaw: procName.rawValue)(
-                \(bind: i.latitude),
-                \(bind: i.longitude),
-                \(bind: i.region_latitude),
-                \(bind: i.region_longitude),
-                \(bind: i.region_radius),
-                \(bind: o.new_meet_coordinate_id)
-            );
-            """
-        }
-        static func decode(_ row: any SQLRow) throws -> InsertMeetCoordinateResult
-        {
-            try .init(
-                new_meet_coordinate_id: row.decode(column: "new_meet_coordinate_id", as: Int64?.self)
-            )
-        }
-    }
-
+    
+    /// Meet ID needs to be created first because it is the identity row for every meet and it links the meet to the user.
+    /// Second a Meet Coordinate ID needs ot be created because it goes inside of the Meets table.
+    /// So whenever you want the meet coordinates you just use the Meet ID which is one of the primary keys inside of
+    /// tb_meets.
+    // MARK: - PROCEDURES RELATED TO MEETS DATA
     // MARK: i_meet_id (OUT new_meet_id) -> row
     struct InsertMeetIdParams: Content, Sendable
     {
@@ -196,7 +163,54 @@ enum Proc
             )
         }
     }
+    
 
+    // MARK: i_meet_coordinate (OUT new_meet_coordinate_id) -> row
+    struct InsertMeetCoordinateParams: Content, Sendable
+    {
+        let latitude            : Double
+        let longitude           : Double
+        let region_latitude     : Double
+        let region_longitude    : Double
+        let region_radius       : Double
+    }
+    
+    struct InsertMeetCoordinateResult: Content, Sendable
+    {
+        let new_meet_coordinate_id: Int64?
+    }
+    
+    enum InsertMeetCoordinate: PgCallableRow
+    {
+        static let procName: RangleyProcName = .i_meet_coordinate
+        static func query(_ i: InsertMeetCoordinateParams, _ o : InsertMeetCoordinateResult) -> SQLQueryString
+        {
+            """
+            CALL \(unsafeRaw: procName.rawValue)
+            (
+                -- OUT
+                 \(bind: o.new_meet_coordinate_id)
+            
+                -- REQUIRED
+                ,\(bind: i.latitude)
+                ,\(bind: i.longitude)
+                ,\(bind: i.region_latitude)
+                ,\(bind: i.region_longitude)
+                ,\(bind: i.region_radius)
+
+            );
+            """
+        }
+        static func decode(_ row: any SQLRow) throws -> InsertMeetCoordinateResult
+        {
+            try .init(
+                new_meet_coordinate_id: row.decode(column: "new_meet_coordinate_id", as: Int64?.self)
+            )
+        }
+    }
+
+    
+    
     
     // MARK: i_meet (no OUT) -> no row
     struct InsertMeetParams: Content, Sendable
@@ -215,6 +229,7 @@ enum Proc
         let max_capacity        : Int32?
 
     }
+    
     struct InsertMeetResult: Content, Sendable
     {
         let num_inserted: Int32?
@@ -229,11 +244,15 @@ enum Proc
             CALL \(unsafeRaw: procName.rawValue)
             (
                  \(bind: o.num_inserted)::int4
+            
+                -- Required
                 ,\(bind: i.meet_coordinate_id)::int8
                 ,\(bind: i.meet_id)::int8
                 ,\(bind: i.name)::varchar(50)
                 ,\(bind: i.dttm_start_utc)::timestamptz
                 ,\(bind: i.dttm_end_utc)::timestamptz
+                
+                -- Optional Params Must Coalesce because they are included in parameter
                 ,COALESCE(\(bind: i.description)::varchar(50), ''::varchar(50))
                 ,COALESCE(\(bind: i.change_reason)::varchar(50), ''::varchar(50))
                 ,COALESCE(\(bind: i.meet_category_id)::int2, 1::int2)   -- <- avoids NULL + matches int2
@@ -248,11 +267,12 @@ enum Proc
     }
 
     
+    
+    
     // MARK: i_meet_change_stamp (OUT new_change_stamp) -> row
     struct InsertMeetChangeStampParams: Content, Sendable
     {
         let meet_id         : Int64
-        let meet_status_id  : Int16? // optional
     }
     
     struct InsertMeetChangeStampResult: Content, Sendable
@@ -270,7 +290,6 @@ enum Proc
             (
                  \(bind: o.new_change_stamp)
                 ,\(bind: i.meet_id)
-                ,COALESCE(\(bind: i.meet_status_id)::int2, 0::int2)   -- <- avoids NULL + matches int2
             );
             """
         }
@@ -282,6 +301,8 @@ enum Proc
     }
     
     
+    
+    
     // MARK: i_updated_meet (INOUT num_inserted) -> row
     struct InsertUpdatedMeetParams: Content, Sendable
     {
@@ -289,12 +310,12 @@ enum Proc
         let meet_id             : Int64
         let change_stamp        : Int64
         let meet_coordinate_id  : Int64
-        let meet_status_id      : Int64
         let name                : String
         let dttm_start_utc      : Date
         let dttm_end_utc        : Date
 
         // optional
+        let meet_status_id      : Int64?
         let description         : String?
         let change_reason       : String?
         let meet_category_id    : Int16?
@@ -316,14 +337,19 @@ enum Proc
             """
             CALL \(unsafeRaw: procName.rawValue)
             (
+                -- Out
                  \(bind: o.num_inserted)::int4
+            
+                -- Required
                 ,\(bind: i.meet_id)::int8
                 ,\(bind: i.change_stamp)::int8
                 ,\(bind: i.meet_coordinate_id)::int8
-                ,\(bind: i.meet_status_id)::int2
                 ,\(bind: i.name)::varchar(50)
                 ,\(bind: i.dttm_start_utc)::timestamptz
                 ,\(bind: i.dttm_end_utc)::timestamptz
+
+                -- Optional Params Must Coalesce because they are included in parameter
+                ,COALESCE(\(bind: i.meet_status_id)::int2, 0::int2)
                 ,COALESCE(\(bind: i.description)::varchar(50), ''::varchar(50))
                 ,COALESCE(\(bind: i.change_reason)::varchar(50), ''::varchar(50))
                 ,COALESCE(\(bind: i.meet_category_id)::int2, 1::int2)   -- <- avoids NULL + matches int2
@@ -336,7 +362,7 @@ enum Proc
         }
     }
     
-    
+    // MARK: - END PROCEDURES RELATED TO MEETS DATA
     
     
     
@@ -351,12 +377,14 @@ enum Proc
     // MARK: m_user (no OUT) -> no row
     struct ModifyUserIn: Content, Sendable
     {
+        // MAKING THEM ALL REQUIERED SO THAT I DON'T HAVE TO
+        // WORRY ABOUT DEFAULTING TO THEIR OLD ONES
         let user_id   : Int64
-        let username  : String?
-        let first_name: String?
-        let last_name : String?
-        let cellphone : String?
-        let email     : String?
+        let username  : String
+        let first_name: String
+        let last_name : String
+        let cellphone : String
+        let email     : String
     }
     
     struct ModifyUserResult: Content, Sendable
@@ -364,20 +392,22 @@ enum Proc
         let num_affected : Int?
     }
     
-    
+    // TODO: FIX THIS
     enum ModifyUser: PgCallableNoRow
     {
         static let procName: RangleyProcName = .m_user
         static func query(_ i: ModifyUserIn, _ o : ModifyUserResult) -> SQLQueryString {
             """
-            CALL \(unsafeRaw: procName.rawValue)(
-                \(bind: i.user_id),
-                \(bind: i.username),
-                \(bind: i.first_name),
-                \(bind: i.last_name),
-                \(bind: i.cellphone),
-                \(bind: i.email),
-                \(bind: o.num_affected)
+            CALL \(unsafeRaw: procName.rawValue)
+            (
+                 \(bind: o.num_affected)
+                ,\(bind: i.user_id)
+                ,\(bind: i.username)
+                ,\(bind: i.first_name)
+                ,\(bind: i.last_name)
+                ,\(bind: i.cellphone)
+                ,\(bind: i.email)
+
             );
             """
         }

@@ -236,9 +236,9 @@ public func routes(_ app: Application) throws {
    -H "Content-Type: application/json" \
    -d '{
      "latitude": 41.830017,
-     "longitude": –87.634598,
+     "longitude": -87.634598,
      "region_latitude": 41.830017,
-     "region_longitude": –87.634598,
+     "region_longitude": -87.634598,
      "region_radius": 2
    }'
  
@@ -248,7 +248,7 @@ public func routes(_ app: Application) throws {
   -d '{
      "meet_id": 1,
      "change_stamp" : 1,
-     "meet_status_id": 2,
+     "meet_coordinate_id": 2,
      "name": "White Sox Rooftop Meetup",
      "dttm_start_utc": "2025-10-29T18:00:00Z",
      "dttm_end_utc": "2025-10-29T21:00:00Z"
