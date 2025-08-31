@@ -80,27 +80,31 @@ enum Proc
 
     // MARK: - INSERTS
     
-    // MARK: i_user (INOUT num_inserted, INOUT new_user_id) -> row
-    struct InsertUserParams: Content, Sendable
-    {
-        let username   : String
-        let first_name : String
-        let last_name  : String
-        let cellphone  : String
-        let email      : String
-    }
+
+    // MARK: - INSERT USER NOT TESTED
+
     
-    struct InsertUserResult: Content, Sendable
-    {
-        let num_inserted: Int
-        let new_user_id : Int64
-    }
-    
-    // i_user (OUT num_inserted, OUT new_user_id)
+    /// Contains Insert Params and Results
     enum InsertUser: PgCallableRow
     {
         static let procName: RangleyProcName = .i_user
-        static func query(_ i: InsertUserParams, _ o: InsertUserResult) -> SQLQueryString
+        
+        struct Params: Content, Sendable
+        {
+            let username   : String
+            let first_name : String
+            let last_name  : String
+            let cellphone  : String
+            let email      : String
+        }
+        
+        struct Result: Content, Sendable
+        {
+            let num_inserted: Int
+            let new_user_id : Int64
+        }
+        
+        static func query(_ i: Params, _ o: Result) -> SQLQueryString
         {
             """
             CALL \(unsafeRaw: procName.rawValue)(
@@ -114,7 +118,8 @@ enum Proc
             );
             """
         }
-        static func decode(_ row: any SQLRow) throws -> InsertUserResult
+        
+        static func decode(_ row: any SQLRow) throws -> Result
         {
             try .init(
                 num_inserted: row.decode(column: "num_inserted", as: Int.self),
@@ -122,31 +127,35 @@ enum Proc
             )
         }
     }
+    // MARK: - END INSERT USER NOT TESTED
     
     
     
     
+    // MARK: - INSERT MEET ID WORKING
     /// Meet ID needs to be created first because it is the identity row for every meet and it links the meet to the user.
     /// Second a Meet Coordinate ID needs ot be created because it goes inside of the Meets table.
     /// So whenever you want the meet coordinates you just use the Meet ID which is one of the primary keys inside of
     /// tb_meets.
     // MARK: - PROCEDURES RELATED TO MEETS DATA
     // MARK: i_meet_id (OUT new_meet_id) -> row
-    struct InsertMeetIdParams: Content, Sendable
-    {
-        let created_by_user_id  : Int64
-    }
-    
-    struct InsertMeetIdResult: Content, Sendable
-    {
-        let new_meet_id: Int64?
-    }
-    
+
+    /// Contains Insert Params and Results
     enum InsertMeetId: PgCallableRow
     {
         static let procName: RangleyProcName = .i_meet_id
         
-        static func query(_ i: InsertMeetIdParams, _ o : InsertMeetIdResult) -> SQLQueryString
+        struct Params: Content, Sendable // WORKING
+        {
+            let created_by_user_id  : Int64
+        }
+        
+        struct Result: Content, Sendable
+        {
+            let new_meet_id: Int64?
+        }
+        
+        static func query(_ i: Params, _ o : Result) -> SQLQueryString
         {
             """
             CALL \(unsafeRaw: procName.rawValue)(
@@ -157,33 +166,40 @@ enum Proc
             """
         }
         
-        static func decode(_ row: any SQLRow) throws -> InsertMeetIdResult {
+        static func decode(_ row: any SQLRow) throws -> Result {
             try .init(
                 new_meet_id: row.decode(column: "new_meet_id", as: Int64?.self)
             )
         }
     }
     
+    // MARK: - END INSERT MEET ID WORKING
 
-    // MARK: i_meet_coordinate (OUT new_meet_coordinate_id) -> row
-    struct InsertMeetCoordinateParams: Content, Sendable
-    {
-        let latitude            : Double
-        let longitude           : Double
-        let region_latitude     : Double
-        let region_longitude    : Double
-        let region_radius       : Double
-    }
     
-    struct InsertMeetCoordinateResult: Content, Sendable
-    {
-        let new_meet_coordinate_id: Int64?
-    }
     
+    
+    // MARK: - INSERT MEET COORDINATE WORKING
+    
+    /// Contains Insert Params and Results
     enum InsertMeetCoordinate: PgCallableRow
     {
         static let procName: RangleyProcName = .i_meet_coordinate
-        static func query(_ i: InsertMeetCoordinateParams, _ o : InsertMeetCoordinateResult) -> SQLQueryString
+        
+        struct Params: Content, Sendable
+        {
+            let latitude            : Double
+            let longitude           : Double
+            let region_latitude     : Double
+            let region_longitude    : Double
+            let region_radius       : Double
+        }
+        
+        struct Result: Content, Sendable
+        {
+            let new_meet_coordinate_id: Int64?
+        }
+        
+        static func query(_ i: Params, _ o : Result) -> SQLQueryString
         {
             """
             CALL \(unsafeRaw: procName.rawValue)
@@ -201,7 +217,7 @@ enum Proc
             );
             """
         }
-        static func decode(_ row: any SQLRow) throws -> InsertMeetCoordinateResult
+        static func decode(_ row: any SQLRow) throws -> Result
         {
             try .init(
                 new_meet_coordinate_id: row.decode(column: "new_meet_coordinate_id", as: Int64?.self)
@@ -209,37 +225,41 @@ enum Proc
         }
     }
 
+    // MARK: - END INSERT MEET COORDINATE WORKING
     
     
     
-    // MARK: i_meet (no OUT) -> no row
-    struct InsertMeetParams: Content, Sendable
-    {
-        // required
-        let meet_id             : Int64   // p_meet_id
-        let meet_coordinate_id  : Int64
-        let name                : String   // p_name
-        let dttm_start_utc      : Date
-        let dttm_end_utc        : Date
-        
-        // optional
-        let description         : String?   // p_description
-        let change_reason       : String?   // p_change_reason
-        let meet_category_id    : Int16?    // p_meet_category_id
-        let max_capacity        : Int32?
-
-    }
     
-    struct InsertMeetResult: Content, Sendable
-    {
-        let num_inserted: Int32?
-    }
+    // MARK: - INSERT MEET WORKING
     
+    /// Contains Insert Params and Results
     enum InsertMeet: PgCallableRow
     {
         static let procName: RangleyProcName = .i_meet
 
-        static func query(_ i: InsertMeetParams, _ o: InsertMeetResult) -> SQLQueryString {
+        struct Params: Content, Sendable
+        {
+            // required
+            let meet_id             : Int64   // p_meet_id
+            let meet_coordinate_id  : Int64
+            let name                : String   // p_name
+            let dttm_start_utc      : Date
+            let dttm_end_utc        : Date
+            
+            // optional
+            let description         : String?   // p_description
+            let change_reason       : String?   // p_change_reason
+            let meet_category_id    : Int16?    // p_meet_category_id
+            let max_capacity        : Int32?
+
+        }
+        
+        struct Result: Content, Sendable
+        {
+            let num_inserted: Int32?
+        }
+        
+        static func query(_ i: Params, _ o: Result) -> SQLQueryString {
             """
             CALL \(unsafeRaw: procName.rawValue)
             (
@@ -261,29 +281,34 @@ enum Proc
             """
         }
 
-        static func decode(_ row: any SQLRow) throws -> InsertMeetResult {
+        static func decode(_ row: any SQLRow) throws -> Result {
             try .init(num_inserted: row.decode(column: "num_inserted", as: Int32?.self))
         }
     }
 
+    // MARK: - END INSERT MEET WORKING
     
     
     
-    // MARK: i_meet_change_stamp (OUT new_change_stamp) -> row
-    struct InsertMeetChangeStampParams: Content, Sendable
+    
+    // MARK: - INSERT CHANGE STAMP WORKING
+    
+    /// Contains Insert Params and Results
+    enum InsertChangeStamp: PgCallableRow
     {
-        let meet_id         : Int64
-    }
-    
-    struct InsertMeetChangeStampResult: Content, Sendable
-    {
-        let new_change_stamp: Int64?
-    }
-    
-    enum InsertMeetChangeStamp: PgCallableRow
-    {
+        struct Params: Content, Sendable
+        {
+            let meet_id         : Int64
+        }
+        
+        struct Result: Content, Sendable
+        {
+            let new_change_stamp: Int64?
+        }
+        
         static let procName: RangleyProcName = .i_meet_change_stamp
-        static func query(_ i: InsertMeetChangeStampParams, _ o : InsertMeetChangeStampResult) -> SQLQueryString
+        
+        static func query(_ i: Params, _ o : Result) -> SQLQueryString
         {
             // OUT params are NOT passed
             """
@@ -298,7 +323,7 @@ enum Proc
             """
         }
         
-        static func decode(_ row: any SQLRow) throws -> InsertMeetChangeStampResult
+        static func decode(_ row: any SQLRow) throws -> Result
         {
             try .init(
                 new_change_stamp: row.decode(column: "new_change_stamp", as: Int64?.self)
@@ -306,39 +331,44 @@ enum Proc
         }
     }
     
+    // MARK: - END INSERT CHANGE STAMP WORKING
     
     
     
-    // MARK: i_updated_meet (INOUT num_inserted) -> row
-    struct InsertUpdatedMeetParams: Content, Sendable
-    {
-        // required
-        let meet_id             : Int64
-        let change_stamp        : Int64
-        let meet_coordinate_id  : Int64
-        let name                : String
-        let dttm_start_utc      : Date
-        let dttm_end_utc        : Date
-
-        // optional
-        let meet_status_id      : Int16?
-        let description         : String?
-        let change_reason       : String?
-        let meet_category_id    : Int16?
-        let max_capacity        : Int32? // PG default 2 if nil
-
-    }
     
-    struct InsertUpdatedMeetResult: Content, Sendable
-    {
-        let num_inserted: Int32?
-    }
     
+    // MARK: INSERT UPDATED MEET WORKING
+    
+    /// Contains Insert Params and Results
     enum InsertUpdatedMeet: PgCallableRow
     {
         static let procName: RangleyProcName = .i_updated_meet
         
-        static func query(_ i: InsertUpdatedMeetParams, _ o : InsertUpdatedMeetResult ) -> SQLQueryString
+        struct Params: Content, Sendable
+        {
+            // required
+            let meet_id             : Int64
+            let change_stamp        : Int64
+            let meet_coordinate_id  : Int64
+            let name                : String
+            let dttm_start_utc      : Date
+            let dttm_end_utc        : Date
+
+            // optional
+            let meet_status_id      : Int16?
+            let description         : String?
+            let change_reason       : String?
+            let meet_category_id    : Int16?
+            let max_capacity        : Int32? // PG default 2 if nil
+
+        }
+        
+        struct Result: Content, Sendable
+        {
+            let num_inserted: Int32?
+        }
+        
+        static func query(_ i: Params, _ o : Result ) -> SQLQueryString
         {
             """
             CALL \(unsafeRaw: procName.rawValue)
@@ -363,11 +393,13 @@ enum Proc
             );
             """
         }
-        static func decode(_ row: any SQLRow) throws -> InsertUpdatedMeetResult
+        static func decode(_ row: any SQLRow) throws -> Result
         {
             try .init(num_inserted: row.decode(column: "num_inserted", as: Int32?.self))
         }
     }
+    
+    // MARK: - END INSERT UPDATED MEET WORKING
     
     // MARK: - END PROCEDURES RELATED TO MEETS DATA
     
@@ -381,29 +413,34 @@ enum Proc
     
     // MARK: - MODIFY
     
-    // MARK: m_user (no OUT) -> no row
-    struct ModifyUserIn: Content, Sendable
-    {
-        // MAKING THEM ALL REQUIERED SO THAT I DON'T HAVE TO
-        // WORRY ABOUT DEFAULTING TO THEIR OLD ONES
-        let user_id   : Int64
-        let username  : String
-        let first_name: String
-        let last_name : String
-        let cellphone : String
-        let email     : String
-    }
-    
-    struct ModifyUserResult: Content, Sendable
-    {
-        let num_affected : Int?
-    }
-    
+
     // TODO: FIX THIS
+    /// Contains Insert Params and Results
     enum ModifyUser: PgCallableNoRow
     {
         static let procName: RangleyProcName = .m_user
-        static func query(_ i: ModifyUserIn, _ o : ModifyUserResult) -> SQLQueryString {
+        
+        
+        // MARK: m_user (no OUT) -> no row
+        struct Params: Content, Sendable
+        {
+            // MAKING THEM ALL REQUIERED SO THAT I DON'T HAVE TO
+            // WORRY ABOUT DEFAULTING TO THEIR OLD ONES
+            let user_id   : Int64
+            let username  : String
+            let first_name: String
+            let last_name : String
+            let cellphone : String
+            let email     : String
+        }
+        
+        struct Result: Content, Sendable
+        {
+            let num_affected : Int?
+        }
+        
+        
+        static func query(_ i: Params, _ o : Result) -> SQLQueryString {
             """
             CALL \(unsafeRaw: procName.rawValue)
             (
@@ -418,7 +455,7 @@ enum Proc
             );
             """
         }
-        static func decode(_ row: any SQLRow) throws -> ModifyUserResult
+        static func decode(_ row: any SQLRow) throws -> Result
         {
             try .init(
                 num_affected: row.decode(column: "num_affected", as: Int?.self)
@@ -489,32 +526,34 @@ enum Func
 {
     // MARK: - VIEWS
 
-    // vw_meet_card_data-style payload (assumes rangley_fn_v_meets() returns these columns)
-    struct ViewMeetsReults: Content, Sendable
-    {
-        let meet_id            : Int64
-        let change_stamp       : Int64
-        let meet_status_id     : Int16
-        let latitude           : Double
-        let longitude          : Double
-        let region_latitude    : Double
-        let region_longitude   : Double
-        let region_radius      : Double
-        let dttm_start_utc     : Date
-        let dttm_end_utc       : Date
-        let name               : String
-        let category_name      : String
-        let description        : String
-        let max_capacity       : Int32
-        let created_by_user_id : Int64
-        let first_name         : String
-        let last_name          : String
-    }
+
 
     enum ViewMeets: PgFunctionRows
     {
         static let funcName: RangleyFunc = .v_meets
 
+        // vw_meet_card_data-style payload (assumes rangley_fn_v_meets() returns these columns)
+        struct Results: Content, Sendable
+        {
+            let meet_id            : Int64
+            let change_stamp       : Int64
+            let meet_status_id     : Int16
+            let latitude           : Double
+            let longitude          : Double
+            let region_latitude    : Double
+            let region_longitude   : Double
+            let region_radius      : Double
+            let dttm_start_utc     : Date
+            let dttm_end_utc       : Date
+            let name               : String
+            let category_name      : String
+            let description        : String
+            let max_capacity       : Int32
+            let created_by_user_id : Int64
+            let first_name         : String
+            let last_name          : String
+        }
+        
         struct In: Sendable { }  // no params
 
         static func query(_ input: In) -> SQLQueryString
@@ -522,7 +561,7 @@ enum Func
             "SELECT * FROM \(unsafeRaw: funcName.rawValue)();"
         }
 
-        static func decode(_ r: any SQLRow) throws -> ViewMeetsReults
+        static func decode(_ r: any SQLRow) throws -> Results
         {
             try .init(
                  meet_id            : r.decode(column: "meet_id",            as: Int64.self)
@@ -546,7 +585,7 @@ enum Func
         }
 
         // convenience
-        static func fetchAll(on db: any SQLDatabase) async throws -> [ViewMeetsReults]
+        static func fetchAll(on db: any SQLDatabase) async throws -> [Results]
         {
             try await fetchAll(on: db, In())
         }
@@ -555,31 +594,34 @@ enum Func
     
     
     
-    struct ViewUserParam: Content, Sendable
-    {
-        let user_id: Int64
-    }
 
-    struct ViewUserResults: Content, Sendable
-    {
-        let username  : String?
-        let first_name: String?
-        let last_name : String?
-        let cellphone : String?
-        let email     : String?
-    }
 
     enum ViewUser: PgFunctionRows
     {
         static let funcName: RangleyFunc = .v_user  // or .v_user_clean
 
+        struct Param: Content, Sendable
+        {
+            let user_id: Int64
+        }
+
+        struct Results: Content, Sendable
+        {
+            let username  : String?
+            let first_name: String?
+            let last_name : String?
+            let cellphone : String?
+            let email     : String?
+        }
+        
         struct In: Sendable { let user_id: Int64 }
 
         static func query(_ input: In) -> SQLQueryString {
             "SELECT * FROM \(unsafeRaw: funcName.rawValue)(\(bind: input.user_id));"
         }
 
-        static func decode(_ r: any SQLRow) throws -> ViewUserResults {
+        static func decode(_ r: any SQLRow) throws -> Results
+        {
             try .init(
                 username  : r.decode(column: "username",   as: String?.self),
                 first_name: r.decode(column: "first_name", as: String?.self),
@@ -592,23 +634,25 @@ enum Func
 
     
     
-    struct ViewMeetCategoriesResults: Content, Sendable
-    {
-        let meet_category_id: Int32
-        let name            : String
-    }
 
     enum ViewMeetCategories: PgFunctionRows
     {
         static let funcName: RangleyFunc = .v_meet_categories
 
+        struct Results: Content, Sendable
+        {
+            let meet_category_id: Int32
+            let name            : String
+        }
+
+        
         struct In: Sendable { }  // no params
 
         static func query(_ input: In) -> SQLQueryString {
             "SELECT * FROM \(unsafeRaw: funcName.rawValue)();"
         }
 
-        static func decode(_ r: any SQLRow) throws -> ViewMeetCategoriesResults
+        static func decode(_ r: any SQLRow) throws -> Results
         {
             try .init(
                 meet_category_id: r.decode(column: "meet_category_id", as: Int32.self),
@@ -617,7 +661,7 @@ enum Func
         }
 
         // convenience
-        static func fetchAll(on db: any SQLDatabase) async throws -> [ViewMeetCategoriesResults] {
+        static func fetchAll(on db: any SQLDatabase) async throws -> [Results] {
             try await fetchAll(on: db, In())
         }
     }

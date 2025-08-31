@@ -65,7 +65,7 @@ public func routes(_ app: Application) throws {
     // GET /v/meets  -> all meet card data
     app.get("v", "meets")
     {
-        req async throws -> [Func.ViewMeetsReults] in
+        req async throws -> [Func.ViewMeets.Results] in
         
         guard let sql = req.db as? (any SQLDatabase)
         else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
@@ -76,7 +76,7 @@ public func routes(_ app: Application) throws {
     // GET /v/user/:user_id  -> single user values
     app.get("v","user",":user_id")
     {
-        req async throws -> [Func.ViewUserResults] in
+        req async throws -> [Func.ViewUser.Results] in
         
         guard let sql = req.db as? (any SQLDatabase)
         else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
@@ -90,7 +90,7 @@ public func routes(_ app: Application) throws {
     // GET /v/meet-categories -> all categories
     app.get("v", "meet-categories")
     {
-        req async throws -> [Func.ViewMeetCategoriesResults] in
+        req async throws -> [Func.ViewMeetCategories.Results] in
         
         guard let sql = req.db as? (any SQLDatabase)
         else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
@@ -109,9 +109,9 @@ public func routes(_ app: Application) throws {
     // i/user -> (num_inserted, new_user_id)
     app.post("i","user")
     {
-        req async throws -> Proc.InsertUserResult in
+        req async throws -> Proc.InsertUser.Result in
         
-        let body = try req.content.decode(Proc.InsertUserParams.self)
+        let body = try req.content.decode(Proc.InsertUser.Params.self)
         
         guard let sql = req.db as? (any SQLDatabase)
         else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
@@ -122,9 +122,9 @@ public func routes(_ app: Application) throws {
     // i/meet-coordinate -> (new_meet_coordinate_id)
     app.post("i","meet-coordinate")
     {
-        req async throws -> Proc.InsertMeetCoordinateResult in
+        req async throws -> Proc.InsertMeetCoordinate.Result in
         
-        let body = try req.content.decode(Proc.InsertMeetCoordinateParams.self)
+        let body = try req.content.decode(Proc.InsertMeetCoordinate.Params.self)
         
         guard body.region_radius > 0 else { throw Abort(.badRequest, reason: "region_radius must be > 0") }
         
@@ -137,8 +137,8 @@ public func routes(_ app: Application) throws {
     // i/meet-id -> (new_meet_id)
     app.post("i","meet-id")
     {
-        req async throws -> Proc.InsertMeetIdResult in
-        let body = try req.content.decode(Proc.InsertMeetIdParams.self)
+        req async throws -> Proc.InsertMeetId.Result in
+        let body = try req.content.decode(Proc.InsertMeetId.Params.self)
         
         guard body.created_by_user_id > 0
         else { throw Abort(.badRequest, reason: "meet_coordinate_id and created_by_user_id are required") }
@@ -152,9 +152,9 @@ public func routes(_ app: Application) throws {
     // i/meet -> returns (num_inserted)
     app.post("i","meet")
     {
-        req async throws -> Proc.InsertMeetResult in
+        req async throws -> Proc.InsertMeet.Result in
         
-        let body = try req.content.decode(Proc.InsertMeetParams.self)
+        let body = try req.content.decode(Proc.InsertMeet.Params.self)
         guard !body.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw Abort(.badRequest, reason: "name is required")
         }
@@ -175,9 +175,9 @@ public func routes(_ app: Application) throws {
     // i/meet-change-stamp -> (new_change_stamp)
     app.post("i","meet-change-stamp")
     {
-        req async throws -> Proc.InsertMeetChangeStampResult in
+        req async throws -> Proc.InsertChangeStamp.Result in
         
-        let body = try req.content.decode(Proc.InsertMeetChangeStampParams.self)
+        let body = try req.content.decode(Proc.InsertChangeStamp.Params.self)
         
         guard body.meet_id > 0
         else { throw Abort(.badRequest, reason: "Meet ID is invalid or not provided") }
@@ -185,15 +185,15 @@ public func routes(_ app: Application) throws {
         guard let sql = req.db as? (any SQLDatabase)
         else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
         
-        return try await Proc.InsertMeetChangeStamp.call(on: sql, body, .init(new_change_stamp: nil))
+        return try await Proc.InsertChangeStamp.call(on: sql, body, .init(new_change_stamp: nil))
     }
 
     // i/meet -> returns (num_inserted)
     app.post("i","updated-meet")
     {
-        req async throws -> Proc.InsertUpdatedMeetResult in
+        req async throws -> Proc.InsertUpdatedMeet.Result in
         
-        let body = try req.content.decode(Proc.InsertUpdatedMeetParams.self)
+        let body = try req.content.decode(Proc.InsertUpdatedMeet.Params.self)
         guard !body.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw Abort(.badRequest, reason: "name is required")
         }
@@ -223,7 +223,7 @@ public func routes(_ app: Application) throws {
     {
         req async throws -> OkResponse in
         
-        let body = try req.content.decode(Proc.ModifyUserIn.self)
+        let body = try req.content.decode(Proc.ModifyUser.Params.self)
         
         guard let sql = req.db as? (any SQLDatabase)
         else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
@@ -249,10 +249,10 @@ public func routes(_ app: Application) throws {
  curl -sS -X POST https://api.mrfoxco.com/i/meet-coordinate \
    -H "Content-Type: application/json" \
    -d '{
-     "latitude": 41.9484,
-     "longitude": -87.6553,
-     "region_latitude": 41.9484,
-     "region_longitude": -87.6553,
+     "latitude": 40.9484,
+     "longitude": -86.6553,
+     "region_latitude": 40.9484,
+     "region_longitude": -86.6553,
      "region_radius": 2
    }'
 
@@ -260,8 +260,8 @@ public func routes(_ app: Application) throws {
  curl -sS -X POST https://api.mrfoxco.com/i/meet \
   -H "Content-Type: application/json" \
   -d '{
-     "meet_id": 4,
-     "meet_coordinate_id": 5,
+     "meet_id": 5,
+     "meet_coordinate_id": 6,
      "name": "Other Cubs Rooftop Meetup",
      "dttm_start_utc": "2025-09-29T18:00:00Z",
      "dttm_end_utc": "2025-09-29T21:00:00Z"
@@ -285,16 +285,16 @@ public func routes(_ app: Application) throws {
  
  
  curl -sS -X POST https://api.mrfoxco.com/i/updated-meet \
-  -H "Content-Type: application/json" \
-  -d '{
-     "meet_id": 1,
-     "change_stamp" : 2,
-     "meet_coordinate_id": 1,
-     "name": "Barstool Rooftop Meetup",
-     "dttm_start_utc": "2025-12-29T9:00:00Z",
-     "dttm_end_utc": "2025-12-29T12:00:00Z"
-     }'
- 
+   -H "Content-Type: application/json" \
+   -d '{
+     "meet_id": 5,
+     "change_stamp": 3,
+     "meet_coordinate_id": 6,
+     "name": "Anthony'\''s Rooftop Party",
+     "dttm_start_utc": "2025-09-05T09:00:00Z",
+     "dttm_end_utc": "2025-09-05T12:00:00Z"
+   }'
+
 
  
  // with legal meet_status_id
