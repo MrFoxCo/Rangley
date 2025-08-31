@@ -9,7 +9,7 @@ let package = Package(
         .package(url: "https://github.com/vapor/fluent.git", from: "4.10.0"),
         .package(url: "https://github.com/vapor/fluent-postgres-driver.git", from: "2.10.0"),
         .package(url: "https://github.com/vapor/sql-kit.git", from: "3.0.0"),
-        .package(url: "https://github.com/vapor/jwt.git", from: "5.0.0")   // ← add this
+        .package(url: "https://github.com/vapor/jwt.git", from: "5.3.0"), // pin to a recent 5.x
     ],
     targets: [
         .target(
@@ -19,7 +19,7 @@ let package = Package(
                 .product(name: "Fluent", package: "fluent"),
                 .product(name: "FluentPostgresDriver", package: "fluent-postgres-driver"),
                 .product(name: "SQLKit", package: "sql-kit"),
-                .product(name: "JWT", package: "jwt")     
+                .product(name: "JWT", package: "jwt"), // <- this brings the Vapor helpers
             ],
             path: "Sources/App",
             swiftSettings: [.enableUpcomingFeature("ExistentialAny")]
@@ -35,8 +35,7 @@ let package = Package(
         ),
         .testTarget(
             name: "AppTests",
-            dependencies: [
-                "App",
+            dependencies: ["App",
                 .product(name: "XCTVapor", package: "vapor")
             ],
             swiftSettings: [.enableUpcomingFeature("ExistentialAny")]

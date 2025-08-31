@@ -7,36 +7,42 @@
 
 // CognitoJWTMiddleware.swift
 import Vapor
-import JWT
+import JWT       // gives you req.jwt / app.jwt
+import JWTKit    // gives you JWKS, claims types
+
+// Thread-safe JWKS cache
+actor JWKSCache {
+    static let shared = JWKSCache()
+    private var jwks: JWKS?
+    private var lastFetch: Date?
+
+    func get(client: any Client, url: URI) async throws -> JWKS {
+        if let jwks, let lastFetch, Date().timeIntervalSince(lastFetch) < 3600 {
+            return jwks
+        }
+        let res = try await client.get(url)
+        let fresh = try res.content.decode(JWKS.self)
+        self.jwks = fresh
+        self.lastFetch = Date()
+        return fresh
+    }
+}
 
 struct CognitoJWTMiddleware: AsyncMiddleware {
     let jwksURL: URI
-    let issuer: String          // e.g. "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_AbCdEf123"
-    let audience: String        // your App Client Id
+    let issuer: String
+    let audience: String
 
-    // cache JWKs in memory
-    private static var cachedJWKs: JWKSet?
-    private static var lastFetch: Date?
-
-    func fetchJWKs(_ client: Client) async throws -> JWKSet {
-        if let s = Self.cachedJWKs, let t = Self.lastFetch, Date().timeIntervalSince(t) < 60*60 {
-            return s
-        }
-        let res = try await client.get(jwksURL)
-        let jwks = try res.content.decode(JWKSet.self)
-        Self.cachedJWKs = jwks
-        Self.lastFetch = Date()
-        return jwks
-    }
-
-    func respond(to req: Request, chainingTo next: AsyncResponder) async throws -> Response {
+    func respond(to req: Request, chainingTo next: any AsyncResponder) async throws -> Response {
         guard let bearer = req.headers.bearerAuthorization?.token else {
             throw Abort(.unauthorized, reason: "Missing bearer token")
         }
 
-        let jwks = try await fetchJWKs(req.client)
-        let signers = JWTSigners()
-        try signers.use(jwks: jwks)
+        // 1) Fetch/refresh JWKS
+        let jwks = try await JWKSCache.shared.get(client: req.client, url: jwksURL)
+
+        // 2) Load JWKS into the app's key collection
+        try await req.application.jwt.keys.add(jwks: jwks)   // <- not .use(...)
 
         struct Claims: JWTPayload {
             var iss: IssuerClaim
@@ -45,25 +51,25 @@ struct CognitoJWTMiddleware: AsyncMiddleware {
             var token_use: String
             var client_id: String?
 
-            func verify(using signer: JWTSigner) throws {
+            func verify(using _: some JWTAlgorithm) async throws {
                 try exp.verifyNotExpired()
             }
         }
 
-        let payload = try signers.verify(bearer, as: Claims.self)
 
-        // hard checks
+        // 3) Verify (note: async in your toolchain)
+        let payload = try await req.jwt.verify(bearer, as: Claims.self)
+
+        // 4) Hard checks
         guard payload.iss.value == issuer else { throw Abort(.unauthorized, reason: "Bad issuer") }
         guard payload.token_use == "access" else { throw Abort(.unauthorized, reason: "Not an access token") }
-        if let cid = payload.client_id { guard cid == audience else { throw Abort(.unauthorized) } }
+        if let cid = payload.client_id, cid != audience { throw Abort(.unauthorized, reason: "Wrong client_id") }
 
-        // expose user id (Cognito sub) to handlers
+        // 5) Expose sub
         req.storage[UserKey.self] = payload.sub.value
         return try await next.respond(to: req)
     }
 }
 
 private struct UserKey: StorageKey { typealias Value = String }
-extension Request {
-    var cognitoSub: String? { storage[UserKey.self] }
-}
+extension Request { var cognitoSub: String? { storage[UserKey.self] } }

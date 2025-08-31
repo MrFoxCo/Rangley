@@ -47,5 +47,29 @@ public func configure(_ app: Application) throws {
         as: .psql
     )
 
+    // --- Cognito ---
+    let cognitoIssuer   = requireEnv("COGNITO_ISSUER") 
+    let cognitoClientID = requireEnv("COGNITO_CLIENT_ID")
+
+    app.storage[CognitoConfigKey.self] = CognitoConfig(
+        issuer: cognitoIssuer,
+        clientID: cognitoClientID
+    )
+
+    
+    
     try routes(app)
+}
+// MARK: - Cognito Config holder
+struct CognitoConfig {
+    let issuer: String
+    let clientID: String
+}
+private struct CognitoConfigKey: StorageKey {
+    typealias Value = CognitoConfig
+}
+extension Application {
+    var cognito: CognitoConfig {
+        storage[CognitoConfigKey.self]!
+    }
 }

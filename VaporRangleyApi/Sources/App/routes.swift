@@ -43,26 +43,29 @@ public func routes(_ app: Application) throws
 //    }
     
     
-    // TODO: !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    // TODO: !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    // TODO: CLEANUP THESE ALL ADD BETTER LOGGING TOO
-    // TODO: !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    // TODO: !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    // --- Cognito-protected group ---
+    let issuer   = app.cognito.issuer          // from configure.swift storage
+    let clientID = app.cognito.clientID
 
+    // AWS Cognito JWKS endpoint is under /.well-known/jwks.json
+    let jwksURL = URI(string: "\(issuer)/.well-known/jwks.json")
+
+    let auth = CognitoJWTMiddleware(
+        jwksURL: jwksURL,
+        issuer: issuer,
+        audience: clientID
+    )
+
+    let api = app.grouped(auth)
     
-    // protected group
-    let issuer = "https://cognito-idp.<region>.amazonaws.com/<userPoolId>"
-    let jwks   = URI(string: "\(issuer)/.well-known/jwks.json")
-    let audience = "<your app client id>"
-
-    let auth = app.grouped(CognitoJWTMiddleware(jwksURL: jwks, issuer: issuer, audience: audience))
-
-    
+    let v = api.grouped("v")                  // public reads
+    let i = api.grouped("i")            // protected inserts
+    let m = api.grouped("m")            // protected modifies
     
     // MARK: - VIEW (fn_* ) or GET ROUTES
 
     // GET /v/meets  -> all meet card data
-    app.get("v", "meets")
+    v.get("v", "meets")
     {
         req async throws -> [Func.ViewMeets.Results] in
         
@@ -73,7 +76,7 @@ public func routes(_ app: Application) throws
     }
 
     // GET /v/user/:user_id  -> single user values
-    app.get("v","user",":user_id")
+    v.get("v","user",":user_id")
     {
         req async throws -> [Func.ViewUser.Results] in
         
@@ -87,7 +90,7 @@ public func routes(_ app: Application) throws
     }
     
     // GET /v/meet-categories -> all categories
-    app.get("v", "meet-categories")
+    v.get("v", "meet-categories")
     {
         req async throws -> [Func.ViewMeetCategories.Results] in
         
@@ -106,7 +109,7 @@ public func routes(_ app: Application) throws
     // MARK: - INSERTS (i_*) or POST ROUTES
 
     // i/user -> (num_inserted, new_user_id)
-    app.post("i","user")
+    i.post("i","user")
     {
         req async throws -> Proc.InsertUser.Result in
         
@@ -119,7 +122,7 @@ public func routes(_ app: Application) throws
     }
 
     // i/meet-coordinate -> (new_meet_coordinate_id)
-    app.post("i","meet-coordinate")
+    i.post("i","meet-coordinate")
     {
         req async throws -> Proc.InsertMeetCoordinate.Result in
         
@@ -134,7 +137,7 @@ public func routes(_ app: Application) throws
     }
 
     // i/meet-id -> (new_meet_id)
-    app.post("i","meet-id")
+    i.post("i","meet-id")
     {
         req async throws -> Proc.InsertMeetId.Result in
         let body = try req.content.decode(Proc.InsertMeetId.Params.self)
@@ -149,7 +152,7 @@ public func routes(_ app: Application) throws
     }
 
     // i/meet -> returns (num_inserted)
-    app.post("i","meet")
+    i.post("i","meet")
     {
         req async throws -> Proc.InsertMeet.Result in
         
@@ -172,7 +175,7 @@ public func routes(_ app: Application) throws
     
     // WORKS BUT SAYS PERMISSION DENIED FOR SOME REASON???
     // i/meet-change-stamp -> (new_change_stamp)
-    app.post("i","meet-change-stamp")
+    i.post("i","meet-change-stamp")
     {
         req async throws -> Proc.InsertChangeStamp.Result in
         
@@ -188,7 +191,7 @@ public func routes(_ app: Application) throws
     }
 
     // i/meet -> returns (num_inserted)
-    app.post("i","updated-meet")
+    i.post("i","updated-meet")
     {
         req async throws -> Proc.InsertUpdatedMeet.Result in
         
@@ -219,7 +222,7 @@ public func routes(_ app: Application) throws
     // MARK: - MODIFIES (m_*) or DELETE/PATCH ROUTES
 
     // m_user -> no OUT/INOUT (no row)
-    app.post("m", "user")
+    m.post("m", "user")
     {
         req async throws -> OkResponse in
         
