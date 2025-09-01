@@ -330,6 +330,8 @@ public func routes(_ app: Application) throws
      "max_capacity" : 2
    }'
  
+ 
+ 
  // no defaults
 
  curl -sS -X POST "{$BASE}/i/user" \
@@ -339,7 +341,7 @@ public func routes(_ app: Application) throws
      "cognito_sub": "us-east-2_abc123:deadbeef-dead-beef-dead-beefdeadbeef",
      "username": "xcoder",
      "display_name": "X Code",
-     "cellphone": "+13125550123",      
+     "cellphone": "+13125550123",
      "email": "x@code.com",
      "dob": "1993-05-14",
      "first_name": "X",
@@ -351,7 +353,7 @@ public func routes(_ app: Application) throws
 
  # single user
  
-curl -sS -X GET "{$BASE}/v/user/2" \
+curl -sS -X GET "{$BASE}/v/user/4" \
     -H "Authorization: Bearer $AUTH_TOKEN" \
     -H "Accept: application/json"
 
@@ -364,7 +366,13 @@ curl -sS -X GET "{$BASE}/v/meet-categories" \
     -H "Accept: application/json"
  
  
- 
+ curl -sS -X POST "{$BASE}/m/user/4" \
+   -H "Content-Type: application/json" \
+   -H "Authorization: Bearer $AUTH_TOKEN" \
+   -d '{
+     "user_id": 4,
+     "display_name": "Jonathan"
+   }'
  
  
  

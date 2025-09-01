@@ -25,7 +25,7 @@ enum RangleyProcName: String
 // Essentially these are views because postgres doesn't allow procedural views in an easy way
 enum RangleyFunc: String
 {
-    case v_user              = "rangley.rangley_fn_v_user_by_user_id"
+    case v_user_by_user_id   = "rangley.rangley_fn_v_user_by_user_id"
     case v_meets             = "rangley.rangley_fn_v_meets"
     case v_meet_categories   = "rangley.rangley_fn_v_meet_categories"
 }
@@ -603,7 +603,7 @@ enum Func
 
     enum ViewUser: PgFunctionRows
     {
-        static let funcName: RangleyFunc = .v_user  // or .v_user_clean
+        static let funcName: RangleyFunc = .v_user_by_user_id  // or .v_user_clean
 
         struct Param: Content, Sendable
         {
@@ -612,11 +612,11 @@ enum Func
 
         struct Results: Content, Sendable
         {
-            let username  : String?
-            let first_name: String?
-            let last_name : String?
-            let cellphone : String?
-            let email     : String?
+            let cognito_sub     : String?
+            let username        : String?
+            let display_name    : String?
+            let cellphone       : String?
+            let email           : String?
         }
         
         struct In: Sendable { let user_id: Int64 }
@@ -628,11 +628,11 @@ enum Func
         static func decode(_ r: any SQLRow) throws -> Results
         {
             try .init(
-                username  : r.decode(column: "username",   as: String?.self),
-                first_name: r.decode(column: "first_name", as: String?.self),
-                last_name : r.decode(column: "last_name",  as: String?.self),
-                cellphone : r.decode(column: "cellphone",  as: String?.self),
-                email     : r.decode(column: "email",      as: String?.self)
+                cognito_sub     : r.decode(column: "cognito_sub",   as: String?.self),
+                username        : r.decode(column: "username",      as: String?.self),
+                display_name    : r.decode(column: "display_name",  as: String?.self),
+                cellphone       : r.decode(column: "cellphone",     as: String?.self),
+                email           : r.decode(column: "email",         as: String?.self)
             )
         }
     }
