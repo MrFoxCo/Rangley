@@ -9,7 +9,7 @@ let package = Package(
         .package(url: "https://github.com/vapor/fluent.git", from: "4.10.0"),
         .package(url: "https://github.com/vapor/fluent-postgres-driver.git", from: "2.10.0"),
         .package(url: "https://github.com/vapor/sql-kit.git", from: "3.0.0"),
-        .package(url: "https://github.com/vapor/jwt.git", from: "5.3.0"), // pin to a recent 5.x
+        .package(url: "https://github.com/vapor/jwt.git", from: "5.0.0"), // pin to a recent 5.x
     ],
     targets: [
         .target(

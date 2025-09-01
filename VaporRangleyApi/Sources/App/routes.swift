@@ -16,7 +16,7 @@ public func routes(_ app: Application) throws
 
     
   
-//    app.get("dbdiag")
+    // app.get("dbdiag")
 //    {
 //        req async -> String in
 //        
@@ -65,7 +65,7 @@ public func routes(_ app: Application) throws
     // MARK: - VIEW (fn_* ) or GET ROUTES
 
     // GET /v/meets  -> all meet card data
-    v.get("v", "meets")
+    v.get("meets")
     {
         req async throws -> [Func.ViewMeets.Results] in
         
@@ -76,7 +76,7 @@ public func routes(_ app: Application) throws
     }
 
     // GET /v/user/:user_id  -> single user values
-    v.get("v","user",":user_id")
+    v.get("user",":user_id")
     {
         req async throws -> [Func.ViewUser.Results] in
         
@@ -90,7 +90,7 @@ public func routes(_ app: Application) throws
     }
     
     // GET /v/meet-categories -> all categories
-    v.get("v", "meet-categories")
+    v.get("meet-categories")
     {
         req async throws -> [Func.ViewMeetCategories.Results] in
         
@@ -109,7 +109,7 @@ public func routes(_ app: Application) throws
     // MARK: - INSERTS (i_*) or POST ROUTES
 
     // i/user -> (num_inserted, new_user_id)
-    i.post("i","user")
+    i.post("user")
     {
         req async throws -> Proc.InsertUser.Result in
         
@@ -118,11 +118,11 @@ public func routes(_ app: Application) throws
         guard let sql = req.db as? (any SQLDatabase)
         else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
         
-        return try await Proc.InsertUser.call(on: sql, body, .init(num_inserted: 0, new_user_id: 0))
+        return try await Proc.InsertUser.call(on: sql, body, .init(new_user_id: nil))
     }
 
     // i/meet-coordinate -> (new_meet_coordinate_id)
-    i.post("i","meet-coordinate")
+    i.post("meet-coordinate")
     {
         req async throws -> Proc.InsertMeetCoordinate.Result in
         
@@ -137,7 +137,7 @@ public func routes(_ app: Application) throws
     }
 
     // i/meet-id -> (new_meet_id)
-    i.post("i","meet-id")
+    i.post("meet-id")
     {
         req async throws -> Proc.InsertMeetId.Result in
         let body = try req.content.decode(Proc.InsertMeetId.Params.self)
@@ -152,7 +152,7 @@ public func routes(_ app: Application) throws
     }
 
     // i/meet -> returns (num_inserted)
-    i.post("i","meet")
+    i.post("meet")
     {
         req async throws -> Proc.InsertMeet.Result in
         
@@ -175,7 +175,7 @@ public func routes(_ app: Application) throws
     
     // WORKS BUT SAYS PERMISSION DENIED FOR SOME REASON???
     // i/meet-change-stamp -> (new_change_stamp)
-    i.post("i","meet-change-stamp")
+    i.post("meet-change-stamp")
     {
         req async throws -> Proc.InsertChangeStamp.Result in
         
@@ -191,7 +191,7 @@ public func routes(_ app: Application) throws
     }
 
     // i/meet -> returns (num_inserted)
-    i.post("i","updated-meet")
+    i.post("updated-meet")
     {
         req async throws -> Proc.InsertUpdatedMeet.Result in
         
@@ -222,7 +222,7 @@ public func routes(_ app: Application) throws
     // MARK: - MODIFIES (m_*) or DELETE/PATCH ROUTES
 
     // m_user -> no OUT/INOUT (no row)
-    m.post("m", "user")
+    m.post("user")
     {
         req async throws -> OkResponse in
         
@@ -330,4 +330,3 @@ public func routes(_ app: Application) throws
 
  
  */
-

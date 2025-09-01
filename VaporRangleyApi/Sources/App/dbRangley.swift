@@ -90,30 +90,43 @@ enum Proc
         
         struct Params: Content, Sendable
         {
-            let username   : String
-            let first_name : String
-            let last_name  : String
-            let cellphone  : String
-            let email      : String
+            // REQUIRED
+            let cognito_sub  : String
+            let username     : String
+            let display_name : String
+            let cellphone    : String // need this or email
+            let email        : String // need this or cellphone
+            let dob          : Date
+             
+            // OPTIONAL
+            let first_name   : String?
+            let last_name    : String?
         }
         
         struct Result: Content, Sendable
         {
-            let num_inserted: Int
-            let new_user_id : Int64
+            let new_user_id : Int64?
         }
         
         static func query(_ i: Params, _ o: Result) -> SQLQueryString
         {
             """
-            CALL \(unsafeRaw: procName.rawValue)(
-                \(bind: i.username),
-                \(bind: i.first_name),
-                \(bind: i.last_name),
-                \(bind: i.cellphone),
-                \(bind: i.email),
-                \(bind: o.num_inserted),
-                \(bind: o.new_user_id)
+            CALL \(unsafeRaw: procName.rawValue)
+            (
+                -- OUT 
+                 \(bind: o.new_user_id)::int8
+            
+                -- REQUIRED
+                ,\(bind: i.cognito_sub)::text
+                ,\(bind: i.username)::varchar(50)
+                ,\(bind: i.display_name)::varchar(50)
+                ,\(bind: i.cellphone)::varchar(16)
+                ,\(bind: i.email)::varchar(256)
+                ,\(bind: i.dob)::date
+            
+                -- OPTIONAL
+                ,COALESCE(\(bind: i.first_name)::varchar(50), '')
+                ,COALESCE(\(bind: i.last_name)::varchar(50), '')
             );
             """
         }
@@ -121,8 +134,7 @@ enum Proc
         static func decode(_ row: any SQLRow) throws -> Result
         {
             try .init(
-                num_inserted: row.decode(column: "num_inserted", as: Int.self),
-                new_user_id : row.decode(column: "new_user_id",  as: Int64.self)
+                new_user_id : row.decode(column: "new_user_id",  as: Int64?.self)
             )
         }
     }
@@ -412,44 +424,54 @@ enum Proc
         static let procName: RangleyProcName = .m_user
         
         
-        // MARK: m_user (no OUT) -> no row
+        
         struct Params: Content, Sendable
         {
-            // MAKING THEM ALL REQUIERED SO THAT I DON'T HAVE TO
-            // WORRY ABOUT DEFAULTING TO THEIR OLD ONES
-            let user_id   : Int64
-            let username  : String
-            let first_name: String
-            let last_name : String
-            let cellphone : String
-            let email     : String
+            // REQUIRED
+            let cognito_sub  : String?
+            let username     : String?
+            let display_name : String?
+            let cellphone    : String? // need this or email
+            let email        : String? // need this or cellphone
+            let dob          : Date
+             
+            // OPTIONAL
+            let first_name   : String?
+            let last_name    : String?
         }
         
         struct Result: Content, Sendable
         {
-            let num_affected : Int?
+            let num_affected : Int32?
         }
         
-        
-        static func query(_ i: Params, _ o : Result) -> SQLQueryString {
+        static func query(_ i: Params, _ o: Result) -> SQLQueryString
+        {
             """
             CALL \(unsafeRaw: procName.rawValue)
             (
-                 \(bind: o.num_affected)
-                ,\(bind: i.user_id)
-                ,\(bind: i.username)
-                ,\(bind: i.first_name)
-                ,\(bind: i.last_name)
-                ,\(bind: i.cellphone)
-                ,\(bind: i.email)
-
+                -- OUT 
+                 \(bind: o.num_affected)::int4
+            
+                -- REQUIRED
+                ,\(bind: i.cognito_sub)::text
+                ,COALESCE(\(bind: i.username)::varchar(50),'')
+                ,COALESCE(\(bind: i.display_name)::varchar(50),'')
+                ,\(bind: i.cellphone)::varchar(16)
+                ,\(bind: i.email)::varchar(256)
+                ,\(bind: i.dob)::date
+            
+                -- OPTIONAL
+                ,COALESCE(\(bind: i.first_name)::varchar(50), '')
+                ,COALESCE(\(bind: i.last_name)::varchar(50), '')
             );
             """
         }
+        
         static func decode(_ row: any SQLRow) throws -> Result
         {
             try .init(
-                num_affected: row.decode(column: "num_affected", as: Int?.self)
+                num_affected : row.decode(column: "num_affected",  as: Int32.self)
             )
         }
     }
