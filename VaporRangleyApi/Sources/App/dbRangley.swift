@@ -96,7 +96,7 @@ enum Proc
             let display_name : String
             let cellphone    : String // need this or email
             let email        : String // need this or cellphone
-            let dob          : Date
+            let dob          : String
              
             // OPTIONAL
             let first_name   : String?
@@ -423,21 +423,20 @@ enum Proc
     {
         static let procName: RangleyProcName = .m_user
         
-        
-        
         struct Params: Content, Sendable
         {
             // REQUIRED
+            let user_id      : Int64
+            
+            //OPTIONAL
             let cognito_sub  : String?
             let username     : String?
             let display_name : String?
-            let cellphone    : String? // need this or email
-            let email        : String? // need this or cellphone
-            let dob          : Date
-             
-            // OPTIONAL
-            let first_name   : String?
-            let last_name    : String?
+            let first_name   : String? // need this or email
+            let last_name    : String? // need this or cellphone
+            let cellphone    : String?
+            let email        : String?
+            let dob          : String?
         }
         
         struct Result: Content, Sendable
@@ -450,20 +449,20 @@ enum Proc
             """
             CALL \(unsafeRaw: procName.rawValue)
             (
-                -- OUT 
+                -- OUT num_affected OMITTED
                  \(bind: o.num_affected)::int4
-            
                 -- REQUIRED
+                ,\(bind: i.user_id)::int8
+
+                -- Optional fields (pass NULLs as-is)
                 ,\(bind: i.cognito_sub)::text
-                ,COALESCE(\(bind: i.username)::varchar(50),'')
-                ,COALESCE(\(bind: i.display_name)::varchar(50),'')
+                ,\(bind: i.username)::varchar(50)
+                ,\(bind: i.display_name)::varchar(50)
+                ,\(bind: i.first_name)::varchar(50)
+                ,\(bind: i.last_name)::varchar(50)
                 ,\(bind: i.cellphone)::varchar(16)
                 ,\(bind: i.email)::varchar(256)
                 ,\(bind: i.dob)::date
-            
-                -- OPTIONAL
-                ,COALESCE(\(bind: i.first_name)::varchar(50), '')
-                ,COALESCE(\(bind: i.last_name)::varchar(50), '')
             );
             """
         }
@@ -561,8 +560,8 @@ enum Func
             let description        : String
             let max_capacity       : Int32
             let created_by_user_id : Int64
-            let first_name         : String
-            let last_name          : String
+            let display_name       : String
+
         }
         
         struct In: Sendable { }  // no params
@@ -590,8 +589,7 @@ enum Func
                 ,description        : r.decode(column: "description",        as: String.self)
                 ,max_capacity       : r.decode(column: "max_capacity",       as: Int32.self)
                 ,created_by_user_id : r.decode(column: "created_by_user_id", as: Int64.self)
-                ,first_name         : r.decode(column: "first_name",         as: String.self)
-                ,last_name          : r.decode(column: "last_name",          as: String.self)
+                ,display_name       : r.decode(column: "display_name",       as: String.self)
             )
         }
 

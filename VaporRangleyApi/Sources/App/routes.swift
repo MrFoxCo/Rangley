@@ -222,7 +222,7 @@ public func routes(_ app: Application) throws
     // MARK: - MODIFIES (m_*) or DELETE/PATCH ROUTES
 
     // m_user -> no OUT/INOUT (no row)
-    m.post("user")
+    m.post("user",":user_id")
     {
         req async throws -> OkResponse in
         
@@ -243,15 +243,17 @@ public func routes(_ app: Application) throws
 
 /**
  ROUTE TESTING
- curl -sS -X POST https://api.mrfoxco.com/i/meet-id \
+ curl -sS -X POST "{$BASE}/i/meet-id" \
    -H "Content-Type: application/json" \
+   -H "Authorization: Bearer $AUTH_TOKEN" \
    -d '{
      "created_by_user_id": 2
    }'
  
- curl -sS -X POST https://api.mrfoxco.com/i/meet-coordinate \
+ curl -sS -X POST "{$BASE}/i/meet-coordinate" \
    -H "Content-Type: application/json" \
-   -d '{
+   -H "Authorization: Bearer $AUTH_TOKEN" \
+    -d '{
      "latitude": 40.9484,
      "longitude": -86.6553,
      "region_latitude": 40.9484,
@@ -260,24 +262,27 @@ public func routes(_ app: Application) throws
    }'
 
  
- curl -sS -X POST https://api.mrfoxco.com/i/meet \
+ curl -sS -X POST "{$BASE}/i/meet" \
   -H "Content-Type: application/json" \
+ -H "Authorization: Bearer $AUTH_TOKEN" \
   -d '{
-     "meet_id": 5,
-     "meet_coordinate_id": 6,
+     "meet_id": 1,
+     "meet_coordinate_id": 1,
      "name": "Other Cubs Rooftop Meetup",
      "dttm_start_utc": "2025-09-29T18:00:00Z",
      "dttm_end_utc": "2025-09-29T21:00:00Z"
      }'
  
  // with legal meet_status_id
- curl -sS -X POST https://api.mrfoxco.com/i/meet-change-stamp \
+ curl -sS -X POST "{$BASE}/i/meet-change-stamp" \
    -H "Content-Type: application/json" \
+ -H "Authorization: Bearer $AUTH_TOKEN" \
    -d '{
      "meet_id": 2,
    }'
- curl -sS -X POST https://api.mrfoxco.com/i/meet-coordinate \
+ curl -sS -X POST "{$BASE}/meet-coordinate" \
    -H "Content-Type: application/json" \
+ -H "Authorization: Bearer $AUTH_TOKEN" \
    -d '{
      "latitude": 41.830017,
      "longitude": -87.634598,
@@ -287,8 +292,9 @@ public func routes(_ app: Application) throws
    }'
  
  
- curl -sS -X POST https://api.mrfoxco.com/i/updated-meet \
+ curl -sS -X POST "{$BASE}/i/updated-meet" \
    -H "Content-Type: application/json" \
+ -H "Authorization: Bearer $AUTH_TOKEN" \
    -d '{
      "meet_id": 5,
      "change_stamp": 3,
@@ -301,16 +307,18 @@ public func routes(_ app: Application) throws
 
  
  // with legal meet_status_id
- curl -sS -X POST https://api.mrfoxco.com/i/meet-change-stamp \
+ curl -sS -X POST "{$BASE}/i/meet-change-stamp" \
    -H "Content-Type: application/json" \
+ -H "Authorization: Bearer $AUTH_TOKEN" \
    -d '{
      "meet_id": 1
    }'
  
  
  
- curl -sS -X POST https://api.mrfoxco.com/i/meet \
+ curl -sS -X POST "{$BASE}/i/meet" \
    -H "Content-Type: application/json" \
+   -H "Authorization: Bearer $AUTH_TOKEN" \
    -d '{
      "meet_id": 1,
      "name": "Cubs Rooftop Meetup",
@@ -324,9 +332,40 @@ public func routes(_ app: Application) throws
  
  // no defaults
 
+ curl -sS -X POST "{$BASE}/i/user" \
+   -H "Content-Type: application/json" \
+   -H "Authorization: Bearer $AUTH_TOKEN" \
+   -d '{
+     "cognito_sub": "us-east-2_abc123:deadbeef-dead-beef-dead-beefdeadbeef",
+     "username": "xcoder",
+     "display_name": "X Code",
+     "cellphone": "+13125550123",      
+     "email": "x@code.com",
+     "dob": "1993-05-14",
+     "first_name": "X",
+     "last_name": "Code"
+   }'
 
  In PostgreSQL you must supply an argument for every parameter without a default, including OUT.
  The OUT placeholders aren’t evaluated (typical is NULL), and the procedure returns a single row containing the OUT/INOUT values.
 
+ # single user
+ 
+curl -sS -X GET "{$BASE}/v/user/2" \
+    -H "Authorization: Bearer $AUTH_TOKEN" \
+    -H "Accept: application/json"
+
+curl -sS -X GET "{$BASE}/v/meets" \
+    -H "Authorization: Bearer $AUTH_TOKEN" \
+    -H "Accept: application/json"
+
+curl -sS -X GET "{$BASE}/v/meet-categories" \
+    -H "Authorization: Bearer $AUTH_TOKEN" \
+    -H "Accept: application/json"
+ 
+ 
+ 
+ 
+ 
  
  */
