@@ -5,8 +5,7 @@ begin
 	CALL rangley.rangley_m_user
 	(
 		 result
-		,4 
-		,NULL
+		,4
 		,NULL
 		,'Macthew'
 		,NULL

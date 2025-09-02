@@ -265,7 +265,8 @@ enum Proc
             let num_inserted: Int32?
         }
         
-        static func query(_ i: Params, _ o: Result) -> SQLQueryString {
+        static func query(_ i: Params, _ o: Result) -> SQLQueryString
+        {
             """
             CALL \(unsafeRaw: procName.rawValue)
             (
@@ -669,6 +670,36 @@ enum Func
         }
     }
 
+    // Inside: enum Func
+    enum UserIdBySub: PgFunctionRow
+    {
+        struct In: Sendable { let sub: String }
+        struct Out: Content, Sendable { let user_id: Int64 }
+
+        // Using raw SQL keeps you from having to add a DB function.
+        static func query(_ input: In) -> SQLQueryString {
+            """
+            SELECT user_id::bigint AS user_id
+            FROM rangley.tb_users
+            WHERE cognito_sub = \(bind: input.sub)
+            LIMIT 1;
+            """
+        }
+
+        static func decode(_ r: any SQLRow) throws -> Out {
+            try .init(user_id: r.decode(column: "user_id", as: Int64.self))
+        }
+
+        // Not used but required by the protocol; you can ignore.
+        static var funcName: RangleyFunc { .v_user_by_user_id }
+        
+        static func fetchMe(on db: any SQLDatabase, cognitoSub: String) async throws -> [Results] {
+            let id = try await Func.UserIdBySub.call(on: db, .init(sub: cognitoSub)).user_id
+            return try await fetchAll(on: db, .init(user_id: id))
+        }
+    }
+
+    
     // MARK: - END VIEWS
 }
 

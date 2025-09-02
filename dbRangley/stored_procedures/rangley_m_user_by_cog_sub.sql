@@ -1,8 +1,7 @@
-CREATE OR REPLACE PROCEDURE rangley.rangley_m_user
+CREATE OR REPLACE PROCEDURE rangley.rangley_m_user_by_cog_sub
 (
      OUT num_affected   int4
 
-    ,IN  p_user_id      int8
     ,IN  p_cognito_sub  text           DEFAULT NULL
     ,IN  p_username     varchar(50)    DEFAULT NULL
     ,IN  p_display_name varchar(50)    DEFAULT NULL
@@ -58,24 +57,23 @@ BEGIN
     num_affected := 0;
 
     -- Guard: user_id required and must exist
-    IF p_user_id IS NULL THEN
+    IF p_cognito_sub IS NULL THEN
         RAISE LOG '[ERRO] Update aborted: user_id is NULL';
         RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='[ERRO] Invalid user_id',
             DETAIL='p_user_id=NULL; table=tb_users; action=UPDATE',
             HINT='Provide a valid tb_users.user_id.';
     END IF;
 
-	is_valid_user := rangley.rangley_fn_validate_user_id(p_user_id);
+	is_valid_user := rangley.rangley_fn_validate_cog_sub(p_cognito_sub);
     IF is_valid_user <> 1 THEN
-        RAISE LOG '[ERRO] Update aborted: user_id % does not exist or failed validation',
-			p_user_id;
+        RAISE LOG '[ERRO] Update aborted: User does not exist or failed validation';
+
         RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='[ERRO] User ID failed validation',
-            DETAIL=format('p_user_id=%s; validator=rangley_fn_validate_user_id -> 0', p_user_id),
+            DETAIL=format('validator=rangley_fn_validate_user_id -> 0'),
             HINT='Ensure the user exists in tb_users.';
     END IF;
 
     -- Normalize inputs if provided
-    IF p_cognito_sub  IS NOT NULL THEN p_cognito_sub  := NULLIF(btrim(p_cognito_sub),  ''); END IF;
     IF p_username     IS NOT NULL THEN p_username     := lower(NULLIF(btrim(p_username),'')); END IF;
     IF p_display_name IS NOT NULL THEN p_display_name := NULLIF(btrim(p_display_name),''); END IF;
     IF p_first_name   IS NOT NULL THEN p_first_name   := NULLIF(btrim(p_first_name),  ''); END IF;
@@ -138,8 +136,7 @@ BEGIN
 
     -- Update only what’s provided
     UPDATE rangley.tb_users u
-       SET cognito_sub        = COALESCE(p_cognito_sub,  cognito_sub)
-          ,username           = COALESCE(p_username,     username)
+       SET username           = COALESCE(p_username,     username)
           ,display_name       = COALESCE(p_display_name, display_name)
           ,first_name         = COALESCE(p_first_name,   first_name)
           ,last_name          = COALESCE(p_last_name,    last_name)

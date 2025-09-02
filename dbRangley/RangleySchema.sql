@@ -287,3 +287,21 @@ CREATE INDEX IF NOT EXISTS ix_inbox_user_received_desc
 -- (Optional) backref lookups
 CREATE INDEX IF NOT EXISTS ix_inbox_notification
   ON rangley.tb_user_inboxes (notification_id);
+
+
+-- TODO: METADATA TABLE
+
+/**
+ * 
+What to store instead (minimal)
+Your normal user record with a unique cognito_sub (and your internal user_id). That’s your stable mapping.
+(Optional) session metadata—not the tokens:
+user_id, device_id, app_version, platform, created_at, last_seen_at, revoked_at
+Useful for “log out of other devices,” analytics, and support.
+
+ * /
+
+
+
+
+

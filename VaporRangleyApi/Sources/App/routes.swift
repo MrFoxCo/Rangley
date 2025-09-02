@@ -108,6 +108,86 @@ public func routes(_ app: Application) throws
     
     // MARK: - INSERTS (i_*) or POST ROUTES
 
+    v.post("auth","register")
+    { req async throws -> [String: AnyEncodable] in
+        let payload = try req.jwt.verify(as: CognitoPayload.self)
+        let sub = payload.sub.value
+
+        guard let sql = req.db as? any SQLDatabase else { throw Abort(.failedDependency) }
+
+        // Upsert via your proc(s). If you prefer raw SQL, use ON CONFLICT.
+        // Example using raw SQL for brevity:
+        let row = try await sql.raw("""
+            INSERT INTO rangley.tb_users (cognito_sub, username, first_name, last_name, cellphone, email)
+            VALUES (
+                \(bind: sub),
+                \(bind: payload.preferred_username ?? .none),
+                \(bind: payload.given_name ?? .none),
+                \(bind: payload.family_name ?? .none),
+                \(bind: payload.phone_number ?? .none),
+                \(bind: payload.email ?? .none)
+            )
+            ON CONFLICT (cognito_sub) DO UPDATE
+                SET dttm_modified_utc = now()
+            RETURNING user_id::bigint
+        """).first()
+
+        guard let userId: Int64 = try row?.decode(column: "user_id", as: Int64.self)
+        else {
+            // Fallback if RETURNING didn't happen (some drivers): re-select.
+            let selected: Int64? = try await sql.raw("""
+                SELECT user_id::bigint FROM rangley.tb_users WHERE cognito_sub = \(bind: sub)
+            """).first(decoding: Int64?.self)
+            guard let id = selected else { throw Abort(.internalServerError, reason: "provisioning failed") }
+            return ["user_id": AnyEncodable(id)]
+        }
+        return ["user_id": AnyEncodable(userId)]
+    }
+
+    v.put("user","me")
+    { req async throws -> HTTPStatus in
+        struct Body: Content, Sendable {
+            let username: String?
+            let display_name: String?
+            let cellphone: String?
+            let email: String?
+            let dob: Date? // ensure ISO8601 decoding or customize decoder
+            let first_name: String?
+            let last_name: String?
+        }
+
+        let sub = try req.jwt.verify(as: CognitoPayload.self).sub.value
+        let body = try req.content.decode(Body.self)
+        guard let sql = req.db as? any SQLDatabase else { throw Abort(.failedDependency) }
+
+        let id: Int64? = try await sql.raw("""
+            SELECT user_id::bigint FROM rangley.tb_users WHERE cognito_sub = \(bind: sub)
+        """).first(decoding: Int64?.self)
+        guard let userId = id else { throw Abort(.notFound) }
+
+        // Call your stored proc to modify (preferred):
+        // CALL rangley.rangley_m_user(OUT num_affected, IN p_user_id, IN p_cognito_sub, IN p_username, ...);
+        try await sql.raw("""
+            CALL rangley.rangley_m_user(
+                NULL,
+                \(bind: userId),
+                DEFAULT,                          -- keep cognito_sub
+                \(bind: body.username ?? .none),
+                \(bind: body.display_name ?? .none),
+                \(bind: body.first_name ?? .none),
+                \(bind: body.last_name  ?? .none),
+                \(bind: body.cellphone  ?? .none),
+                \(bind: body.email      ?? .none),
+                \(bind: body.dob        ?? .none)
+            );
+        """).run()
+
+        return .noContent
+    }
+
+    
+    
+    
     // i/user -> (num_inserted, new_user_id)
     i.post("user")
     {
@@ -238,6 +318,7 @@ public func routes(_ app: Application) throws
     
     // MARK: - END MODIFIES (m_*) or DELETE/PATCH ROUTES
 
+    
 
 }
 

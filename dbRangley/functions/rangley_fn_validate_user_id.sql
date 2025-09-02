@@ -1,9 +1,9 @@
-CREATE OR REPLACE FUNCTION rangley.rangley_fn_validate_user_id(p_user_id bigint)
+CREATE OR REPLACE FUNCTION rangley.rangley_fn_validate_cog_sub(p_cog_sub text)
  RETURNS integer
  LANGUAGE plpgsql
 AS $function$
 /*
-SELECT rangley_fn_validate_user_id(3);
+SELECT rangley_fn_validate_cog_sub(3);
 
 
 */
@@ -14,7 +14,7 @@ DECLARE
 BEGIN
   SELECT COUNT(*) INTO num_returned
   FROM rangley.vw_users
-  WHERE user_id = p_user_id;
+  WHERE cog_sub = p_cog_sub;
 
   IF num_returned = 0 THEN
     RETURN -1;  -- error / not found
