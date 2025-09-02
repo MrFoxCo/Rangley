@@ -8,18 +8,19 @@
 import Vapor
 import Fluent
 import SQLKit
+import JWT
 
 // MARK: - Registry of fully-qualified procedure names
 
 enum RangleyProcName: String
 {
-    case i_user              = "rangley.rangley_i_user"
-    case i_meet_id           = "rangley.rangley_i_meet_id"
-    case i_meet_coordinate   = "rangley.rangley_i_meet_coordinate"
-    case i_meet              = "rangley.rangley_i_meet"
-    case i_meet_change_stamp = "rangley.rangley_i_change_stamp"
-    case i_updated_meet      = "rangley.rangley_i_updated_meet"
-    case m_user              = "rangley.rangley_m_user"
+    case i_user_by_auth_register = "rangley.rangley_i_user_by_auth_register"
+    case i_meet_id               = "rangley.rangley_i_meet_id"
+    case i_meet_coordinate       = "rangley.rangley_i_meet_coordinate"
+    case i_meet                  = "rangley.rangley_i_meet"
+    case i_meet_change_stamp     = "rangley.rangley_i_change_stamp"
+    case i_updated_meet          = "rangley.rangley_i_updated_meet"
+    case m_user                  = "rangley.rangley_m_user"
 }
 
 // Essentially these are views because postgres doesn't allow procedural views in an easy way
@@ -84,60 +85,82 @@ enum Proc
     // MARK: - INSERT USER NOT TESTED
     
     /// Contains Insert Params and Results
-    enum InsertUser: PgCallableRow
+    enum InsertUserByAuthRegister: PgCallableRow
     {
-        static let procName: RangleyProcName = .i_user
-        
-        struct Params: Content, Sendable
+        // MUST match: CREATE PROCEDURE rangley.rangley_i_auth_register(...)
+        static let procName: RangleyProcName = .i_user_by_auth_register
+
+        struct Body: Content, Sendable
         {
-            // REQUIRED
-            let cognito_sub  : String
             let username     : String
             let display_name : String
-            let cellphone    : String // need this or email
-            let email        : String // need this or cellphone
-            let dob          : String
-             
-            // OPTIONAL
+            let cellphone    : String?    // need this OR email
+            let email        : String?    // need this OR cellphone
+            let dob          : String     // "YYYY-MM-DD"
             let first_name   : String?
             let last_name    : String?
         }
-        
+
+        struct Params: Sendable
+        {
+            let cognito_sub  : String
+            let username     : String
+            let display_name : String
+            let cellphone    : String?
+            let email        : String?
+            let dob          : String
+            let first_name   : String?
+            let last_name    : String?
+        }
+
+        // Synchronous now (no await). Uses sub provided by your middleware.
+        static func fromRequest(_ req: Request) throws -> Params
+        {
+            let b = try req.content.decode(Body.self)
+            guard let sub = req.cognitoSub
+            else { throw Abort(.unauthorized, reason: "Missing Cognito sub") }
+
+            return .init(
+                cognito_sub  : sub,
+                username     : b.username,
+                display_name : b.display_name,
+                cellphone    : b.cellphone,
+                email        : b.email,
+                dob          : b.dob,
+                first_name   : b.first_name,
+                last_name    : b.last_name
+            )
+        }
+
         struct Result: Content, Sendable
         {
-            let new_user_id : Int64?
+            let is_success: Bool?
         }
-        
+
+        // Do NOT pass the OUT param; DB returns it as a row.
         static func query(_ i: Params, _ o: Result) -> SQLQueryString
         {
             """
             CALL \(unsafeRaw: procName.rawValue)
             (
-                -- OUT 
-                 \(bind: o.new_user_id)::int8
-            
-                -- REQUIRED
-                ,\(bind: i.cognito_sub)::text
+                 \(bind: i.cognito_sub)::text
                 ,\(bind: i.username)::varchar(50)
                 ,\(bind: i.display_name)::varchar(50)
                 ,\(bind: i.cellphone)::varchar(16)
                 ,\(bind: i.email)::varchar(256)
                 ,\(bind: i.dob)::date
-            
-                -- OPTIONAL
-                ,COALESCE(\(bind: i.first_name)::varchar(50), '')
-                ,COALESCE(\(bind: i.last_name)::varchar(50), '')
+                ,COALESCE(\(bind: i.first_name)::varchar(50), ''::varchar(50))
+                ,COALESCE(\(bind: i.last_name)::varchar(50),  ''::varchar(50))
             );
             """
         }
-        
+
         static func decode(_ row: any SQLRow) throws -> Result
         {
-            try .init(
-                new_user_id : row.decode(column: "new_user_id",  as: Int64?.self)
-            )
+            try .init(is_success: row.decode(column: "is_success", as: Bool?.self))
         }
     }
+
     
     // MARK: - END INSERT USER NOT TESTED
     
@@ -671,33 +694,6 @@ enum Func
     }
 
     // Inside: enum Func
-    enum UserIdBySub: PgFunctionRow
-    {
-        struct In: Sendable { let sub: String }
-        struct Out: Content, Sendable { let user_id: Int64 }
-
-        // Using raw SQL keeps you from having to add a DB function.
-        static func query(_ input: In) -> SQLQueryString {
-            """
-            SELECT user_id::bigint AS user_id
-            FROM rangley.tb_users
-            WHERE cognito_sub = \(bind: input.sub)
-            LIMIT 1;
-            """
-        }
-
-        static func decode(_ r: any SQLRow) throws -> Out {
-            try .init(user_id: r.decode(column: "user_id", as: Int64.self))
-        }
-
-        // Not used but required by the protocol; you can ignore.
-        static var funcName: RangleyFunc { .v_user_by_user_id }
-        
-        static func fetchMe(on db: any SQLDatabase, cognitoSub: String) async throws -> [Results] {
-            let id = try await Func.UserIdBySub.call(on: db, .init(sub: cognitoSub)).user_id
-            return try await fetchAll(on: db, .init(user_id: id))
-        }
-    }
 
     
     // MARK: - END VIEWS

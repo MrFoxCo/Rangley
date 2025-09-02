@@ -46,7 +46,7 @@
 				Lib/DatabaseSchema/LookupInserts.txt,
 				Lib/DatabaseSchema/UserInsert.txt,
 				Lib/Deprecated/DbInserts.txt,
-				Lib/LibraryIssues_READ.txt,
+				Lib/Deprecated/LibraryIssues_READ.txt,
 				Lib/Utilities/HelpfulComments.txt,
 			);
 			target = 65FAB44F2E1468F0004AFBE8 /* Rangley */;

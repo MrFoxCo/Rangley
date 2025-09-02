@@ -56,7 +56,18 @@ public func configure(_ app: Application) throws {
         clientID: cognitoClientID
     )
 
-    
+    // JWKS endpoint for the user pool
+    let jwksURL = URI(string: "\(cognitoIssuer)/.well-known/jwks.json")
+
+    app.middleware.use(
+        CognitoJWTMiddleware(
+            jwksURL: jwksURL,
+            issuer: cognitoIssuer,
+            audience: cognitoClientID
+        )
+    )
+
+    //
     
     try routes(app)
 }
