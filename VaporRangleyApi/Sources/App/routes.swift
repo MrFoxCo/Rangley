@@ -157,17 +157,42 @@ public func routes(_ app: Application) throws
     // i/user -> (num_inserted, new_user_id)
     // routes.swift (stays tiny)
     i.post("auth-register")
-    {
-        req async throws -> Proc.InsertUserByAuthRegister.Result in
-        
-        guard let sql = req.db as? (any SQLDatabase)
+    { req async throws -> Proc.InsertUserByAuthRegister.Result in
+        guard let sql = req.db as? any SQLDatabase
         else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
-        
         let params = try Proc.InsertUserByAuthRegister.fromRequest(req)
-        
         return try await Proc.InsertUserByAuthRegister.call(on: sql, params, .init(is_success: nil))
     }
 
+
+    i.post("auth-register-test") {
+        req async throws -> Proc.InsertUserByAuthRegister.Result in
+        guard let sql = req.db as? any SQLDatabase else { throw Abort(.failedDependency) }
+
+        let p = try Proc.InsertUserByAuthRegister.fromRequest(req)
+        let outPlaceholder: Bool? = nil   // placeholder for INOUT
+
+        let q: SQLQueryString = """
+        CALL rangley.rangley_i_user_by_auth_register(
+             \(bind: outPlaceholder)::boolean
+            ,\(bind: p.cognito_sub)::text
+            ,\(bind: p.username)::varchar(50)
+            ,\(bind: p.display_name)::varchar(50)
+            ,\(bind: p.cellphone)::varchar(16)
+            ,\(bind: p.email)::varchar(256)
+            ,\(bind: p.dob)::date
+            ,COALESCE(\(bind: p.first_name)::varchar(50), ''::varchar(50))
+            ,COALESCE(\(bind: p.last_name)::varchar(50),  ''::varchar(50))
+        )
+        """
+
+        guard let row = try await sql.raw(q).first() else {
+            throw Abort(.internalServerError, reason: "CALL returned no row")
+        }
+        return try .init(is_success: row.decode(column: "is_success", as: Bool?.self))
+    }
+
+    
 
 
     // i/meet-coordinate -> (new_meet_coordinate_id)
@@ -424,6 +449,44 @@ curl -sS -X GET "{$BASE}/v/meet-categories" \
      "display_name": "Jonathan"
    }'
  
+ curl -sS -X POST "{$BASE}/i/auth-register" \
+   -H "Authorization: Bearer $AUTH_TOKEN" \
+   -H "Content-Type: application/json" \
+   -d '{
+     "username": "elvis",
+     "display_name": "elvis p",
+     "cellphone": "+17731232222",
+     "email": "",
+     "dob": "1999-01-01",
+     "first_name": "",
+     "last_name": ""
+   }'
+ curl -sS -X POST "{$BASE}/i/auth-register-test" \
+   -H "Authorization: Bearer $AUTH_TOKEN" \
+   -H "Content-Type: application/json" \
+   -d '{
+     "username": "ricksanchez",
+     "display_name": "rick s",
+     "cellphone": "+13121238888",
+     "email": "rick@g.com",
+     "dob": "1999-01-01",
+     "first_name": "",
+     "last_name": ""
+   }'
  
+ 
+ curl -sS -X POST "{$BASE}/i/auth-register" \
+   -H "Authorization: Bearer $AUTH_TOKEN" \
+   -H "Content-Type: application/json" \
+   -d '{
+          "cognito_sub":"arn.asldjfalsdkj",
+     "username": "stanleyyelnats",
+     "display_name": "stan y",
+     "cellphone": "+17730232222",
+     "email": "",
+     "dob": "1999-01-01",
+     "first_name": "",
+     "last_name": ""
+   }'
  
  */

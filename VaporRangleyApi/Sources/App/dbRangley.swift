@@ -84,25 +84,21 @@ enum Proc
 
     // MARK: - INSERT USER NOT TESTED
     
-    /// Contains Insert Params and Results
-    enum InsertUserByAuthRegister: PgCallableRow
-    {
-        // MUST match: CREATE PROCEDURE rangley.rangley_i_auth_register(...)
+    /// MUST match: CREATE PROCEDURE rangley.rangley_i_user_by_auth_register(...)
+    enum InsertUserByAuthRegister: PgCallableRow {
         static let procName: RangleyProcName = .i_user_by_auth_register
 
-        struct Body: Content, Sendable
-        {
+        struct Body: Content, Sendable {
             let username     : String
             let display_name : String
-            let cellphone    : String?    // need this OR email
-            let email        : String?    // need this OR cellphone
-            let dob          : String     // "YYYY-MM-DD"
+            let cellphone    : String?
+            let email        : String?
+            let dob          : String          // "YYYY-MM-DD"
             let first_name   : String?
             let last_name    : String?
         }
 
-        struct Params: Sendable
-        {
+        struct Params: Sendable {
             let cognito_sub  : String
             let username     : String
             let display_name : String
@@ -113,13 +109,10 @@ enum Proc
             let last_name    : String?
         }
 
-        // Synchronous now (no await). Uses sub provided by your middleware.
-        static func fromRequest(_ req: Request) throws -> Params
-        {
+        static func fromRequest(_ req: Request) throws -> Params {
             let b = try req.content.decode(Body.self)
             guard let sub = req.cognitoSub
             else { throw Abort(.unauthorized, reason: "Missing Cognito sub") }
-
             return .init(
                 cognito_sub  : sub,
                 username     : b.username,
@@ -132,14 +125,12 @@ enum Proc
             )
         }
 
-        struct Result: Content, Sendable
-        {
+        struct Result: Content, Sendable {
             let is_success: Bool?
         }
 
-        // Do NOT pass the OUT param; DB returns it as a row.
-        static func query(_ i: Params, _ o: Result) -> SQLQueryString
-        {
+        // OUT goes first, just like your InsertMeetId example
+        static func query(_ i: Params, _ o: Result) -> SQLQueryString {
             """
             CALL \(unsafeRaw: procName.rawValue)
             (
@@ -151,15 +142,15 @@ enum Proc
                 ,\(bind: i.dob)::date
                 ,COALESCE(\(bind: i.first_name)::varchar(50), ''::varchar(50))
                 ,COALESCE(\(bind: i.last_name)::varchar(50),  ''::varchar(50))
-            );
+            )
             """
         }
 
-        static func decode(_ row: any SQLRow) throws -> Result
-        {
+        static func decode(_ row: any SQLRow) throws -> Result {
             try .init(is_success: row.decode(column: "is_success", as: Bool?.self))
         }
     }
+
 
     
     // MARK: - END INSERT USER NOT TESTED

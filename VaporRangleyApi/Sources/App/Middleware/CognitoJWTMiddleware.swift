@@ -11,7 +11,8 @@ import JWT       // gives you req.jwt / app.jwt
 import JWTKit    // gives you JWKS, claims types
 
 // Thread-safe JWKS cache
-actor JWKSCache {
+actor JWKSCache
+{
     static let shared = JWKSCache()
     private var jwks: JWKS?
     private var lastFetch: Date?
@@ -28,12 +29,14 @@ actor JWKSCache {
     }
 }
 
-struct CognitoJWTMiddleware: AsyncMiddleware {
+struct CognitoJWTMiddleware: AsyncMiddleware
+{
     let jwksURL: URI
     let issuer: String
     let audience: String
 
-    func respond(to req: Request, chainingTo next: any AsyncResponder) async throws -> Response {
+    func respond(to req: Request, chainingTo next: any AsyncResponder) async throws -> Response
+    {
         guard let bearer = req.headers.bearerAuthorization?.token else {
             throw Abort(.unauthorized, reason: "Missing bearer token")
         }
