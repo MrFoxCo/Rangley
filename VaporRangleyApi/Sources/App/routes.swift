@@ -44,20 +44,13 @@ public func routes(_ app: Application) throws
     
     
     // --- Cognito-protected group ---
-    let issuer   = app.cognito.issuer          // from configure.swift storage
+    let issuer   = app.cognito.issuer
     let clientID = app.cognito.clientID
+    let jwksURL  = URI(string: "\(issuer)/.well-known/jwks.json")
 
-    // AWS Cognito JWKS endpoint is under /.well-known/jwks.json
-    let jwksURL = URI(string: "\(issuer)/.well-known/jwks.json")
-
-    let auth = CognitoJWTMiddleware(
-        jwksURL: jwksURL,
-        issuer: issuer,
-        audience: clientID
-    )
-
-    let api = app.grouped(auth)
+    let auth = CognitoJWTMiddleware(jwksURL: jwksURL, issuer: issuer, audience: clientID)
     
+    let api = app.grouped(auth)
     let v = api.grouped("v")                  // public reads
     let i = api.grouped("i")            // protected inserts
     let m = api.grouped("m")            // protected modifies
@@ -154,10 +147,12 @@ public func routes(_ app: Application) throws
     
     
     
-    // i/user -> (num_inserted, new_user_id)
+
     // routes.swift (stays tiny)
-    app.post("auth-register")
-    { req async throws -> Proc.InsertUserByAuthRegister.Result in
+    /// register a new user through authentication system
+    i.post("user")
+    {
+        req async throws -> Proc.InsertUserByAuthRegister.Result in
         guard let sql = req.db as? any SQLDatabase
         else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
         let params = try Proc.InsertUserByAuthRegister.fromRequest(req)
@@ -444,7 +439,20 @@ curl -sS -X GET "{$BASE}/v/meet-categories" \
    }'
  
  
- curl -sS -X POST "{$BASE}/i/auth-register" \
+ curl -sS -X POST "{$BASE}/auth-register" \
+   -H "Authorization: Bearer $AUTH_TOKEN" \
+   -H "Content-Type: application/json" \
+   -d '{
+     "username": "stevek",
+     "display_name": "Steve Kematovic",
+     "cellphone": "+14321112222",
+     "email": "",
+     "dob": "1999-01-01",
+     "first_name": "",
+     "last_name": ""
+   }'
+ 
+ curl -sS -X POST "{$BASE}/i-user-by-auth-register" \
    -H "Authorization: Bearer $AUTH_TOKEN" \
    -H "Content-Type: application/json" \
    -d '{
