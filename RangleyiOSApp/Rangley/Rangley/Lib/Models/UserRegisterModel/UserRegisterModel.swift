@@ -9,7 +9,7 @@
 import Foundation
 
 // Match server snake_case exactly to avoid CodingKeys noise.
-public struct AuthRegisterRequest: Codable, Sendable
+public struct UserRegisterModel: Codable, Sendable
 {
     public let username: String
     public let display_name: String
@@ -36,7 +36,7 @@ public struct AuthRegisterRequest: Codable, Sendable
     }
 }
 
-public struct AuthRegisterResult: Codable, Sendable
+public struct UserRegisterResult: Codable, Sendable
 {
     public let is_success: Bool?
 }

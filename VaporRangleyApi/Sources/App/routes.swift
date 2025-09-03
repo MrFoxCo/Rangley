@@ -439,20 +439,20 @@ curl -sS -X GET "{$BASE}/v/meet-categories" \
    }'
  
  
- curl -sS -X POST "{$BASE}/auth-register" \
+ curl -sS -X POST "{$BASE}/i/user" \
    -H "Authorization: Bearer $AUTH_TOKEN" \
    -H "Content-Type: application/json" \
    -d '{
      "username": "stevek",
-     "display_name": "Steve Kematovic",
-     "cellphone": "+14321112222",
-     "email": "",
+     "display_name": "Steve K",
+     "cellphone": "+14321902222",
+     "email": null,
      "dob": "1999-01-01",
-     "first_name": "",
-     "last_name": ""
-   }'
- 
- curl -sS -X POST "{$BASE}/i-user-by-auth-register" \
+     "first_name": null,
+     "last_name": null
+    }'
+     
+ curl -sS -X POST "{$BASE}/i/user" \
    -H "Authorization: Bearer $AUTH_TOKEN" \
    -H "Content-Type: application/json" \
    -d '{
@@ -465,7 +465,7 @@ curl -sS -X GET "{$BASE}/v/meet-categories" \
      "last_name": ""
    }'
  
- curl -sS -X POST "$BASE/i/auth-register-test" \
+ curl -sS -X POST "$BASE/user" \
    -H "Content-Type: application/json" \
    -d '{
      "username": "sdfgsdfg",

@@ -235,6 +235,9 @@
 			);
 			mainGroup = 65FAB4472E1468F0004AFBE8;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				655F250B2E68C6090097AC05 /* XCRemoteSwiftPackageReference "soto" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 65FAB4512E1468F0004AFBE8 /* Products */;
 			projectDirPath = "";
@@ -634,6 +637,17 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		655F250B2E68C6090097AC05 /* XCRemoteSwiftPackageReference "soto" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/soto-project/soto";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 7.9.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
 	};
 	rootObject = 65FAB4482E1468F0004AFBE8 /* Project object */;
 }

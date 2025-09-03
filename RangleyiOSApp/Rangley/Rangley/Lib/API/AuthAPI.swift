@@ -23,15 +23,13 @@ enum AuthAPIError: Error, LocalizedError
     }
 }
 
-struct AuthAPI
-{
-    /// baseURL like: https://api.yourdomain.com
-    /// ^^ THIS NEEDS TO BE GRABBED FROM ENV
-    static func register(baseURL: URL,
-                         token: String,
-                         payload: AuthRegisterRequest) async throws -> AuthRegisterResult {
+import Foundation
+
+struct AuthAPI {
+    static func register(baseURL: URL,token: String,payload: UserRegisterModel) async throws -> UserRegisterResult
+    {
         var url = baseURL
-        url.append(path: "/i/auth-register")
+        url.append(path: "/i/user")
 
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -40,20 +38,16 @@ struct AuthAPI
         req.httpBody = try JSONEncoder().encode(payload)
 
         let (data, resp) = try await URLSession.shared.data(for: req)
-        guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
+        guard let http = resp as? HTTPURLResponse else {
+            throw AuthAPIError.http(-1, "No HTTPURLResponse")
+        }
 
         if (200..<300).contains(http.statusCode) {
-            // Vapor procedure returns a row with is_success
-            if let res = try? JSONDecoder().decode(AuthRegisterResult.self, from: data) {
-                return res
-            } else {
-                // If your route wraps result (e.g., as array) adapt this decode
-                throw AuthAPIError.decode
-            }
+            return try JSONDecoder().decode(UserRegisterResult.self, from: data)
         } else {
-            // Vapor typically returns {"reason":"..."} on error
             let reason = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["reason"] as? String
             throw AuthAPIError.http(http.statusCode, reason)
         }
     }
 }
+

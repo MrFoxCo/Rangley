@@ -10,7 +10,7 @@
 import SwiftUI
 
 @MainActor
-final class AuthRegisterVM: ObservableObject
+final class UserRegisterVM: ObservableObject
 {
     @Published var username = ""
     @Published var display_name = ""
@@ -52,7 +52,7 @@ final class AuthRegisterVM: ObservableObject
         isSubmitting = true
         defer { isSubmitting = false }
         
-        let payload = AuthRegisterRequest(
+        let payload = UserRegisterModel(
             username    : username,
             display_name: display_name,
             cellphone   : cellphone.isEmpty ? nil : cellphone,
@@ -72,9 +72,9 @@ final class AuthRegisterVM: ObservableObject
     }
 }
 
-struct AuthRegisterView: View
+struct UserRegisterView: View
 {
-    @StateObject private var vm = AuthRegisterVM()
+    @StateObject private var vm = UserRegisterVM()
     
     var body: some View
     {
@@ -135,7 +135,7 @@ struct ContentView: View {
         NavigationStack {
             List {
                 NavigationLink("Auth Register") {
-                    AuthRegisterView()
+                    UserRegisterView()
                 }
             }
             .navigationTitle("Dev Tools")

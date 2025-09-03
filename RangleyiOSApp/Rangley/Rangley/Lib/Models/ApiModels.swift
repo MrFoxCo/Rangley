@@ -13,42 +13,6 @@ enum APIModels {}
 
 // MARK: - i/user
 
-extension APIModels
-{
-    struct InsertUserRequest: Codable
-    {
-        // REQUIRED
-        let cognitoSub: String
-        let username: String
-        let displayName: String
-        // one of these must be provided (server validates)
-        let cellphone: String?
-        let email: String?
-        // keep as "yyyy-MM-dd" string to match server cast ::date
-        let dob: String
-        // OPTIONAL
-        let firstName: String?
-        let lastName: String?
-
-        enum CodingKeys: String, CodingKey
-        {
-            case cognitoSub = "cognito_sub"
-            case username
-            case displayName = "display_name"
-            case cellphone
-            case email
-            case dob
-            case firstName = "first_name"
-            case lastName  = "last_name"
-        }
-    }
-
-    struct InsertUserResponse: Codable
-    {
-        let newUserId: Int64?
-        enum CodingKeys: String, CodingKey { case newUserId = "new_user_id" }
-    }
-}
 
 // MARK: - i/meet-coordinate
 
@@ -353,8 +317,7 @@ final class APIClient
 extension APIClient
 {
     // Inserts
-    func insertUser(_ body: APIModels.InsertUserRequest) async throws -> APIModels.InsertUserResponse
-    {
+    func insertUser(_ body: UserRegisterModel) async throws -> UserRegisterResult {
         try await post("/i/user", body: body)
     }
 
