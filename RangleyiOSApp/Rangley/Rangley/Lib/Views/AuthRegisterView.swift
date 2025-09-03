@@ -9,7 +9,6 @@
 
 import SwiftUI
 
-/// Will be used to Insert a User Using JWT Auth Register
 @MainActor
 final class AuthRegisterVM: ObservableObject
 {
