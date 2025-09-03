@@ -121,8 +121,31 @@ struct AuthRegisterView: View
             vm.accessTokenProvider = {
                 // Return the Cognito **access token** string ("Bearer" value) from your auth layer.
                 // e.g., Amplify.Auth.fetchAuthSession → session.userPoolTokens?.accessToken
-                return "<ACCESS_TOKEN>"
+                return "<AUTH_TOKEN>" // ? what is the actual return suppsoed to be
             }
         }
     }
 }
+
+//########################################################################################################
+//  CAN PREVIEW THE REGISTRATION FORM HERE
+//########################################################################################################
+
+struct ContentView: View {
+    var body: some View {
+        NavigationStack {
+            List {
+                NavigationLink("Auth Register") {
+                    AuthRegisterView()
+                }
+            }
+            .navigationTitle("Dev Tools")
+        }
+    }
+}
+#Preview {
+    ContentView()
+}
+//########################################################################################################
+//  CAN PREVIEW THE REGISTRATION FORM HERE ^^^^^^^^^^^^^^^^^^^^^^^^
+//########################################################################################################

@@ -44,14 +44,14 @@ BEGIN
   CALL rangley.rangley_i_user_by_auth_register
   (
   	 result
-    ,'arn.asdfasdfasdfasdfavcasdabsfb.com'
-    ,'ava'
-    ,'h asdfa'
-    ,'+17734441199'
-    ,NULL
+    ,'a.asldjfalsdkj.banana'
+    ,'HISISWORKING'
+    ,'ORKING '
+    ,'+10881112222'
+    ,'baana@f.com'
     ,'1999-01-01'
-    ,NULL
-    ,NULL
+    ,'trry'
+    ,'lwson'
   );
 
 END $$;
@@ -174,10 +174,18 @@ BEGIN
 		,p_email
 		,p_dob
 	)
-	ON CONFLICT (cognito_sub) DO NOTHING;
-
-	RAISE LOG '[INFO] User Inserted';
-	is_success := true;
+	RETURNING user_id INTO v_user_id;
+	
+	GET DIAGNOSTICS v_rows = ROW_COUNT;   -- 1 = inserted, 0 = conflict/no insert
+	
+	IF v_rows = 0 THEN
+	  SELECT user_id INTO v_user_id
+	  FROM rangley.tb_users
+	  WHERE cognito_sub = p_cognito_sub;
+	END IF;
+	
+	RAISE LOG '[INFO] auth_register rows=% user_id=% sub=% username=%',
+	  v_rows, COALESCE(v_user_id,-1), p_cognito_sub, p_username;
 
 EXCEPTION
     WHEN OTHERS THEN

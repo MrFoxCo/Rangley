@@ -134,7 +134,8 @@ enum Proc
             """
             CALL \(unsafeRaw: procName.rawValue)
             (
-                 \(bind: i.cognito_sub)::text
+                 \(bind: o.is_success)::boolean
+                ,\(bind: i.cognito_sub)::text
                 ,\(bind: i.username)::varchar(50)
                 ,\(bind: i.display_name)::varchar(50)
                 ,\(bind: i.cellphone)::varchar(16)
