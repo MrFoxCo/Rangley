@@ -310,8 +310,8 @@ public func routes(_ app: Application) throws
   -H "Content-Type: application/json" \
  -H "Authorization: Bearer $AUTH_TOKEN" \
   -d '{
-     "meet_id": 1,
-     "meet_coordinate_id": 1,
+     "meet_id": 6,
+     "meet_coordinate_id": 2,
      "name": "Other Cubs Rooftop Meetup",
      "dttm_start_utc": "2025-09-29T18:00:00Z",
      "dttm_end_utc": "2025-09-29T21:00:00Z"
@@ -458,12 +458,11 @@ curl -sS -X GET "{$BASE}/v/meet-categories" \
    }'
  
  curl -sS -X POST "$BASE/i/auth-register-test" \
-   -H "Authorization: Bearer $AUTH_TOKEN" \
    -H "Content-Type: application/json" \
    -d '{
-     "username": "ffs",
-     "display_name": "ff s ",
-     "cellphone": "+18889994220",
+     "username": "sdfgsdfg",
+     "display_name": "ffsdfgs ",
+     "cellphone": "+1888999220",
      "email": "asd@f.com",
      "dob": "1999-01-01",
      "first_name": "",
