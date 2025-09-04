@@ -18,7 +18,7 @@ enum RangleyProcName: String
     case i_meet_id               = "rangley.rangley_i_meet_id"
     case i_meet_coordinate       = "rangley.rangley_i_meet_coordinate"
     case i_meet                  = "rangley.rangley_i_meet"
-    case i_meet_change_stamp     = "rangley.rangley_i_change_stamp"
+    case i_change_stamp          = "rangley.rangley_i_change_stamp"
     case i_updated_meet          = "rangley.rangley_i_updated_meet"
     case m_user                  = "rangley.rangley_m_user"
 }
@@ -109,10 +109,12 @@ enum Proc
             let last_name    : String?
         }
 
+        // InsertUserByAuthRegister.fromRequest
         static func fromRequest(_ req: Request) throws -> Params {
             let b = try req.content.decode(Body.self)
-            guard let sub = req.cognitoSub
-            else { throw Abort(.unauthorized, reason: "Missing Cognito sub") }
+            // guard let sub = req.cognitoSuba   // WRONG
+            guard let sub = req.appSub else { throw Abort(.unauthorized, reason: "Missing app token sub") }
+ 
             return .init(
                 cognito_sub  : sub,
                 username     : b.username,
@@ -124,6 +126,7 @@ enum Proc
                 last_name    : b.last_name
             )
         }
+
 
         struct Result: Content, Sendable {
             let is_success: Bool?
@@ -326,7 +329,7 @@ enum Proc
             let new_change_stamp: Int64?
         }
         
-        static let procName: RangleyProcName = .i_meet_change_stamp
+        static let procName: RangleyProcName = .i_change_stamp
         
         static func query(_ i: Params, _ o : Result) -> SQLQueryString
         {

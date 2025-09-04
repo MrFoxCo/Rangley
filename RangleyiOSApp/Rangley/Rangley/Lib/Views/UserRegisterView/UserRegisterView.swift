@@ -26,7 +26,8 @@ final class UserRegisterVM: ObservableObject
     
     // Configure these for your env
     var baseURL = URL(string: "https://api.mrfoxco.com")!
-    var accessTokenProvider: () -> String = { "" } // inject your Cognito access token here
+    var tokenProvider: () async throws -> String = { "" }
+
     
     private let df: DateFormatter = {
         let f = DateFormatter()
@@ -63,7 +64,8 @@ final class UserRegisterVM: ObservableObject
         )
         
         do {
-            let token = accessTokenProvider()
+            let token = try await tokenProvider()   // raw JWT string (no "Bearer " prefix here)
+
             let res = try await AuthAPI.register(baseURL: baseURL, token: token, payload: payload)
             resultText = res.is_success == true ? "Success" : "Registered (is_success = \(String(describing: res.is_success)))"
         } catch {
@@ -115,14 +117,10 @@ struct UserRegisterView: View
         }
         .navigationTitle("Auth Register")
         .onAppear {
-            // Inject your real values here:
             vm.baseURL = URL(string: "https://api.mrfoxco.com")!
-            vm.accessTokenProvider = {
-                // Return the Cognito **access token** string ("Bearer" value) from your auth layer.
-                // e.g., Amplify.Auth.fetchAuthSession → session.userPoolTokens?.accessToken
-                return "<AUTH_TOKEN>" // ? what is the actual return suppsoed to be
-            }
+            vm.tokenProvider = { try await CognitoTokens.idToken() }
         }
+
     }
 }
 

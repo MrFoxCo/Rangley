@@ -2,6 +2,9 @@ import Vapor
 import Fluent
 import FluentPostgresDriver
 import NIOSSL
+import JWT
+import SotoCore
+import SotoCognitoIdentityProvider
 
 @discardableResult
 private func requireEnv(_ k: String) -> String {
@@ -9,7 +12,11 @@ private func requireEnv(_ k: String) -> String {
     return v
 }
 
-public func configure(_ app: Application) throws {
+public func configure(_ app: Application) throws
+{
+
+    // MARK: - DATABASE
+    
     let dbHost = requireEnv("DB_HOST")
     let dbPort = Int(Environment.get("DB_PORT") ?? "5432") ?? 5432
     let dbName = requireEnv("DB_NAME")
@@ -46,41 +53,104 @@ public func configure(_ app: Application) throws {
         ),
         as: .psql
     )
-
-    // --- Cognito ---
-    let cognitoIssuer   = requireEnv("COGNITO_ISSUER") 
-    let cognitoClientID = requireEnv("COGNITO_CLIENT_ID")
-
+    
+    // MARK: - END DATABASE
+    
+    
+    
+    
+    // MARK: - COGNITO
+    
+    // --- Cognito config (single source of truth) ---
+    let cognitoIssuer     = requireEnv("COGNITO_ISSUER")
+    let cognitoClientID   = requireEnv("COGNITO_CLIENT_ID")
+    let cognitoUserPoolId = requireEnv("COGNITO_USER_POOL_ID")
     app.storage[CognitoConfigKey.self] = CognitoConfig(
         issuer: cognitoIssuer,
-        clientID: cognitoClientID
+        clientID: cognitoClientID,
+        userPoolId: cognitoUserPoolId
     )
 
-    // JWKS endpoint for the user pool
-//    let jwksURL = URI(string: "\(cognitoIssuer)/.well-known/jwks.json")
-//
-//    app.middleware.use(
-//        CognitoJWTMiddleware(
-//            jwksURL: jwksURL,
-//            issuer: cognitoIssuer,
-//            audience: cognitoClientID
-//        )
-//    )
+    let jwtIssuer = Environment.get("APP_JWT_ISSUER") ?? "https://api.mrfoxco.com"
+    let secret    = requireEnv("APP_JWT_HS256_SECRET")
 
-    //
+    app.storage[AppAuthConfigKey.self] = .init(
+        issuer: jwtIssuer,
+        hmacSecret: Array(secret.utf8) // harmless to keep if you use it elsewhere
+    )
+
+    // Register HS256 key for signing & verifying (kid optional, but you used it above)
+    Task {
+        let sym = SymmetricKey(data: Data(secret.utf8))
+        await app.jwt.keys.add(hmac: .init(key: sym), digestAlgorithm: .sha256, kid: "app-hs256")
+    }
+
+
+    // --- Soto client v7 ---
+    let region = Region(rawValue: requireEnv("AWS_REGION"))
+    let aws    = AWSClient() // v7 default init
+    app.storage[AWSClientKey.self] = aws
+    app.storage[CognitoIDPKey.self] = CognitoIdentityProvider(client: aws, region: region)
+    app.lifecycle.use(ShutdownAWS(client: aws))
+
+    // MARK: - END COGNITO
     
     try routes(app)
 }
-// MARK: - Cognito Config holder
-struct CognitoConfig {
+// MARK: - Storage helpers (make Values Sendable)
+struct CognitoConfig: Sendable {
     let issuer: String
     let clientID: String
+    let userPoolId: String
 }
-private struct CognitoConfigKey: StorageKey {
-    typealias Value = CognitoConfig
+struct CognitoConfigKey: StorageKey { typealias Value = CognitoConfig }
+extension Application { var cognito: CognitoConfig { storage[CognitoConfigKey.self]! } }
+
+struct AppAuthConfig: Sendable {
+    let issuer: String
+    let hmacSecret: [UInt8]
 }
+struct AppAuthConfigKey: StorageKey { typealias Value = AppAuthConfig }
+extension Application { var appAuth: AppAuthConfig { storage[AppAuthConfigKey.self]! } }
+
+struct AWSClientKey: StorageKey { typealias Value = AWSClient }
+struct CognitoIDPKey: StorageKey { typealias Value = CognitoIdentityProvider }
 extension Application {
-    var cognito: CognitoConfig {
-        storage[CognitoConfigKey.self]!
+    var aws: AWSClient { storage[AWSClientKey.self]! }
+    var cognitoIDP: CognitoIdentityProvider { storage[CognitoIDPKey.self]! }
+}
+struct ShutdownAWS: LifecycleHandler {
+    let client: AWSClient
+    func shutdown(_ app: Application) { try? client.syncShutdown() }
+}
+// MARK: - Secret decoding helpers
+private func decodeSecret(_ s: String) throws -> [UInt8] {
+    if s.hasPrefix("b64:") {
+        guard let data = Data(base64Encoded: String(s.dropFirst(4))) else {
+            throw Abort(.internalServerError, reason: "Invalid base64 in APP_JWT_HS256_SECRET")
+        }
+        return [UInt8](data)
+    }
+    if s.hasPrefix("hex:") {
+        return try [UInt8](hexString: String(s.dropFirst(4)))
+    }
+    // fallback: treat as raw utf8 (still fine if it's random)
+    return Array(s.utf8)
+}
+
+private extension Array where Element == UInt8 {
+    init(hexString: String) throws {
+        let s = hexString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard s.count % 2 == 0 else { throw Abort(.internalServerError, reason: "Odd-length hex secret") }
+        var out = [UInt8](); out.reserveCapacity(s.count/2)
+        var i = s.startIndex
+        while i < s.endIndex {
+            let j = s.index(i, offsetBy: 2)
+            guard let b = UInt8(s[i..<j], radix: 16) else {
+                throw Abort(.internalServerError, reason: "Invalid hex in APP_JWT_HS256_SECRET")
+            }
+            out.append(b); i = j
+        }
+        self = out
     }
 }

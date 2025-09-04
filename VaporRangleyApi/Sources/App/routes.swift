@@ -7,6 +7,8 @@
 import Vapor
 import Fluent
 import SQLKit
+import JWT
+import SotoCognitoIdentityProvider
 
 private struct OkResponse: Content { let ok: Bool }
 
@@ -15,43 +17,72 @@ public func routes(_ app: Application) throws
     app.get("health") { _ in "ok" }
 
     
-  
-    // app.get("dbdiag")
-//    {
-//        req async -> String in
-//        
-//        let c = req.application.config
-//        
-//        var lines = [
-//            "dbdiag:",
-//            "host:\(c.dbHost) port:\(c.dbPort) name:\(c.dbName) user:\(c.dbUser)"
-//        ]
-//
-//        guard let sql = req.db as? (any SQLDatabase) else {
-//            lines.append("adapter:error req.db is not SQLDatabase")
-//            return lines.joined(separator: "\n")
-//        }
-//
-//        do {
-//            _ = try await sql.raw("select 1 as one").first()
-//            lines.append("query:ok select 1")
-//        } catch {
-//            lines.append("query:error \(error)")
-//        }
-//
-//        return lines.joined(separator: "\n")
-//    }
-    
-    
-    // --- Cognito-protected group ---
-    let issuer   = app.cognito.issuer
-    let clientID = app.cognito.clientID
-    let jwksURL  = URI(string: "\(issuer)/.well-known/jwks.json")
+    // MARK: - AUTHENTICATION
 
-    let auth = CognitoJWTMiddleware(jwksURL: jwksURL, issuer: issuer, audience: clientID)
+    struct LoginBody: Content, Sendable { let username: String; let password: String }
+    struct LoginResp: Content, Sendable { let token: String; let expires_at: Date }
+
+    app.post("auth","login")
+    {
+        req async throws -> LoginResp in
+        
+        let body = try req.content.decode(LoginBody.self)
+        let idp  = req.application.cognitoIDP
+        let cfg  = req.application.cognito
+
+        // 1) Admin auth with username/password
+        let initResp = try await idp.adminInitiateAuth(.init(
+            authFlow: .adminUserPasswordAuth,
+            authParameters: ["USERNAME": body.username, "PASSWORD": body.password], // <-- move up
+            clientId: cfg.clientID,
+            userPoolId: cfg.userPoolId
+        ))
+
+        // Handle NEW_PASSWORD_REQUIRED if you plan to support it; for now reject.
+        if let ch = initResp.challengeName, ch == .newPasswordRequired {
+           throw Abort(.forbidden, reason: "Password reset required")
+        }
+
+        guard let access = initResp.authenticationResult?.accessToken else {
+           throw Abort(.unauthorized, reason: "Auth failed")
+        }
+
+        // could be issue with null or something
+        // 2) Fetch attributes to get `sub`
+        let user = try await idp.getUser(.init(accessToken: access))
+        guard let sub = user.userAttributes.first(where: { $0.name == "sub" })?.value
+        else { throw Abort(.unauthorized, reason: "No sub") }
+
+
+        // 2) Mint your app token using Vapor JWT v5 helpers
+        let now = Date()
+        let exp = now.addingTimeInterval(15 * 60)
+
+        let payload = AppPayload(
+            iss: .init(value: req.application.appAuth.issuer),
+            sub: .init(value: sub),
+            exp: .init(value: exp),
+            iat: .init(value: now),
+            jti: .init(value: UUID().uuidString),
+            user_id: nil,
+            roles: ["user"]
+        )
+
+        // v5: Sign via req.jwt (not JWTSigner)
+        let token = try await req.jwt.sign(payload, kid: "app-hs256")
+        return .init(token: token, expires_at: exp)
+
+    }
+
+    // MARK: - END AUTHENTICATION
     
-    let api = app.grouped(auth)
-    let v = api.grouped("v")                  // public reads
+    // ===== Routing groups =====
+    // MARK: - ROUTING GROUPS
+    // ===== Routing groups =====
+
+    let api = app.grouped(AppJWTMiddleware())
+
+    let v = api.grouped("v")                  // protected reads
     let i = api.grouped("i")            // protected inserts
     let m = api.grouped("m")            // protected modifies
     //let p = api.grouped("p")            // protected modifies
@@ -149,15 +180,93 @@ public func routes(_ app: Application) throws
     
 
     // routes.swift (stays tiny)
-    /// register a new user through authentication system
-    i.post("user")
-    {
-        req async throws -> Proc.InsertUserByAuthRegister.Result in
+    /// register a new user through authentication system MUST BE OPEN TO THE PUBLIC
+    // MARK: - AUTH: REGISTER (PUBLIC)
+    struct RegisterBody: Content, Sendable {
+        let username: String            // app handle (NOT Cognito username)
+        let password: String
+        let display_name: String
+        let cellphone: String?
+        let email: String?
+        let dob: String                 // "YYYY-MM-DD"
+        let first_name: String?
+        let last_name: String?
+    }
+    struct RegisterResp: Content, Sendable {
+        let token: String?
+        let expires_at: Date?
+        let requires_confirmation: Bool
+    }
+
+    app.post("auth", "register") { req async throws -> RegisterResp in
+        let body = try req.content.decode(RegisterBody.self)
+
+        // must have at least one login identifier
+        guard (body.email?.isEmpty == false) || (body.cellphone?.isEmpty == false)
+        else { throw Abort(.badRequest, reason: "Provide email or cellphone") }
+
+        // Prefer cellphone as Cognito username if both are present
+        let cognitoUsername: String
+        if let phone = body.cellphone, !phone.isEmpty {
+            cognitoUsername = phone        // E.164 expected, e.g. +13125550123
+        } else {
+            cognitoUsername = body.email!  // safe: guarded above
+        }
+
+        let idp = req.application.cognitoIDP
+        let cfg = req.application.cognito
+
+        // 1) Cognito signUp (password must precede username)
+        let sign = try await idp.signUp(.init(
+            clientId: cfg.clientID,
+            password: body.password,
+            userAttributes: [
+                .init(name: "name", value: body.display_name),
+                body.email.map { .init(name: "email", value: $0) },
+                body.cellphone.map { .init(name: "phone_number", value: $0) }
+            ].compactMap { $0 },
+            username: cognitoUsername
+        ))
+
+        let sub = sign.userSub   // <- store as cognito_sub
+
+        // 2) Insert your app user row via stored proc (keep app handle = body.username)
         guard let sql = req.db as? any SQLDatabase
         else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
-        let params = try Proc.InsertUserByAuthRegister.fromRequest(req)
-        return try await Proc.InsertUserByAuthRegister.call(on: sql, params, .init(is_success: nil))
+
+        let params = Proc.InsertUserByAuthRegister.Params(
+            cognito_sub: sub,
+            username: body.username,              // your app handle
+            display_name: body.display_name,
+            cellphone: body.cellphone,
+            email: body.email,
+            dob: body.dob,
+            first_name: body.first_name,
+            last_name: body.last_name
+        )
+        _ = try await Proc.InsertUserByAuthRegister.call(on: sql, params, .init(is_success: nil))
+
+        // 3) Return confirmation state (coalesce optional)
+        let requiresConfirmation = !(sign.userConfirmed)
+        if requiresConfirmation {
+            return .init(token: nil, expires_at: nil, requires_confirmation: true)
+        } else {
+            let now = Date(), exp = now.addingTimeInterval(15 * 60)
+            let payload = AppPayload(
+                iss: .init(value: req.application.appAuth.issuer),
+                sub: .init(value: sub),
+                exp: .init(value: exp),
+                iat: .init(value: now),
+                jti: .init(value: UUID().uuidString),
+                user_id: nil,
+                roles: ["user"]
+            )
+            let token = try await req.jwt.sign(payload, kid: "app-hs256")
+            return .init(token: token, expires_at: exp, requires_confirmation: false)
+        }
     }
+
+
 
     // i/meet-coordinate -> (new_meet_coordinate_id)
     i.post("meet-coordinate")
@@ -255,7 +364,7 @@ public func routes(_ app: Application) throws
     
     
     
-    
+    // ===== MODIFIES (protected) =====
     
     // MARK: - MODIFIES (m_*) or DELETE/PATCH ROUTES
 
@@ -276,6 +385,10 @@ public func routes(_ app: Application) throws
     
     // MARK: - END MODIFIES (m_*) or DELETE/PATCH ROUTES
 
+    
+    
+    
+    // MARK: - END ROUTING GROUPS
     
 
 }
@@ -478,6 +591,37 @@ curl -sS -X GET "{$BASE}/v/meet-categories" \
    }'
  
  
+ curl -sS -X POST "$BASE/auth/register" -H "Content-Type: application/json" -d '{
+   "username":"elvis",
+   "password":"StrongPw123!",
+   "display_name":"Elvis P",
+   "cellphone":"+16865550123",
+   "email":"elvis@example.com",
+   "dob":"1999-01-01",
+   "first_name":"Elvis",
+   "last_name":"Presley"
+ }'
+ curl -sS -X POST "https://api.mrfoxco.com/auth/register" -H "Content-Type: application/json" -d '{
+   "username":"",
+   "password":"!",
+   "display_name":"",
+   "cellphone":"+",
+   "email":"",
+   "dob":"",
+   "first_name":"",
+   "last_name":""
+ }'
  
- 
+ curl.exe -sS -X POST "https://api.mrfoxco.com/auth/register" `
+   -H "Content-Type: application/json" `
+   -d '{"username":"",
+        "password":"!",
+        "display_name":"",
+        "cellphone":"+",
+        "email":"",
+        "dob":"yyyy-mm-dd",
+        "first_name":"",
+        "last_name":""
+ }'
+
  */

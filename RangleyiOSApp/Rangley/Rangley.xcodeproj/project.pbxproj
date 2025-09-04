@@ -8,6 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		65052A222E14ECD600DD3D81 /* config.json in Resources */ = {isa = PBXBuildFile; fileRef = 65052A212E14ECCF00DD3D81 /* config.json */; };
+		655F25112E68D7A80097AC05 /* Amplify in Frameworks */ = {isa = PBXBuildFile; productRef = 655F25102E68D7A80097AC05 /* Amplify */; };
+		655F25132E68D7B70097AC05 /* AWSCognitoAuthPlugin in Frameworks */ = {isa = PBXBuildFile; productRef = 655F25122E68D7B70097AC05 /* AWSCognitoAuthPlugin */; };
 		65CD85022E146C930095C7F3 /* .gitignore in Resources */ = {isa = PBXBuildFile; fileRef = 65CD85012E146C8D0095C7F3 /* .gitignore */; };
 /* End PBXBuildFile section */
 
@@ -89,6 +91,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				655F25112E68D7A80097AC05 /* Amplify in Frameworks */,
+				655F25132E68D7B70097AC05 /* AWSCognitoAuthPlugin in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -109,6 +113,13 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		655F250F2E68D7A80097AC05 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		65FAB4472E1468F0004AFBE8 = {
 			isa = PBXGroup;
 			children = (
@@ -119,6 +130,7 @@
 				65CD85012E146C8D0095C7F3 /* .gitignore */,
 				65052A212E14ECCF00DD3D81 /* config.json */,
 				6550883E2E1AE49F004F48A3 /* README.md */,
+				655F250F2E68D7A80097AC05 /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -152,6 +164,8 @@
 			);
 			name = Rangley;
 			packageProductDependencies = (
+				655F25102E68D7A80097AC05 /* Amplify */,
+				655F25122E68D7B70097AC05 /* AWSCognitoAuthPlugin */,
 			);
 			productName = Freebird;
 			productReference = 65FAB4502E1468F0004AFBE8 /* Rangley.app */;
@@ -236,7 +250,7 @@
 			mainGroup = 65FAB4472E1468F0004AFBE8;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				655F250B2E68C6090097AC05 /* XCRemoteSwiftPackageReference "soto" */,
+				655F250E2E68D3150097AC05 /* XCRemoteSwiftPackageReference "amplify-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 65FAB4512E1468F0004AFBE8 /* Products */;
@@ -639,15 +653,28 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		655F250B2E68C6090097AC05 /* XCRemoteSwiftPackageReference "soto" */ = {
+		655F250E2E68D3150097AC05 /* XCRemoteSwiftPackageReference "amplify-swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/soto-project/soto";
+			repositoryURL = "https://github.com/aws-amplify/amplify-swift.git";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 7.9.0;
+				minimumVersion = 2.50.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		655F25102E68D7A80097AC05 /* Amplify */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 655F250E2E68D3150097AC05 /* XCRemoteSwiftPackageReference "amplify-swift" */;
+			productName = Amplify;
+		};
+		655F25122E68D7B70097AC05 /* AWSCognitoAuthPlugin */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 655F250E2E68D3150097AC05 /* XCRemoteSwiftPackageReference "amplify-swift" */;
+			productName = AWSCognitoAuthPlugin;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 65FAB4482E1468F0004AFBE8 /* Project object */;
 }

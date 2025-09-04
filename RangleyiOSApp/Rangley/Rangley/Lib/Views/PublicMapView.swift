@@ -10,6 +10,26 @@ import SwiftUI
 import Foundation
 import SQLite3
 
+
+struct ContentViewTest: View {
+    var body: some View {
+        NavigationStack {
+            List {
+                NavigationLink("Auth Register") { UserRegisterView() }
+                Button("Debug: print ID token") {
+                    Task {
+                        do { print(try await CognitoTokens.idToken()) }
+                        catch { print("No token:", error) }
+                    }
+                }
+            }
+            .navigationTitle("Dev Tools")
+        }
+    }
+}
+#Preview { ContentViewTest() }   // ← match the struct name
+
+
 private enum ActiveSheet: Identifiable, Equatable {
     case CreateMeet
     case Meet(MeetCardData)
@@ -26,7 +46,7 @@ private enum ActiveSheet: Identifiable, Equatable {
 public struct PublicMapView: View {
     
     // TODO: userManager is a temp solution to not having a session and knowing who is logged in
-    @EnvironmentObject var userManager: UserManager
+   // @EnvironmentObject var userManager: UserManager
     
     
     // MARK: - Map Location
@@ -228,35 +248,35 @@ public struct PublicMapView: View {
                                 let geocoder = CLGeocoder()
                                 let location = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
                                 
-                                Task {
-                                    guard
-                                        let li   = await createLocationInfoObject(geocoder, location),
-                                        let _ = userManager.anthony
-                                    else { return }
-                                    
-                                    // load dynamic categories once (outside MainActor)
-                                    let cats = DbRangle.loadCategories(DbManager.shared.database)
-                                    let initialCategory = UserDefaults.standard.string(forKey: "lastCategory")
-                                    ?? cats.first?.Name ?? ""
-                                    
-                                    await MainActor.run {
-                                        currentMeetBatch.LocationInfo = li
-                                        currentMeetBatch.User = userManager.anthony!
-
-                                        createDraft = CreateMeetDraft(
-                                            name        : "",
-                                            notes       : "",
-                                            categoryName: initialCategory,                 // <-- dynamic
-                                            dttmStart   : Date().addingTimeInterval(60*30),
-                                            dttmEnd     :   Date().addingTimeInterval(60*90),
-                                            capacity    : 4,
-                                            placeName   : li.Name ?? li.Locality
-                                        )
-                                        
-                                        activeSheet = .CreateMeet
-                                    }
-                                    
-                                }
+//                                Task {
+//                                    guard
+//                                        let li   = await createLocationInfoObject(geocoder, location),
+//                                        let _ = "aa"
+//                                    else { return }
+//                                    
+//                                    // load dynamic categories once (outside MainActor)
+//                                    let cats = DbRangle.loadCategories(DbManager.shared.database)
+//                                    let initialCategory = UserDefaults.standard.string(forKey: "lastCategory")
+//                                    ?? cats.first?.Name ?? ""
+//                                    
+//                                    await MainActor.run {
+//                                        currentMeetBatch.LocationInfo = li
+//
+//
+//                                        createDraft = CreateMeetDraft(
+//                                            name        : "",
+//                                            notes       : "",
+//                                            categoryName: initialCategory,                 // <-- dynamic
+//                                            dttmStart   : Date().addingTimeInterval(60*30),
+//                                            dttmEnd     :   Date().addingTimeInterval(60*90),
+//                                            capacity    : 4,
+//                                            placeName   : li.Name ?? li.Locality
+//                                        )
+//                                        
+//                                        activeSheet = .CreateMeet
+//                                    }
+//                                    
+//                                }
                             }
                         }
                     )

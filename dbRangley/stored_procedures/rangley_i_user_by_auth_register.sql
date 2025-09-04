@@ -67,6 +67,8 @@ DECLARE
     v_e164   			text;
 	email_reg_ex 		text := '^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$';
     _state text; _msg 	text; _detail text; _hint text; _ctx text;
+	v_user_id bigint;
+	v_rows    int;
 BEGIN
     is_success := false;
 
@@ -141,13 +143,16 @@ BEGIN
 
     -- Friendly uniqueness preflight
     IF EXISTS (SELECT 1 FROM rangley.tb_users WHERE lower(username)=p_username) THEN
-    	RAISE EXCEPTION USING ERRCODE='23505', MESSAGE='[ERRO] Username already taken', DETAIL = format('username=%s', p_username);
+    	RAISE EXCEPTION USING 
+		ERRCODE='23505', MESSAGE='[ERRO] Username already taken', DETAIL = format('username=%s', p_username);
     END IF;
     IF p_email IS NOT NULL AND EXISTS (SELECT 1 FROM rangley.tb_users WHERE lower(email)=p_email) THEN
-    	RAISE EXCEPTION USING ERRCODE='23505', MESSAGE='[ERRO] Email already in use', DETAIL = format('email=%s', p_email);
+    	RAISE EXCEPTION USING 
+			ERRCODE='23505', MESSAGE='[ERRO] Email already in use', DETAIL = format('email=%s', p_email);
     END IF;
     IF v_e164 IS NOT NULL AND EXISTS (SELECT 1 FROM rangley.tb_users WHERE cellphone=v_e164) THEN
-        	RAISE EXCEPTION USING ERRCODE='23505', MESSAGE='[ERRO] Cellphone already in use', DETAIL = format('cellphone=%s', v_e164);
+		RAISE EXCEPTION USING 
+			ERRCODE='23505', MESSAGE='[ERRO] Cellphone already in use', DETAIL = format('cellphone=%s', v_e164);
     END IF;
 
 

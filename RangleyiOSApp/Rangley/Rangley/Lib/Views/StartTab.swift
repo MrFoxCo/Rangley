@@ -8,7 +8,7 @@
 import SwiftUI
 struct StartTab : View {
     var body : some View {
-        PublicMapView()
+        ContentViewTest()
 //        TabView {
 //            Group {
 //                PublicMap()

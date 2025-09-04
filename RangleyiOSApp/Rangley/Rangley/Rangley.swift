@@ -5,66 +5,71 @@
 //
 
 import SwiftUI
+import Amplify
+import AWSCognitoAuthPlugin
+import UIKit
+
+final class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication,
+                     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1" { return true }
+        #endif
+
+        // Sanity check: is the config JSON in the app bundle?
+        let cfg = Bundle.main.url(forResource: "amplifyconfiguration", withExtension: "json")
+        print("📄 amplifyconfiguration.json present:", cfg != nil ? "YES" : "NO")
+
+        Amplify.Logging.logLevel = .verbose
+        do {
+            try Amplify.add(plugin: AWSCognitoAuthPlugin())
+            try Amplify.configure()   // uses amplifyconfiguration.json in your bundle
+            print("✅ Amplify configured")
+        } catch {
+            print("Amplify configure failed:", error)
+        }
+        return true
+    }
+}
 
 @main
 struct RangleyApp: App {
-    @StateObject private var locationManager = LocationManager()
-    @StateObject private var userManager = UserManager()
-    
-    var body: some Scene {
-        WindowGroup {
-            RootView()
-                .environmentObject(locationManager)
-                .environmentObject(userManager)
-                .onAppear {
-                    // Initialize database after the app loads
-                    _ = DbManager.shared
-                    userManager.loadUser()
-                }
-        }
-    }
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    var body: some Scene { WindowGroup { ContentView() } }
+}
+#Preview {
+    EmptyView()
 }
 
-class UserManager: ObservableObject {
-    @Published var anthony: User?
-    @Published var error: Error?
-    
-    func loadUser() {
-        let result = DbRangle.tryViewUser(DbManager.shared.database!, userId: 2)
-        anthony = result.0
-        error = result.1
-    }
-}
 
-/**
- let allViews = [
-     
-     // lookups
-      Views.vwMeetCategory
-     ,Views.vwParticpantStatus
-     ,Views.vwMeetStatus
-     ,Views.vwNotificationType
-     ,Views.vwSubCategory
-     ,Views.vwFeatures
-     ,Views.vwVersionFeatures
-     
-     // mains
-     ,Views.vwMeetIcon
-     ,Views.vwMeetParticipants
-     ,Views.vwMeetIDs
-     ,Views.vwMeetAddresses
-     ,Views.vwMeets
-     ,Views.vwMeetChangeStamps
-     ,Views.vwNotifications
-     ,Views.vwUserInboxes
-     ,Views.vwUsers
-
-     // subs
-     ,Views.vwLatestMeetVersions
-     ,Views.vwMeetDisplays
-     ,Views.vwLatestVisibleMeets
-     ,Views.vwMeetCategoryIDAndName
-     ,Views.vwMeetChangeStampsPartitioned
-
- ]
- */
+// V1
+//import SwiftUI
+//import Amplify
+//import AWSCognitoAuthPlugin
+//
+//@main
+//struct RangleyApp: App {
+//    init() {
+//        configureAmplify()
+//    }
+//
+//    @StateObject private var locationManager = LocationManager()
+//
+//    var body: some Scene {
+//        WindowGroup {
+//            RootView()
+//                .environmentObject(locationManager)
+//        }
+//    }
+//}
+//
+//func configureAmplify() {
+//    do {
+//        try Amplify.add(plugin: AWSCognitoAuthPlugin())
+//        try Amplify.configure()
+//        print("Amplify configured")
+//    } catch {
+//        print("Amplify configure failed: \(error)")
+//    }
+//}
