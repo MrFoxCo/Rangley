@@ -10,7 +10,9 @@ import JWT
 import Foundation
 
 // MARK: - App token claims (Codable by default)
-struct AppPayload: JWTPayload, Sendable, Codable {
+
+struct AppPayload: JWTPayload, Sendable, Codable
+{
     var iss: IssuerClaim
     var sub: SubjectClaim           // Cognito sub
     var exp: ExpirationClaim
@@ -27,13 +29,21 @@ struct AppPayload: JWTPayload, Sendable, Codable {
 private struct AppSubKey: StorageKey { typealias Value = String }
 private struct AppUserIdKey: StorageKey { typealias Value = Int64 }
 
-extension Request {
+extension Request
+{
     var appSub: String?   { storage[AppSubKey.self] }
     var appUserId: Int64? { storage[AppUserIdKey.self] }
 }
 
+// MARK: - END App token claims (Codable by default)
+
+
+
+
 // MARK: - Middleware verifying with HS256 secret
-struct AppJWTMiddleware: AsyncMiddleware {
+
+struct AppJWTMiddleware: AsyncMiddleware
+{
     func respond(to req: Request, chainingTo next: any AsyncResponder) async throws -> Response {
         // v5: verify bearer from Authorization header automatically
         let payload = try await req.jwt.verify(as: AppPayload.self)
@@ -47,3 +57,4 @@ struct AppJWTMiddleware: AsyncMiddleware {
     }
 }
 
+// MARK: - END Middleware verifying with HS256 secret

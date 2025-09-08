@@ -12,19 +12,39 @@ import SotoCognitoIdentityProvider
 
 private struct OkResponse: Content { let ok: Bool }
 
+// TODO: - REMOVE ALL BUSINESS LOGIC FROM routes.swift PLACE IN dbRangley.swift
 public func routes(_ app: Application) throws
 {
     app.get("health") { _ in "ok" }
 
     
-    // MARK: - AUTHENTICATION
+    // MARK: - AUTHENTICATION (Sign Up, Log In, Log Out, Password Reset, Forgot Password, Admin Reset Password)
+    
+    // TODO: - RELOCATE ALL STRUCTS TO DIFFERENT FILE
+    
+    
+    /// register a new user through authentication system MUST BE OPEN TO THE PUBLIC
+    // MARK: - AUTH REGISTER (PUBLIC)
 
-    struct LoginBody: Content, Sendable { let username: String; let password: String }
-    struct LoginResp: Content, Sendable { let token: String; let expires_at: Date }
+    // ---------- Route ----------
+    app.post("auth", "register")
+    {
+        req async throws -> AWS.RegisterResponse in
+        try await AWS.register(req)
+    }
+
+    // MARK: - END AUTH REGISTER (PUBLIC)
+
+    // MARK: - AUTH LOGIN
+    
+    struct LoginBody    : Content, Sendable
+    { let username  : String; let password  : String }
+    struct LoginResponse: Content, Sendable
+    { let token     : String; let expires_at: Date }
 
     app.post("auth","login")
     {
-        req async throws -> LoginResp in
+        req async throws -> LoginResponse in
         
         let body = try req.content.decode(LoginBody.self)
         let idp  = req.application.cognitoIDP
@@ -73,6 +93,55 @@ public func routes(_ app: Application) throws
         return .init(token: token, expires_at: exp)
 
     }
+    
+    // MARK: - END AUTH LOGIN
+    
+    struct ForgotBody: Content, Sendable { let username: String } // email or phone (per your pool)
+
+    app.post("auth","forgot") { req async throws -> HTTPStatus in
+        let b = try req.content.decode(ForgotBody.self)
+        
+        let idp = req.application.cognitoIDP, cfg = req.application.cognito
+        
+        try await idp.forgotPassword(.init(clientId: cfg.clientID, username: b.username))
+        
+        return .noContent
+    }
+
+    struct ConfirmResetBody: Content, Sendable { let username: String; let code: String; let new_password: String }
+    
+    app.post("auth","confirm-forgot"){ req async throws -> HTTPStatus in
+        let b = try req.content.decode(ConfirmResetBody.self)
+        let idp = req.application.cognitoIDP, cfg = req.application.cognito
+//        try await idp.confirmForgotPassword(.init(
+//            clientId: cfg.clientID, username: b.username,
+//            confirmationCode: b.code, password: b.new_password
+//        ))
+        return .noContent
+    }
+    
+    struct ChangePwBody: Content, Sendable { let old_password: String; let new_password: String }
+    app.post("auth","change-password") { req async throws -> HTTPStatus in
+        // get Cognito access token first (your login already retrieved it; include it in the app token or fetch again)
+        // if you don’t have it handy, call adminInitiateAuth again and get AccessToken
+//        let access = /* your way to obtain the current Cognito access token */
+//        let b = try req.content.decode(ChangePwBody.self)
+//        let idp = req.application.cognitoIDP
+//        try await idp.changePassword(.init(previousPassword: b.old_password, proposedPassword: b.new_password, accessToken: access))
+        return .noContent
+    }
+
+    struct AdminSetPwBody: Content, Sendable { let username: String; let new_password: String; let permanent: Bool }
+    app.post("admin","set-password") { req async throws -> HTTPStatus in
+        let b = try req.content.decode(AdminSetPwBody.self)
+        let idp = req.application.cognitoIDP, cfg = req.application.cognito
+//        try await idp.adminSetUserPassword(.init(
+//            userPoolId: cfg.userPoolId, username: b.username,
+//            password: b.new_password, permanent: b.permanent
+//        ))
+        return .noContent
+    }
+
 
     // MARK: - END AUTHENTICATION
     
@@ -178,94 +247,6 @@ public func routes(_ app: Application) throws
     
     
     
-
-    // routes.swift (stays tiny)
-    /// register a new user through authentication system MUST BE OPEN TO THE PUBLIC
-    // MARK: - AUTH: REGISTER (PUBLIC)
-    struct RegisterBody: Content, Sendable {
-        let username: String            // app handle (NOT Cognito username)
-        let password: String
-        let display_name: String
-        let cellphone: String?
-        let email: String?
-        let dob: String                 // "YYYY-MM-DD"
-        let first_name: String?
-        let last_name: String?
-    }
-    struct RegisterResp: Content, Sendable {
-        let token: String?
-        let expires_at: Date?
-        let requires_confirmation: Bool
-    }
-
-    app.post("auth", "register") { req async throws -> RegisterResp in
-        let body = try req.content.decode(RegisterBody.self)
-
-        // must have at least one login identifier
-        guard (body.email?.isEmpty == false) || (body.cellphone?.isEmpty == false)
-        else { throw Abort(.badRequest, reason: "Provide email or cellphone") }
-
-        // Prefer cellphone as Cognito username if both are present
-        let cognitoUsername: String
-        if let phone = body.cellphone, !phone.isEmpty {
-            cognitoUsername = phone        // E.164 expected, e.g. +13125550123
-        } else {
-            cognitoUsername = body.email!  // safe: guarded above
-        }
-
-        let idp = req.application.cognitoIDP
-        let cfg = req.application.cognito
-
-        // 1) Cognito signUp (password must precede username)
-        let sign = try await idp.signUp(.init(
-            clientId: cfg.clientID,
-            password: body.password,
-            userAttributes: [
-                .init(name: "name", value: body.display_name),
-                body.email.map { .init(name: "email", value: $0) },
-                body.cellphone.map { .init(name: "phone_number", value: $0) }
-            ].compactMap { $0 },
-            username: cognitoUsername
-        ))
-
-        let sub = sign.userSub   // <- store as cognito_sub
-
-        // 2) Insert your app user row via stored proc (keep app handle = body.username)
-        guard let sql = req.db as? any SQLDatabase
-        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
-
-        let params = Proc.InsertUserByAuthRegister.Params(
-            cognito_sub: sub,
-            username: body.username,              // your app handle
-            display_name: body.display_name,
-            cellphone: body.cellphone,
-            email: body.email,
-            dob: body.dob,
-            first_name: body.first_name,
-            last_name: body.last_name
-        )
-        _ = try await Proc.InsertUserByAuthRegister.call(on: sql, params, .init(is_success: nil))
-
-        // 3) Return confirmation state (coalesce optional)
-        let requiresConfirmation = !(sign.userConfirmed)
-        if requiresConfirmation {
-            return .init(token: nil, expires_at: nil, requires_confirmation: true)
-        } else {
-            let now = Date(), exp = now.addingTimeInterval(15 * 60)
-            let payload = AppPayload(
-                iss: .init(value: req.application.appAuth.issuer),
-                sub: .init(value: sub),
-                exp: .init(value: exp),
-                iat: .init(value: now),
-                jti: .init(value: UUID().uuidString),
-                user_id: nil,
-                roles: ["user"]
-            )
-            let token = try await req.jwt.sign(payload, kid: "app-hs256")
-            return .init(token: token, expires_at: exp, requires_confirmation: false)
-        }
-    }
-
 
 
     // i/meet-coordinate -> (new_meet_coordinate_id)
@@ -611,7 +592,7 @@ curl -sS -X GET "{$BASE}/v/meet-categories" \
    "first_name":"",
    "last_name":""
  }'
- 
+ // WINDOWS
  curl.exe -sS -X POST "https://api.mrfoxco.com/auth/register" `
    -H "Content-Type: application/json" `
    -d '{"username":"",
@@ -624,4 +605,54 @@ curl -sS -X GET "{$BASE}/v/meet-categories" \
         "last_name":""
  }'
 
+ curl -sS -X POST POST "$BASE/auth/login" `
+ -H "Content-Type: application/json" `
+ -d
+ '{
+ "username":"mrman",
+ "password":"14PincheTuMadre!"
+ }'
+ 
+ curl -sS -X POST "$BASE/auth/login" \
+   -H "Content-Type: application/json" \
+   -d '{"username":"21abe5c0-d071-70b3-e3c1-876a9457ea6c","password":"d!DNF9AKJ"}'
+ 
+ curl -sS -X POST "$BASE/auth/login" \
+   -H "Content-Type: application/json" \
+   -d '{"username":"<email-or-+1phone>","password":"<password>"}'
+ 
+ 
+ Password minimum length
+ 8 character(s)
+ Password requirements
+ Contains at least 1 number
+ Contains at least 1 special character
+ Contains at least 1 uppercase letter
+ Contains at least 1 lowercase letter
+ // password  must satisfy regular expression pattern: ^[\S]+.*[\S]+$
+ 
+ curl -sS -X POST "$BASE/auth/register" \
+ -H "Content-Type: application/json"\
+ -d '{
+   "username":"testu",
+   "password":"d!DNF9AKJ",
+   "display_name":"testd",
+   "cellphone":"+17731110101",
+   "email":"1@gmail.com",
+   "dob":"1988-01-01",
+   "first_name":"not",
+   "last_name":"important"
+ }'
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
  */

@@ -9,6 +9,7 @@ import Vapor
 import Fluent
 import SQLKit
 import JWT
+import SotoCognitoIdentityProvider
 
 // MARK: - Registry of fully-qualified procedure names
 
@@ -85,76 +86,47 @@ enum Proc
     // MARK: - INSERT USER NOT TESTED
     
     /// MUST match: CREATE PROCEDURE rangley.rangley_i_user_by_auth_register(...)
-    enum InsertUserByAuthRegister: PgCallableRow {
-        static let procName: RangleyProcName = .i_user_by_auth_register
+    enum InsertUserByAuthRegister: PgCallableRow
+    {
+            static let procName: RangleyProcName = .i_user_by_auth_register
 
-        struct Body: Content, Sendable {
-            let username     : String
-            let display_name : String
-            let cellphone    : String?
-            let email        : String?
-            let dob          : String          // "YYYY-MM-DD"
-            let first_name   : String?
-            let last_name    : String?
+            struct Params: Sendable {
+                let cognito_sub  : String
+                let username     : String
+                let display_name : String
+                let cellphone    : String?
+                let email        : String?
+                let dob          : String          // "YYYY-MM-DD"
+                let first_name   : String?
+                let last_name    : String?
+            }
+
+            struct Result: Content, Sendable {
+                let is_success: Bool?
+            }
+
+            // OUT goes first (your convention)
+            static func query(_ i: Params, _ o: Result) -> SQLQueryString {
+                """
+                CALL \(unsafeRaw: procName.rawValue)
+                (
+                     \(bind: o.is_success)::boolean
+                    ,\(bind: i.cognito_sub)::text
+                    ,\(bind: i.username)::varchar(50)
+                    ,\(bind: i.display_name)::varchar(50)
+                    ,\(bind: i.cellphone)::varchar(16)
+                    ,\(bind: i.email)::varchar(256)
+                    ,\(bind: i.dob)::date
+                    ,COALESCE(\(bind: i.first_name)::varchar(50), ''::varchar(50))
+                    ,COALESCE(\(bind: i.last_name)::varchar(50),  ''::varchar(50))
+                );
+                """
+            }
+
+            static func decode(_ row: any SQLRow) throws -> Result {
+                try .init(is_success: row.decode(column: "is_success", as: Bool?.self))
+            }
         }
-
-        struct Params: Sendable {
-            let cognito_sub  : String
-            let username     : String
-            let display_name : String
-            let cellphone    : String?
-            let email        : String?
-            let dob          : String
-            let first_name   : String?
-            let last_name    : String?
-        }
-
-        // InsertUserByAuthRegister.fromRequest
-        static func fromRequest(_ req: Request) throws -> Params {
-            let b = try req.content.decode(Body.self)
-            // guard let sub = req.cognitoSuba   // WRONG
-            guard let sub = req.appSub else { throw Abort(.unauthorized, reason: "Missing app token sub") }
- 
-            return .init(
-                cognito_sub  : sub,
-                username     : b.username,
-                display_name : b.display_name,
-                cellphone    : b.cellphone,
-                email        : b.email,
-                dob          : b.dob,
-                first_name   : b.first_name,
-                last_name    : b.last_name
-            )
-        }
-
-
-        struct Result: Content, Sendable {
-            let is_success: Bool?
-        }
-
-        // OUT goes first, just like your InsertMeetId example
-        static func query(_ i: Params, _ o: Result) -> SQLQueryString {
-            """
-            CALL \(unsafeRaw: procName.rawValue)
-            (
-                 \(bind: o.is_success)::boolean
-                ,\(bind: i.cognito_sub)::text
-                ,\(bind: i.username)::varchar(50)
-                ,\(bind: i.display_name)::varchar(50)
-                ,\(bind: i.cellphone)::varchar(16)
-                ,\(bind: i.email)::varchar(256)
-                ,\(bind: i.dob)::date
-                ,COALESCE(\(bind: i.first_name)::varchar(50), ''::varchar(50))
-                ,COALESCE(\(bind: i.last_name)::varchar(50),  ''::varchar(50))
-            )
-            """
-        }
-
-        static func decode(_ row: any SQLRow) throws -> Result {
-            try .init(is_success: row.decode(column: "is_success", as: Bool?.self))
-        }
-    }
-
 
     
     // MARK: - END INSERT USER NOT TESTED
@@ -693,6 +665,150 @@ enum Func
     
     // MARK: - END VIEWS
 }
+
+
+
+
+// TODO: Determine where this goes
+enum AWS
+{
+
+    // MARK: - AUTH REGISTER
+
+    struct RegisterBody: Content, Sendable {
+        let username     : String          // app handle
+        let password     : String
+        let display_name : String
+        let cellphone    : String?         // E.164 (+1...)
+        let email        : String?         // lowercase
+        let dob          : String          // "YYYY-MM-DD"
+        let first_name   : String?
+        let last_name    : String?
+
+    }
+
+    struct RegisterResponse: Content, Sendable
+    {
+        let token: String?
+        let expires_at: Date?
+        let requires_confirmation: Bool
+    }
+
+    // MARK: Helpers (all static)
+    private static let reservedHandles: Set<String> = ["admin","support","rangley","mrfox","root","system"]
+
+    @inlinable
+    static func normalizeHandle(_ s: String) -> String {
+        s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    @inlinable
+    static func validateHandle(_ h: String) -> Bool {
+        h.range(of: #"^[a-z0-9_]{3,20}$"#, options: .regularExpression) != nil
+        && !reservedHandles.contains(h)
+    }
+
+    @inlinable
+    static func normalizeEmail(_ e: String?) -> String? {
+        e?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    @inlinable
+    static func normalizePhoneE164(_ p: String?) -> String? {
+        guard let p else { return nil }
+        let cleaned = p.replacingOccurrences(of: #"[^+\d]"#, with: "", options: .regularExpression)
+        return cleaned.hasPrefix("+") && cleaned.count >= 8 ? cleaned : nil
+    }
+
+    // MARK: Business logic
+    static func register(_ req: Request) async throws -> RegisterResponse {
+        let body = try req.content.decode(RegisterBody.self)
+
+        // Normalize + validate
+        let handle = normalizeHandle(body.username)
+        guard validateHandle(handle) else {
+            throw Abort(.badRequest, reason: "Invalid or reserved username")
+        }
+        let emailLower = normalizeEmail(body.email)
+        let phoneE164  = normalizePhoneE164(body.cellphone)
+
+        guard emailLower != nil || phoneE164 != nil else {
+            throw Abort(.badRequest, reason: "Email or cellphone are required")
+        }
+
+        // Prefer phone as Cognito username, else email
+        let cognitoUsername = phoneE164 ?? emailLower!
+
+        let idp = req.application.cognitoIDP
+        let cfg = req.application.cognito
+
+        // Sign up with preferred_username so handle can be used to sign in
+        let sign: CognitoIdentityProvider.SignUpResponse
+        do {
+            sign = try await idp.signUp(.init(
+                clientId: cfg.clientID,
+                password: body.password,
+                userAttributes: [
+                    .init(name: "name", value: body.display_name),
+                    .init(name: "preferred_username", value: handle),
+                    body.first_name.map { .init(name: "given_name", value: $0) },
+                    body.last_name.map  { .init(name: "family_name", value: $0) },
+                    emailLower.map      { .init(name: "email", value: $0) },
+                    phoneE164.map       { .init(name: "phone_number", value: $0) }
+                ].compactMap { $0 },
+                username: cognitoUsername
+            ))
+        } catch let e as CognitoIdentityProviderErrorType {
+            switch e {
+            case .usernameExistsException:
+                throw Abort(.conflict, reason: "Account already exists for this email/phone")
+            case .aliasExistsException, .invalidParameterException:
+                throw Abort(.conflict, reason: "Username is taken")
+            case .invalidPasswordException:
+                throw Abort(.badRequest, reason: "Weak password")
+            default:
+                throw Abort(.badRequest, reason: "Signup failed: \(e)")
+            }
+        }
+
+        let sub = sign.userSub
+
+        // Insert app user row (keyed by cognito_sub)
+        guard let sql = req.db as? any SQLDatabase
+        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+
+        let params = Proc.InsertUserByAuthRegister.Params(
+            cognito_sub  : sub,
+            username     : handle,
+            display_name : body.display_name,
+            cellphone    : phoneE164,
+            email        : emailLower,
+            dob          : body.dob,
+            first_name   : body.first_name,
+            last_name    : body.last_name
+        )
+        _ = try await Proc.InsertUserByAuthRegister.call(on: sql, params, .init(is_success: nil))
+
+        // If confirmation required, return that state; else mint app token
+        if !sign.userConfirmed {
+            return .init(token: nil, expires_at: nil, requires_confirmation: true)
+        } else {
+            let now = Date(), exp = now.addingTimeInterval(15 * 60)
+            let payload = AppPayload(
+                iss: .init(value: req.application.appAuth.issuer),
+                sub: .init(value: sub),
+                exp: .init(value: exp),
+                iat: .init(value: now),
+                jti: .init(value: UUID().uuidString),
+                user_id: nil,
+                roles: ["user"]
+            )
+            let token = try await req.jwt.sign(payload, kid: "app-hs256")
+            return .init(token: token, expires_at: exp, requires_confirmation: false)
+        }
+    }
+}
+
 
 
 // for ios repo i believe??
