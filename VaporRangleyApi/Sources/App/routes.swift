@@ -29,71 +29,19 @@ public func routes(_ app: Application) throws
     // ---------- Route ----------
     app.post("auth", "register")
     {
-        req async throws -> AWS.RegisterResponse in
-        try await AWS.register(req)
+        req async throws -> AWS.AuthRegister.RegisterResponse in
+        try await AWS.AuthRegister.register(req)
     }
 
     // MARK: - END AUTH REGISTER (PUBLIC)
 
     // MARK: - AUTH LOGIN
-    
-    struct LoginBody    : Content, Sendable
-    { let username  : String; let password  : String }
-    struct LoginResponse: Content, Sendable
-    { let token     : String; let expires_at: Date }
 
-    app.post("auth","login")
+    app.post("auth", "login")
     {
-        req async throws -> LoginResponse in
-        
-        let body = try req.content.decode(LoginBody.self)
-        let idp  = req.application.cognitoIDP
-        let cfg  = req.application.cognito
-
-        // 1) Admin auth with username/password
-        let initResp = try await idp.adminInitiateAuth(.init(
-            authFlow: .adminUserPasswordAuth,
-            authParameters: ["USERNAME": body.username, "PASSWORD": body.password], // <-- move up
-            clientId: cfg.clientID,
-            userPoolId: cfg.userPoolId
-        ))
-
-        // Handle NEW_PASSWORD_REQUIRED if you plan to support it; for now reject.
-        if let ch = initResp.challengeName, ch == .newPasswordRequired {
-           throw Abort(.forbidden, reason: "Password reset required")
-        }
-
-        guard let access = initResp.authenticationResult?.accessToken else {
-           throw Abort(.unauthorized, reason: "Auth failed")
-        }
-
-        // could be issue with null or something
-        // 2) Fetch attributes to get `sub`
-        let user = try await idp.getUser(.init(accessToken: access))
-        guard let sub = user.userAttributes.first(where: { $0.name == "sub" })?.value
-        else { throw Abort(.unauthorized, reason: "No sub") }
-
-
-        // 2) Mint your app token using Vapor JWT v5 helpers
-        let now = Date()
-        let exp = now.addingTimeInterval(15 * 60)
-
-        let payload = AppPayload(
-            iss: .init(value: req.application.appAuth.issuer),
-            sub: .init(value: sub),
-            exp: .init(value: exp),
-            iat: .init(value: now),
-            jti: .init(value: UUID().uuidString),
-            user_id: nil,
-            roles: ["user"]
-        )
-
-        // v5: Sign via req.jwt (not JWTSigner)
-        let token = try await req.jwt.sign(payload, kid: "app-hs256")
-        return .init(token: token, expires_at: exp)
-
+        req async throws -> AWS.AuthLogin.LoginResponse in
+        try await AWS.AuthLogin.login(req)
     }
-    
     // MARK: - END AUTH LOGIN
     
     struct ForgotBody: Content, Sendable { let username: String } // email or phone (per your pool)
