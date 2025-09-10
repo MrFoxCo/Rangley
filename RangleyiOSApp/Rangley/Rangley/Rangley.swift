@@ -4,28 +4,23 @@
 //  Created by Anthony Guzzardo on 7/1/25.
 //
 
+// RangleApp.swift
 import SwiftUI
 import Amplify
 import AWSCognitoAuthPlugin
 import UIKit
 
 final class AppDelegate: NSObject, UIApplicationDelegate {
-    func application(_ application: UIApplication,
-                     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
-
-        #if DEBUG
-        if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1" { return true }
-        #endif
-
-        // Sanity check: is the config JSON in the app bundle?
-        let cfg = Bundle.main.url(forResource: "amplifyconfiguration", withExtension: "json")
-        print("📄 amplifyconfiguration.json present:", cfg != nil ? "YES" : "NO")
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
 
         Amplify.Logging.logLevel = .verbose
         do {
             try Amplify.add(plugin: AWSCognitoAuthPlugin())
-            try Amplify.configure()   // uses amplifyconfiguration.json in your bundle
-            print("✅ Amplify configured")
+            try Amplify.configure()   // reads amplifyconfiguration.json from bundle
+            print("Amplify configured")
         } catch {
             print("Amplify configure failed:", error)
         }
@@ -36,11 +31,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
 @main
 struct RangleyApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    var body: some Scene { WindowGroup { ContentView() } }
+    var body: some Scene { WindowGroup { UserRegisterFlow() } }
 }
-#Preview {
-    EmptyView()
-}
+
+
 
 
 // V1

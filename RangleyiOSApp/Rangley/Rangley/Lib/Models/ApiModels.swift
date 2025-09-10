@@ -11,8 +11,6 @@ import Foundation
 
 enum APIModels {}
 
-// MARK: - i/user
-
 
 // MARK: - i/meet-coordinate
 
@@ -316,10 +314,7 @@ final class APIClient
 
 extension APIClient
 {
-    // Inserts
-    func insertUser(_ body: UserRegisterModel) async throws -> UserRegisterResult {
-        try await post("/i/user", body: body)
-    }
+    // MARK: - Inserts
 
     func insertMeetCoordinate(_ body: APIModels.InsertMeetCoordinateRequest) async throws -> APIModels.InsertMeetCoordinateResponse {
         try await post("/i/meet-coordinate", body: body)

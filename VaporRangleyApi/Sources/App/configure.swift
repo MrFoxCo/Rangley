@@ -3,8 +3,7 @@ import Fluent
 import FluentPostgresDriver
 import NIOSSL
 import JWT
-import SotoCore
-import SotoCognitoIdentityProvider
+
 
 @discardableResult
 private func requireEnv(_ k: String) -> String {
@@ -60,38 +59,38 @@ public func configure(_ app: Application) throws
     
     
     // MARK: - COGNITO
-    
-    // --- Cognito config (single source of truth) ---
-    let cognitoIssuer     = requireEnv("COGNITO_ISSUER")
-    let cognitoClientID   = requireEnv("COGNITO_CLIENT_ID")
+    // Cognito env
+    // COGNITO (env already loaded above)
+    let cognitoIssuer     = requireEnv("COGNITO_ISSUER")          // e.g.
+    let cognitoClientID   = requireEnv("COGNITO_CLIENT_ID")       // PUBLIC client id (SRP)
     let cognitoUserPoolId = requireEnv("COGNITO_USER_POOL_ID")
+
     app.storage[CognitoConfigKey.self] = CognitoConfig(
         issuer: cognitoIssuer,
         clientID: cognitoClientID,
         userPoolId: cognitoUserPoolId
     )
 
-    let jwtIssuer = Environment.get("APP_JWT_ISSUER") ?? "https://api.mrfoxco.com"
-    let secret    = requireEnv("APP_JWT_HS256_SECRET")
+    // Make iss/aud available to middleware
+    // app.storage[...] keys used by middleware
+    app.storage[IssuerKey.self]   = cognitoIssuer
+    app.storage[AudienceKey.self] = cognitoClientID
 
-    app.storage[AppAuthConfigKey.self] = .init(
-        issuer: jwtIssuer,
-        hmacSecret: Array(secret.utf8) // harmless to keep if you use it elsewhere
-    )
 
-    // Register HS256 key for signing & verifying (kid optional, but you used it above)
+    // Load JWKS into the *keys* store (v5 API). Network call is async.
+    // In configure(_:)
     Task {
-        let sym = SymmetricKey(data: Data(secret.utf8))
-        await app.jwt.keys.add(hmac: .init(key: sym), digestAlgorithm: .sha256, kid: "app-hs256")
+        do {
+            try await app.jwt.keys.add(
+                jwksJSON: "\(cognitoIssuer)/.well-known/jwks.json"
+            )
+            app.logger.info("Loaded Cognito JWKS")
+        } catch {
+            app.logger.error("Failed to load Cognito JWKS: \(error)")
+        }
     }
 
 
-    // --- Soto client v7 ---
-    let region = Region(rawValue: requireEnv("AWS_REGION"))
-    let aws    = AWSClient() // v7 default init
-    app.storage[AWSClientKey.self] = aws
-    app.storage[CognitoIDPKey.self] = CognitoIdentityProvider(client: aws, region: region)
-    app.lifecycle.use(ShutdownAWS(client: aws))
 
     // MARK: - END COGNITO
     
@@ -113,30 +112,7 @@ struct AppAuthConfig: Sendable {
 struct AppAuthConfigKey: StorageKey { typealias Value = AppAuthConfig }
 extension Application { var appAuth: AppAuthConfig { storage[AppAuthConfigKey.self]! } }
 
-struct AWSClientKey: StorageKey { typealias Value = AWSClient }
-struct CognitoIDPKey: StorageKey { typealias Value = CognitoIdentityProvider }
-extension Application {
-    var aws: AWSClient { storage[AWSClientKey.self]! }
-    var cognitoIDP: CognitoIdentityProvider { storage[CognitoIDPKey.self]! }
-}
-struct ShutdownAWS: LifecycleHandler {
-    let client: AWSClient
-    func shutdown(_ app: Application) { try? client.syncShutdown() }
-}
-// MARK: - Secret decoding helpers
-private func decodeSecret(_ s: String) throws -> [UInt8] {
-    if s.hasPrefix("b64:") {
-        guard let data = Data(base64Encoded: String(s.dropFirst(4))) else {
-            throw Abort(.internalServerError, reason: "Invalid base64 in APP_JWT_HS256_SECRET")
-        }
-        return [UInt8](data)
-    }
-    if s.hasPrefix("hex:") {
-        return try [UInt8](hexString: String(s.dropFirst(4)))
-    }
-    // fallback: treat as raw utf8 (still fine if it's random)
-    return Array(s.utf8)
-}
+
 
 private extension Array where Element == UInt8 {
     init(hexString: String) throws {

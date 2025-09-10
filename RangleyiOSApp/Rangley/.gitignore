@@ -1,11 +1,18 @@
-appsettings.json
+# macOS
+.DS_Store
 
-# Ignore Database folder and all contents
-*/DatabaseSchema/*
-DatabaseManager.swift
+# Xcode / Swift
+xcuserdata/
+*.xcuserstate
+DerivedData/
+*.xccheckout
+*.xcscmblueprint
 
-# Ignore app settings
-appsettings.json
+# App config / secrets
+**/.env
+**/appsettings.json
+**/amplifyconfiguration.json
 
-.env
-
+# Database stuff
+**/DatabaseSchema/**
+**/DatabaseManager.swift

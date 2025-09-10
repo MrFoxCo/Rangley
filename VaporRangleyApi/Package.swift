@@ -9,9 +9,7 @@ let package = Package(
         .package(url: "https://github.com/vapor/fluent.git", from: "4.10.0"),
         .package(url: "https://github.com/vapor/fluent-postgres-driver.git", from: "2.10.0"),
         .package(url: "https://github.com/vapor/sql-kit.git", from: "3.0.0"),
-        .package(url: "https://github.com/vapor/jwt.git", from: "5.0.0"), // pin to a recent 5.x
-        .package(url: "https://github.com/soto-project/soto.git", from: "7.0.0"),
-        .package(url: "https://github.com/soto-project/soto-core.git", from: "7.0.0"),
+        .package(url: "https://github.com/vapor/jwt.git", from: "5.0.0")
     ],
     targets: [
         .target(
@@ -21,10 +19,7 @@ let package = Package(
                 .product(name: "Fluent", package: "fluent"),
                 .product(name: "FluentPostgresDriver", package: "fluent-postgres-driver"),
                 .product(name: "SQLKit", package: "sql-kit"),
-                .product(name: "JWT", package: "jwt"), // <- this brings the Vapor helpers
-                .product(name: "SotoCore", package: "soto-core"),
-                .product(name: "SotoCognitoIdentityProvider", package: "soto"),
-
+                .product(name: "JWT", package: "jwt")
             ],
             path: "Sources/App",
             swiftSettings: [.enableUpcomingFeature("ExistentialAny")]
@@ -40,7 +35,8 @@ let package = Package(
         ),
         .testTarget(
             name: "AppTests",
-            dependencies: ["App",
+            dependencies: [
+                "App",
                 .product(name: "XCTVapor", package: "vapor")
             ],
             swiftSettings: [.enableUpcomingFeature("ExistentialAny")]

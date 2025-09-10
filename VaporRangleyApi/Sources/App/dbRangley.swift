@@ -5,11 +5,12 @@
 //  Created by Anthony Guzzardo on 8/27/25.
 //
 
+
 import Vapor
 import Fluent
 import SQLKit
 import JWT
-import SotoCognitoIdentityProvider
+
 
 // MARK: - Registry of fully-qualified procedure names
 
@@ -90,7 +91,7 @@ enum Proc
     {
             static let procName: RangleyProcName = .i_user_by_auth_register
 
-            struct Params: Sendable {
+            struct Params: Content, Sendable {
                 let cognito_sub  : String
                 let username     : String
                 let display_name : String
@@ -672,283 +673,283 @@ enum Func
 
 
 // TODO: CONSIDER UN-NESTING ALL THIS SHIT
-
-enum AWS
-{
-    // MARK: Helpers (all static)
-    private static let reservedHandles: Set<String> = ["admin","support","rangley","mrfox","root","system"]
-
-    @inlinable
-    static func normalizeHandle(_ s: String) -> String {
-        s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    }
-
-    @inlinable
-    static func validateHandle(_ h: String) -> Bool {
-        h.range(of: #"^[a-z0-9_]{3,20}$"#, options: .regularExpression) != nil
-        && !reservedHandles.contains(h)
-    }
-
-    @inlinable
-    static func normalizeEmail(_ e: String?) -> String? {
-        e?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    }
-
-    @inlinable
-    static func normalizePhoneE164(_ p: String?) -> String? {
-        guard let p else { return nil }
-        let cleaned = p.replacingOccurrences(of: #"[^+\d]"#, with: "", options: .regularExpression)
-        return cleaned.hasPrefix("+") && cleaned.count >= 8 ? cleaned : nil
-    }
-    /// Turn whatever the user typed into a Cognito-friendly username:
-    /// - phone -> E.164
-    /// - email -> lowercase
-    /// - else  -> normalized handle (lowercased)
-    @inlinable
-    static func normalizeLoginUsername(_ raw: String) -> String {
-        if let p = normalizePhoneE164(raw) { return p }
-        if let e = normalizeEmail(raw), raw.contains("@") { return e }
-        return normalizeHandle(raw)
-    }
-
-    // MARK: - END Helpers (all static)
-    
-    // MARK: - AUTH REGISTER
-    
-    enum AuthRegister
-    {
-        struct RegisterBody: Content, Sendable
-        {
-            let username     : String          // app handle
-            let password     : String
-            let display_name : String
-            let cellphone    : String?         // E.164 (+1...)
-            let email        : String?         // lowercase
-            let dob          : String          // "YYYY-MM-DD"
-            let first_name   : String?
-            let last_name    : String?
-
-        }
-
-        struct RegisterResponse: Content, Sendable
-        {
-            let token: String?
-            let expires_at: Date?
-            let requires_confirmation: Bool
-        }
-
-
-
-        // MARK: Business logic
-        static func register(_ req: Request) async throws -> RegisterResponse
-        {
-            let body = try req.content.decode(RegisterBody.self)
-
-            // Normalize + validate
-            let handle = normalizeHandle(body.username)
-            guard validateHandle(handle) else {
-                throw Abort(.badRequest, reason: "Invalid or reserved username")
-            }
-            let emailLower = normalizeEmail(body.email)
-            let phoneE164  = normalizePhoneE164(body.cellphone)
-
-            guard emailLower != nil || phoneE164 != nil else {
-                throw Abort(.badRequest, reason: "Email or cellphone are required")
-            }
-
-            // Prefer phone as Cognito username, else email
-            let cognitoUsername = phoneE164 ?? emailLower!
-
-            let idp = req.application.cognitoIDP
-            let cfg = req.application.cognito
-
-            // Sign up with preferred_username so handle can be used to sign in
-            let sign: CognitoIdentityProvider.SignUpResponse
-            do {
-                sign = try await idp.signUp(.init(
-                    clientId: cfg.clientID,
-                    password: body.password,
-                    userAttributes: [
-                        .init(name: "name", value: body.display_name),
-                        .init(name: "preferred_username", value: handle),
-                        body.first_name.map { .init(name: "given_name", value: $0) },
-                        body.last_name.map  { .init(name: "family_name", value: $0) },
-                        emailLower.map      { .init(name: "email", value: $0) },
-                        phoneE164.map       { .init(name: "phone_number", value: $0) }
-                    ].compactMap { $0 },
-                    username: cognitoUsername
-                ))
-            } catch let e as CognitoIdentityProviderErrorType {
-                switch e {
-                case .usernameExistsException:
-                    throw Abort(.conflict, reason: "Account already exists for this email/phone")
-                case .aliasExistsException, .invalidParameterException:
-                    throw Abort(.conflict, reason: "Username is taken")
-                case .invalidPasswordException:
-                    throw Abort(.badRequest, reason: "Weak password")
-                default:
-                    throw Abort(.badRequest, reason: "Signup failed: \(e)")
-                }
-            }
-
-            let sub = sign.userSub
-
-            // Insert app user row (keyed by cognito_sub)
-            guard let sql = req.db as? any SQLDatabase
-            else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
-
-            let params = Proc.InsertUserByAuthRegister.Params(
-                cognito_sub  : sub,
-                username     : handle,
-                display_name : body.display_name,
-                cellphone    : phoneE164,
-                email        : emailLower,
-                dob          : body.dob,
-                first_name   : body.first_name,
-                last_name    : body.last_name
-            )
-            _ = try await Proc.InsertUserByAuthRegister.call(on: sql, params, .init(is_success: nil))
-
-            // If confirmation required, return that state; else mint app token
-            if !sign.userConfirmed {
-                return .init(token: nil, expires_at: nil, requires_confirmation: true)
-            } else {
-                let now = Date(), exp = now.addingTimeInterval(15 * 60)
-                let payload = AppPayload(
-                    iss: .init(value: req.application.appAuth.issuer),
-                    sub: .init(value: sub),
-                    exp: .init(value: exp),
-                    iat: .init(value: now),
-                    jti: .init(value: UUID().uuidString),
-                    user_id: nil,
-                    roles: ["user"]
-                )
-                let token = try await req.jwt.sign(payload, kid: "app-hs256")
-                return .init(token: token, expires_at: exp, requires_confirmation: false)
-            }
-        }
-        
-        /**
-         # Email-only
-         curl -sS -X POST "$BASE/auth/register" \
-           -H "Content-Type: application/json" \
-           -d '{
-             "username": "bobby",
-             "password": "Str0ngP@ss!",
-             "display_name": "bobby",
-             "email": "bobby@example.com",
-             "dob": "1993-05-14",
-             "first_name": "bobby",
-             "last_name": "fisher"
-           }'
-         # Phone-only (E.164)
-         curl -sS -X POST "$BASE/auth/register" \
-           -H "Content-Type: application/json" \
-           -d '{
-             "username": "buick",
-             "password": "Str0ngP@ss!",
-             "display_name": "buick lasaber",
-             "cellphone": "+16685551234",
-             "dob": "1993-05-14"
-           }'
-         */
-    }
-    
-    // MARK: - END AUTH REGISTER
-    
-    // MARK: - AUTH LOGIN
-    
-    enum AuthLogin
-    {
-        struct LoginBody: Content, Sendable
-        {
-            let username: String   // can be handle, email, or phone
-            let password: String
-        }
-        struct LoginResponse: Content, Sendable {
-            let token: String
-            let expires_at: Date
-        }
-
-
-        static func login(_ req: Request) async throws -> LoginResponse
-        {
-            let body = try req.content.decode(LoginBody.self)
-
-            let cognitoUsername = normalizeLoginUsername(body.username)
-            let idp = req.application.cognitoIDP
-            let cfg = req.application.cognito
-
-            // 1) Password auth (aliases enabled -> handle/email/phone all work)
-            let initResp = try await idp.adminInitiateAuth(.init(
-                authFlow: .adminUserPasswordAuth,
-                authParameters: ["USERNAME": cognitoUsername, "PASSWORD": body.password],
-                clientId: cfg.clientID,
-                userPoolId: cfg.userPoolId
-            ))
-
-            // Handle common challenges explicitly
-            if let ch = initResp.challengeName {
-                switch ch {
-                case .newPasswordRequired:
-                    throw Abort(.forbidden, reason: "Password reset required")
-                case .smsMfa, .softwareTokenMfa, .selectMfaType, .mfaSetup:
-                    throw Abort(.unauthorized, reason: "MFA required")
-                default:
-                    throw Abort(.unauthorized, reason: "Unsupported auth challenge: \(ch.rawValue)")
-                }
-            }
-
-            guard
-                let auth = initResp.authenticationResult,
-                let access = auth.accessToken
-            else {
-                throw Abort(.unauthorized, reason: "Authentication failed")
-            }
-
-            // 2) Fetch attributes to get stable `sub`
-            let user = try await idp.getUser(.init(accessToken: access))
-            guard let sub = user.userAttributes.first(where: { $0.name == "sub" })?.value else {
-                throw Abort(.unauthorized, reason: "No sub on token")
-            }
-
-            // 3) Mint your app token
-            let now = Date()
-            let exp = now.addingTimeInterval(15 * 60)
-            let payload = AppPayload(
-                iss: .init(value: req.application.appAuth.issuer),
-                sub: .init(value: sub),
-                exp: .init(value: exp),
-                iat: .init(value: now),
-                jti: .init(value: UUID().uuidString),
-                user_id: nil,
-                roles: ["user"]
-            )
-            let token = try await req.jwt.sign(payload, kid: "app-hs256")
-            return .init(token: token, expires_at: exp)
-        }
-        
-        /**
-         # handle
-         curl -sS -X POST "$BASE/auth/login" \
-           -H "Content-Type: application/json" \
-           -d '{"username":"anthony","password":"Str0ngP@ss!"}'
-
-         # email
-         curl -sS -X POST "$BASE/auth/login" \
-           -H "Content-Type: application/json" \
-           -d '{"username":"anthony@example.com","password":"Str0ngP@ss!"}'
-
-         # phone (E.164)
-         curl -sS -X POST "$BASE/auth/login" \
-           -H "Content-Type: application/json" \
-           -d '{"username":"+17735551234","password":"Str0ngP@ss!"}'
-
-         */
-    }
-    
-    // MARK: - END AUTH LOGIN
-}
+//
+//enum AWS
+//{
+//    // MARK: Helpers (all static)
+//    private static let reservedHandles: Set<String> = ["admin","support","rangley","mrfox","root","system"]
+//
+//    @inlinable
+//    static func normalizeHandle(_ s: String) -> String {
+//        s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+//    }
+//
+//    @inlinable
+//    static func validateHandle(_ h: String) -> Bool {
+//        h.range(of: #"^[a-z0-9_]{3,20}$"#, options: .regularExpression) != nil
+//        && !reservedHandles.contains(h)
+//    }
+//
+//    @inlinable
+//    static func normalizeEmail(_ e: String?) -> String? {
+//        e?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+//    }
+//
+//    @inlinable
+//    static func normalizePhoneE164(_ p: String?) -> String? {
+//        guard let p else { return nil }
+//        let cleaned = p.replacingOccurrences(of: #"[^+\d]"#, with: "", options: .regularExpression)
+//        return cleaned.hasPrefix("+") && cleaned.count >= 8 ? cleaned : nil
+//    }
+//    /// Turn whatever the user typed into a Cognito-friendly username:
+//    /// - phone -> E.164
+//    /// - email -> lowercase
+//    /// - else  -> normalized handle (lowercased)
+//    @inlinable
+//    static func normalizeLoginUsername(_ raw: String) -> String {
+//        if let p = normalizePhoneE164(raw) { return p }
+//        if let e = normalizeEmail(raw), raw.contains("@") { return e }
+//        return normalizeHandle(raw)
+//    }
+//
+//    // MARK: - END Helpers (all static)
+//    
+//    // MARK: - AUTH REGISTER
+//    
+//    enum AuthRegister
+//    {
+//        struct RegisterBody: Content, Sendable
+//        {
+//            let username     : String          // app handle
+//            let password     : String
+//            let display_name : String
+//            let cellphone    : String?         // E.164 (+1...)
+//            let email        : String?         // lowercase
+//            let dob          : String          // "YYYY-MM-DD"
+//            let first_name   : String?
+//            let last_name    : String?
+//
+//        }
+//
+//        struct RegisterResponse: Content, Sendable
+//        {
+//            let token: String?
+//            let expires_at: Date?
+//            let requires_confirmation: Bool
+//        }
+//
+//
+//
+//        // MARK: Business logic
+//        static func register(_ req: Request) async throws -> RegisterResponse
+//        {
+//            let body = try req.content.decode(RegisterBody.self)
+//
+//            // Normalize + validate
+//            let handle = normalizeHandle(body.username)
+//            guard validateHandle(handle) else {
+//                throw Abort(.badRequest, reason: "Invalid or reserved username")
+//            }
+//            let emailLower = normalizeEmail(body.email)
+//            let phoneE164  = normalizePhoneE164(body.cellphone)
+//
+//            guard emailLower != nil || phoneE164 != nil else {
+//                throw Abort(.badRequest, reason: "Email or cellphone are required")
+//            }
+//
+//            // Prefer phone as Cognito username, else email
+//            let cognitoUsername = phoneE164 ?? emailLower!
+//
+//            let idp = req.application.cognitoIDP
+//            let cfg = req.application.cognito
+//
+//            // Sign up with preferred_username so handle can be used to sign in
+//            let sign: CognitoIdentityProvider.SignUpResponse
+//            do {
+//                sign = try await idp.signUp(.init(
+//                    clientId: cfg.clientID,
+//                    password: body.password,
+//                    userAttributes: [
+//                        .init(name: "name", value: body.display_name),
+//                        .init(name: "preferred_username", value: handle),
+//                        body.first_name.map { .init(name: "given_name", value: $0) },
+//                        body.last_name.map  { .init(name: "family_name", value: $0) },
+//                        emailLower.map      { .init(name: "email", value: $0) },
+//                        phoneE164.map       { .init(name: "phone_number", value: $0) }
+//                    ].compactMap { $0 },
+//                    username: cognitoUsername
+//                ))
+//            } catch let e as CognitoIdentityProviderErrorType {
+//                switch e {
+//                case .usernameExistsException:
+//                    throw Abort(.conflict, reason: "Account already exists for this email/phone")
+//                case .aliasExistsException, .invalidParameterException:
+//                    throw Abort(.conflict, reason: "Username is taken")
+//                case .invalidPasswordException:
+//                    throw Abort(.badRequest, reason: "Weak password")
+//                default:
+//                    throw Abort(.badRequest, reason: "Signup failed: \(e)")
+//                }
+//            }
+//
+//            let sub = sign.userSub
+//
+//            // Insert app user row (keyed by cognito_sub)
+//            guard let sql = req.db as? any SQLDatabase
+//            else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+//
+//            let params = Proc.InsertUserByAuthRegister.Params(
+//                cognito_sub  : sub,
+//                username     : handle,
+//                display_name : body.display_name,
+//                cellphone    : phoneE164,
+//                email        : emailLower,
+//                dob          : body.dob,
+//                first_name   : body.first_name,
+//                last_name    : body.last_name
+//            )
+//            _ = try await Proc.InsertUserByAuthRegister.call(on: sql, params, .init(is_success: nil))
+//
+//            // If confirmation required, return that state; else mint app token
+//            if !sign.userConfirmed {
+//                return .init(token: nil, expires_at: nil, requires_confirmation: true)
+//            } else {
+//                let now = Date(), exp = now.addingTimeInterval(15 * 60)
+//                let payload = AppPayload(
+//                    iss: .init(value: req.application.appAuth.issuer),
+//                    sub: .init(value: sub),
+//                    exp: .init(value: exp),
+//                    iat: .init(value: now),
+//                    jti: .init(value: UUID().uuidString),
+//                    user_id: nil,
+//                    roles: ["user"]
+//                )
+//                let token = try await req.jwt.sign(payload, kid: "app-hs256")
+//                return .init(token: token, expires_at: exp, requires_confirmation: false)
+//            }
+//        }
+//        
+//        /**
+//         # Email-only
+//         curl -sS -X POST "$BASE/auth/register" \
+//           -H "Content-Type: application/json" \
+//           -d '{
+//             "username": "bobby",
+//             "password": "Str0ngP@ss!",
+//             "display_name": "bobby",
+//             "email": "bobby@example.com",
+//             "dob": "1993-05-14",
+//             "first_name": "bobby",
+//             "last_name": "fisher"
+//           }'
+//         # Phone-only (E.164)
+//         curl -sS -X POST "$BASE/auth/register" \
+//           -H "Content-Type: application/json" \
+//           -d '{
+//             "username": "buick",
+//             "password": "Str0ngP@ss!",
+//             "display_name": "buick lasaber",
+//             "cellphone": "+16685551234",
+//             "dob": "1993-05-14"
+//           }'
+//         */
+//    }
+//    
+//    // MARK: - END AUTH REGISTER
+//    
+//    // MARK: - AUTH LOGIN
+//    
+//    enum AuthLogin
+//    {
+//        struct LoginBody: Content, Sendable
+//        {
+//            let username: String   // can be handle, email, or phone
+//            let password: String
+//        }
+//        struct LoginResponse: Content, Sendable {
+//            let token: String
+//            let expires_at: Date
+//        }
+//
+//
+//        static func login(_ req: Request) async throws -> LoginResponse
+//        {
+//            let body = try req.content.decode(LoginBody.self)
+//
+//            let cognitoUsername = normalizeLoginUsername(body.username)
+//            let idp = req.application.cognitoIDP
+//            let cfg = req.application.cognito
+//
+//            // 1) Password auth (aliases enabled -> handle/email/phone all work)
+//            let initResp = try await idp.adminInitiateAuth(.init(
+//                authFlow: .adminUserPasswordAuth,
+//                authParameters: ["USERNAME": cognitoUsername, "PASSWORD": body.password],
+//                clientId: cfg.clientID,
+//                userPoolId: cfg.userPoolId
+//            ))
+//
+//            // Handle common challenges explicitly
+//            if let ch = initResp.challengeName {
+//                switch ch {
+//                case .newPasswordRequired:
+//                    throw Abort(.forbidden, reason: "Password reset required")
+//                case .smsMfa, .softwareTokenMfa, .selectMfaType, .mfaSetup:
+//                    throw Abort(.unauthorized, reason: "MFA required")
+//                default:
+//                    throw Abort(.unauthorized, reason: "Unsupported auth challenge: \(ch.rawValue)")
+//                }
+//            }
+//
+//            guard
+//                let auth = initResp.authenticationResult,
+//                let access = auth.accessToken
+//            else {
+//                throw Abort(.unauthorized, reason: "Authentication failed")
+//            }
+//
+//            // 2) Fetch attributes to get stable `sub`
+//            let user = try await idp.getUser(.init(accessToken: access))
+//            guard let sub = user.userAttributes.first(where: { $0.name == "sub" })?.value else {
+//                throw Abort(.unauthorized, reason: "No sub on token")
+//            }
+//
+//            // 3) Mint your app token
+//            let now = Date()
+//            let exp = now.addingTimeInterval(15 * 60)
+//            let payload = AppPayload(
+//                iss: .init(value: req.application.appAuth.issuer),
+//                sub: .init(value: sub),
+//                exp: .init(value: exp),
+//                iat: .init(value: now),
+//                jti: .init(value: UUID().uuidString),
+//                user_id: nil,
+//                roles: ["user"]
+//            )
+//            let token = try await req.jwt.sign(payload, kid: "app-hs256")
+//            return .init(token: token, expires_at: exp)
+//        }
+//        
+//        /**
+//         # handle
+//         curl -sS -X POST "$BASE/auth/login" \
+//           -H "Content-Type: application/json" \
+//           -d '{"username":"anthony","password":"Str0ngP@ss!"}'
+//
+//         # email
+//         curl -sS -X POST "$BASE/auth/login" \
+//           -H "Content-Type: application/json" \
+//           -d '{"username":"anthony@example.com","password":"Str0ngP@ss!"}'
+//
+//         # phone (E.164)
+//         curl -sS -X POST "$BASE/auth/login" \
+//           -H "Content-Type: application/json" \
+//           -d '{"username":"+17735551234","password":"Str0ngP@ss!"}'
+//
+//         */
+//    }
+//    
+//    // MARK: - END AUTH LOGIN
+//}
 
 
 

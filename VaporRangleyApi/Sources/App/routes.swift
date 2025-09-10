@@ -8,9 +8,27 @@ import Vapor
 import Fluent
 import SQLKit
 import JWT
-import SotoCognitoIdentityProvider
+
 
 private struct OkResponse: Content { let ok: Bool }
+
+extension Request {
+    /// Look up the app's user_id by Cognito sub; throws if not provisioned.
+    func userIdOrFail() async throws -> Int64 {
+        let sub = self.cognito.sub.value
+        guard let sql = self.db as? any SQLDatabase else {
+            throw Abort(.failedDependency, reason: "Database is not SQLDatabase")
+        }
+        if let id: Int64 = try await sql.raw("""
+            SELECT user_id::bigint
+            FROM rangley.vw_users
+            WHERE cognito_sub = \(bind: sub)
+        """).first(decoding: Int64.self) {
+            return id
+        }
+        throw Abort(.notFound, reason: "User not provisioned in DB (sub=\(sub)).")
+    }
+}
 
 // TODO: - REMOVE ALL BUSINESS LOGIC FROM routes.swift PLACE IN dbRangley.swift
 public func routes(_ app: Application) throws
@@ -18,90 +36,28 @@ public func routes(_ app: Application) throws
     app.get("health") { _ in "ok" }
 
     
-    // MARK: - AUTHENTICATION (Sign Up, Log In, Log Out, Password Reset, Forgot Password, Admin Reset Password)
-    
-    // TODO: - RELOCATE ALL STRUCTS TO DIFFERENT FILE
-    
-    
-    /// register a new user through authentication system MUST BE OPEN TO THE PUBLIC
-    // MARK: - AUTH REGISTER (PUBLIC)
-
-    // ---------- Route ----------
-    app.post("auth", "register")
-    {
-        req async throws -> AWS.AuthRegister.RegisterResponse in
-        try await AWS.AuthRegister.register(req)
-    }
-
-    // MARK: - END AUTH REGISTER (PUBLIC)
-
-    // MARK: - AUTH LOGIN
-
-    app.post("auth", "login")
-    {
-        req async throws -> AWS.AuthLogin.LoginResponse in
-        try await AWS.AuthLogin.login(req)
-    }
-    // MARK: - END AUTH LOGIN
-    
-    struct ForgotBody: Content, Sendable { let username: String } // email or phone (per your pool)
-
-    app.post("auth","forgot") { req async throws -> HTTPStatus in
-        let b = try req.content.decode(ForgotBody.self)
-        
-        let idp = req.application.cognitoIDP, cfg = req.application.cognito
-        
-        try await idp.forgotPassword(.init(clientId: cfg.clientID, username: b.username))
-        
-        return .noContent
-    }
-
-    struct ConfirmResetBody: Content, Sendable { let username: String; let code: String; let new_password: String }
-    
-    app.post("auth","confirm-forgot"){ req async throws -> HTTPStatus in
-        let b = try req.content.decode(ConfirmResetBody.self)
-        let idp = req.application.cognitoIDP, cfg = req.application.cognito
-//        try await idp.confirmForgotPassword(.init(
-//            clientId: cfg.clientID, username: b.username,
-//            confirmationCode: b.code, password: b.new_password
-//        ))
-        return .noContent
-    }
-    
-    struct ChangePwBody: Content, Sendable { let old_password: String; let new_password: String }
-    app.post("auth","change-password") { req async throws -> HTTPStatus in
-        // get Cognito access token first (your login already retrieved it; include it in the app token or fetch again)
-        // if you don’t have it handy, call adminInitiateAuth again and get AccessToken
-//        let access = /* your way to obtain the current Cognito access token */
-//        let b = try req.content.decode(ChangePwBody.self)
-//        let idp = req.application.cognitoIDP
-//        try await idp.changePassword(.init(previousPassword: b.old_password, proposedPassword: b.new_password, accessToken: access))
-        return .noContent
-    }
-
-    struct AdminSetPwBody: Content, Sendable { let username: String; let new_password: String; let permanent: Bool }
-    app.post("admin","set-password") { req async throws -> HTTPStatus in
-        let b = try req.content.decode(AdminSetPwBody.self)
-        let idp = req.application.cognitoIDP, cfg = req.application.cognito
-//        try await idp.adminSetUserPassword(.init(
-//            userPoolId: cfg.userPoolId, username: b.username,
-//            password: b.new_password, permanent: b.permanent
-//        ))
-        return .noContent
-    }
-
-
-    // MARK: - END AUTHENTICATION
     
     // ===== Routing groups =====
     // MARK: - ROUTING GROUPS
+    
     // ===== Routing groups =====
 
-    let api = app.grouped(AppJWTMiddleware())
+    let api = app.grouped(CognitoIDMiddleware())
+    
+    api.get("auth", "whoami") { req async throws -> [String:String] in
+        let p = req.cognito
+        return [
+            "sub": p.sub.value,
+            "email": p.email ?? "",
+            "phone": p.phone_number ?? "",
+            "username": p.cognito_username ?? ""
+        ]
+    }
 
-    let v = api.grouped("v")                  // protected reads
-    let i = api.grouped("i")            // protected inserts
-    let m = api.grouped("m")            // protected modifies
+    let auth = api.grouped("auth")
+    let v    = api.grouped("v")                  // protected reads
+    let i    = api.grouped("i")            // protected inserts
+    let m    = api.grouped("m")            // protected modifies
     //let p = api.grouped("p")            // protected modifies
     
     // MARK: - VIEW (fn_* ) or GET ROUTES
@@ -141,6 +97,8 @@ public func routes(_ app: Application) throws
         
         return try await Func.ViewMeetCategories.fetchAll(on: sql)
     }
+    
+    
 
     // MARK: - END VIEW (fn_* ) or GET ROUTES
 
@@ -194,8 +152,32 @@ public func routes(_ app: Application) throws
 
     
     
+    auth.post("register")
+    {
+        req async throws -> Proc.InsertUserByAuthRegister.Result in
+        
+        let body = try req.content.decode(Proc.InsertUserByAuthRegister.Params.self)
+        
+        guard let sql = req.db as? (any SQLDatabase)
+        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+        
+        return try await Proc.InsertUserByAuthRegister.call(on: sql, body, .init(is_success: nil))
+    }
     
-
+//    auth.post("forgot-password")
+//    {
+//
+//    }
+//
+//    auth.post("forgot-email")
+//    {
+//
+//    }
+//    
+//    auth.post("forgot-phone")
+//    {
+//        
+//    }
 
     // i/meet-coordinate -> (new_meet_coordinate_id)
     i.post("meet-coordinate")
@@ -213,18 +195,14 @@ public func routes(_ app: Application) throws
     }
 
     // i/meet-id -> (new_meet_id)
-    i.post("meet-id")
-    {
-        req async throws -> Proc.InsertMeetId.Result in
-        let body = try req.content.decode(Proc.InsertMeetId.Params.self)
-        
-        guard body.created_by_user_id > 0
-        else { throw Abort(.badRequest, reason: "meet_coordinate_id and created_by_user_id are required") }
-        
-        guard let sql = req.db as? (any SQLDatabase)
+    i.post("meet-id") { req async throws -> Proc.InsertMeetId.Result in
+        let userId = try await req.userIdOrFail()
+
+        guard let sql = req.db as? any SQLDatabase
         else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
-        
-        return try await Proc.InsertMeetId.call(on: sql, body, .init(new_meet_id: nil))
+
+        let params = Proc.InsertMeetId.Params(created_by_user_id: userId)
+        return try await Proc.InsertMeetId.call(on: sql, params, .init(new_meet_id: nil))
     }
 
     // i/meet -> returns (num_inserted)
@@ -318,7 +296,6 @@ public func routes(_ app: Application) throws
     
     
     // MARK: - END ROUTING GROUPS
-    
 
 }
 
@@ -593,8 +570,7 @@ curl -sS -X GET "{$BASE}/v/meet-categories" \
  }'
  
  
- 
- 
+ DNF9AKJ#
  
  
  

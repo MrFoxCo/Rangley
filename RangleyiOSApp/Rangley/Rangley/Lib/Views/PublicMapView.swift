@@ -15,7 +15,7 @@ struct ContentViewTest: View {
     var body: some View {
         NavigationStack {
             List {
-                NavigationLink("Auth Register") { UserRegisterView() }
+                NavigationLink("Auth Register") { UserRegisterFlow() }
                 Button("Debug: print ID token") {
                     Task {
                         do { print(try await CognitoTokens.idToken()) }
