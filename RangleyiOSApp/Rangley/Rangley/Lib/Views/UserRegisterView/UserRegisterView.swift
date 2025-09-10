@@ -1,9 +1,9 @@
 //
-//  UserRegisterView.swift
+//  UserRegisterFlow.swift
 //  Rangley
 //
-//  Created by Anthony Guzzardo on 9/2/25.
-//
+//  Created by You on 9/10/25.
+
 
 import SwiftUI
 import Amplify
@@ -27,485 +27,540 @@ fileprivate func explainAuth(_ error: Error) -> String {
     return String(describing: error)
 }
 
-// MARK: - Steps
-private enum RegStep: Hashable {
-    case phone, email, password, display, handle, agree, verify, challenge, done
+// MARK: - Form & Flow State
+
+private struct FormState: Equatable {
+    var phoneRaw: String = ""          // user-typed (we’ll normalize on advance)
+    var email: String = ""
+    var password: String = ""
+    var displayName: String = ""
+    var handle: String = ""
+    var dobDate: Date = .init(timeIntervalSince1970: 0)
 }
 
-// MARK: - Flow (single NavigationStack; Back arrow works)
-struct UserRegisterFlow: View {
-    @State private var path: [RegStep] = []
+private enum Step: Hashable {
+    case idChooser         // phone/email screen combined
+    case password
+    case display
+    case handleDob
+    case agree
+    case verify(String?)   // NOTE: no label to avoid tuple-with-label error
+    case done
+}
 
-    // Inputs
-    @State private var phone = ""            // UI shows "+digits"
-    @State private var email = ""
-    @State private var password = ""
-    @State private var displayName = ""
-    @State private var handle = ""
-    @State private var dobDate = Date()
+private enum BannerState: Equatable {
+    case none
+    case info(String)
+    case error(String)
+    case success(String)
+}
 
-    // Runtime
-    @State private var status = ""
-    @State private var isBusy = false
-    @State private var idToken = ""
-    @State private var verifyInfo = ""
-    @State private var pendingMFA = false
-    @State private var pendingNewPassword = false
-    @State private var code = ""
+private enum FlowState: Equatable {
+    case collecting(Step)          // gather inputs
+    case awaitingVerification(String?)
+    case signingIn                 // transient
+    case signedIn(idToken: String) // final
+    case failed(String)
+}
 
-    private let baseURL = URL(string: "https://api.mrfoxco.com")! // TODO: move to config
-    private let df: DateFormatter = {
-        let f = DateFormatter()
-        f.calendar = .init(identifier: .iso8601)
-        f.locale   = .init(identifier: "en_US_POSIX")
-        f.timeZone = .init(secondsFromGMT: 0)
-        f.dateFormat = "yyyy-MM-dd"
-        return f
-    }()
+// MARK: - Auth client abstraction (thin wrapper over Amplify)
 
-    var body: some View {
-        NavigationStack(path: $path) {
-            // Root = Phone screen
-            PhoneStep(
-                phone: $phone,
-                onNext: { path.append(.password) },    // phone → password by default
-                onUseEmail: { path.append(.email) },   // only when explicitly chosen
-                phoneIsValid: phoneIsValid
-            )
-            .toolbar { ToolbarItem(placement: .principal) { Text("Phone").font(.headline) } }
+private protocol AuthClient {
+    func signUp(username: String, password: String, attributes: [AuthUserAttribute]) async throws -> AuthSignUpResult
+    func confirmSignUp(for username: String, code: String) async throws -> AuthSignUpResult
+    func signIn(username: String, password: String) async throws -> AuthSignInResult
+    func autoSignIn() async throws -> AuthSignInResult
+    func fetchTokens() async throws -> String   // return just the idToken
+}
+
+private struct AmplifyAuthClient: AuthClient {
+    func signUp(username: String, password: String, attributes: [AuthUserAttribute]) async throws -> AuthSignUpResult {
+        try await Amplify.Auth.signUp(username: username, password: password, options: .init(userAttributes: attributes))
+    }
+    func confirmSignUp(for username: String, code: String) async throws -> AuthSignUpResult {
+        try await Amplify.Auth.confirmSignUp(for: username, confirmationCode: code)
+    }
+    func signIn(username: String, password: String) async throws -> AuthSignInResult {
+        try await Amplify.Auth.signIn(username: username, password: password)
+    }
+    func autoSignIn() async throws -> AuthSignInResult {
+        try await Amplify.Auth.autoSignIn()
+    }
+    func fetchTokens() async throws -> String {
+        let s = try await Amplify.Auth.fetchAuthSession()
+        guard s.isSignedIn, let p = s as? AuthCognitoTokensProvider else {
+            throw NSError(domain: "Auth", code: -1, userInfo: [NSLocalizedDescriptionKey: "Not signed in"])
         }
-        // Attach destinations to the stack (more reliable than attaching inside child)
-        .navigationDestination(for: RegStep.self) { step in
-            switch step {
-            case .email:
-                EmailStep(
-                    email: $email,
-                    onNext: { path.append(.password) },
-                    onUsePhone: {
-                        // back to phone; if phone valid, skip to password
-                        while path.last != .phone { _ = path.popLast() }
-                        if phoneIsValid { path.append(.password) }
-                    },
-                    emailIsValid: emailIsValid,
-                    allowSkip: phoneIsValid
-                )
+        let tokens = try p.getCognitoTokens().get()
+        return tokens.idToken
+    }
+}
 
-            case .password:
-                PasswordStep(
-                    password: $password,
-                    passwordIsValid: passwordIsValid,
-                    rulesView: { PasswordRulesView(pw: password) },
-                    onNext: { path.append(.display) }
-                )
+// MARK: - ViewModel (Reducer + Effects)
 
-            case .display:
-                DisplayStep(
-                    displayName: $displayName,
-                    onNext: { path.append(.handle) }
-                )
+@MainActor
+private final class RegisterVM: ObservableObject {
+    @Published var form = FormState()
+    @Published var flow: FlowState = .collecting(.idChooser)
+    @Published var banner: BannerState = .none
+    @Published var isBusy = false
+    @Published var code = ""                // verification code when needed
 
-            case .handle:
-                HandleStep(
-                    handle: $handle,
-                    dobDate: $dobDate,
-                    onNext: { path.append(.agree) }
-                )
+    // config
+    let baseURL = URL(string: "https://api.mrfoxco.com")! // move to config as needed
 
-            case .agree:
-                AgreeStep(
-                    isBusy: isBusy,
-                    onCreate: { Task { await signUp() } },
-                    onSignIn: { Task { await signIn() } },
-                    canCreate: basicInputsValid,
-                    canSignIn: signInInputsValid
-                )
-                .toolbar { ToolbarItem(placement: .principal) { Text("Create account").font(.headline) } }
+    // deps
+    private let auth: AuthClient
+    private let df: DateFormatter
 
-            case .verify:
-                VerifyStep(
-                    info: verifyInfo,
-                    code: $code,
-                    isBusy: isBusy,
-                    onConfirm: { Task { await confirmSignUp() } }
-                )
-
-            case .challenge:
-                ChallengeStep(
-                    code: $code,
-                    isBusy: isBusy,
-                    isNewPassword: pendingNewPassword,
-                    onSubmit: { Task { await confirmSignIn(with: code) } }
-                )
-
-            case .done:
-                DoneStep(idToken: idToken)
-
-            case .phone:
-                EmptyView()
-            }
-        }
+    init(auth: AuthClient = AmplifyAuthClient()) {
+        self.auth = auth
+        self.df = DateFormatter()
+        self.df.calendar = .init(identifier: .iso8601)
+        self.df.locale   = .init(identifier: "en_US_POSIX")
+        self.df.timeZone = .init(secondsFromGMT: 0)
+        self.df.dateFormat = "yyyy-MM-dd"
     }
 
-    // MARK: - Validations / transforms
+    // MARK: - Derived helpers
 
-    private var phoneDigits: String { phone.filter(\.isNumber) }
-    private var phoneIsValid: Bool { phoneDigits.count >= 10 }
+    private var phoneDigits: String { form.phoneRaw.filter(\.isNumber) }
 
-    // Return "+<E.164>" or nil
-    private var e164PhoneForCognito: String? {
+    // Exposed (not private) so the IdChooser step can read it
+    var e164Phone: String? {
         let ds = phoneDigits
         switch ds.count {
-        case 10:                         return "+1" + ds              // US default
-        case 11 where ds.hasPrefix("1"): return "+" + ds               // already CC=1
-        case 12...15:                    return "+" + ds               // other CCs
+        case 10:                         return "+1" + ds          // US default
+        case 11 where ds.hasPrefix("1"): return "+" + ds
+        case 12...15:                    return "+" + ds
         default:                         return nil
         }
     }
 
-    private var emailIsValid: Bool {
+    var emailValid: Bool {
         let pattern = #"^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$"#
-        return email.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
+        return form.email.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
     }
-
-    // password rules
-    private var pwHasMinLen: Bool { password.count >= 8 }
-    private var pwHasDigit:   Bool { password.range(of: "\\d", options: .regularExpression) != nil }
-    private var pwHasUpper:   Bool { password.range(of: "[A-Z]", options: .regularExpression) != nil }
-    private var pwHasLower:   Bool { password.range(of: "[a-z]", options: .regularExpression) != nil }
-    private var pwHasSpecial: Bool { password.range(of: #"[^A-Za-z0-9]"#, options: .regularExpression) != nil }
-    private var pwNoEdgeWhitespace: Bool {
-        password.range(of: #"^\S+.*\S+$"#, options: .regularExpression) != nil
+    var passwordScore: (ok: Bool, reasons: [String]) {
+        var reasons: [String] = []
+        if form.password.count < 8 { reasons.append("≥ 8 chars") }
+        if form.password.range(of: "\\d", options: .regularExpression) == nil { reasons.append("number") }
+        if form.password.range(of: "[A-Z]", options: .regularExpression) == nil { reasons.append("uppercase") }
+        if form.password.range(of: "[a-z]", options: .regularExpression) == nil { reasons.append("lowercase") }
+        if form.password.range(of: #"[^A-Za-z0-9]"#, options: .regularExpression) == nil { reasons.append("special") }
+        if form.password.range(of: #"^\S+.*\S+$"#, options: .regularExpression) == nil { reasons.append("no edge spaces") }
+        return (reasons.isEmpty, reasons)
     }
-    private var passwordIsValid: Bool {
-        pwHasMinLen && pwHasDigit && pwHasUpper && pwHasLower && pwHasSpecial && pwNoEdgeWhitespace
-    }
-
-    private var basicInputsValid: Bool {
-        cognitoPrincipal != nil
-        && passwordIsValid
-        && !displayName.trimmingCharacters(in: .whitespaces).isEmpty
-        && !handle.trimmingCharacters(in: .whitespaces).isEmpty
-    }
-    private var signInInputsValid: Bool {
-        cognitoPrincipal != nil && !password.isEmpty
-    }
-
-    private var cognitoPrincipal: String? {
-        if emailIsValid { return email }
-        if let e164 = e164PhoneForCognito { return e164 }
+    private var principal: String? {
+        if emailValid { return form.email }
+        if let p = e164Phone { return p }
         return nil
     }
+    var inputsForCreateOK: Bool {
+        principal != nil
+        && passwordScore.ok
+        && !form.displayName.trimmingCharacters(in: .whitespaces).isEmpty
+        && !form.handle.trimmingCharacters(in: .whitespaces).isEmpty
+        && is13OrOlder(form.dobDate)
+    }
 
-    // MARK: - Flows
+    private func is13OrOlder(_ dob: Date) -> Bool {
+        let years = Calendar(identifier: .gregorian).dateComponents([.year], from: dob, to: Date()).year ?? 0
+        return years >= 13
+    }
 
-    private func signUp() async {
-        await setBusy(true); defer { Task { await setBusy(false) } }
-        status = ""
-        do {
-            guard passwordIsValid else {
-                status = "Password doesn’t meet policy."
-                while path.last != .password { _ = path.popLast() }
-                return
+    // MARK: - Navigation / Reducer-ish methods
+
+    func back() {
+        switch flow {
+        case .collecting(let step):
+            switch step {
+            case .idChooser: break
+            case .password: flow = .collecting(.idChooser)
+            case .display: flow = .collecting(.password)
+            case .handleDob: flow = .collecting(.display)
+            case .agree: flow = .collecting(.handleDob)
+            case .verify: flow = .collecting(.agree)
+            case .done: break
             }
-            guard let principal = cognitoPrincipal else {
-                status = "Enter a valid email or a 10+ digit mobile number."
-                // Go back to the right identifier step
-                if path.contains(.email) && !emailIsValid {
-                    while path.last != .email { _ = path.popLast() }
-                } else {
-                    while path.last != .phone { _ = path.popLast() }
-                }
-                return
-            }
-
-            var attrs: [AuthUserAttribute] = []
-            if emailIsValid { attrs.append(.init(.email, value: email)) }
-            if let e164 = e164PhoneForCognito { attrs.append(.init(.phoneNumber, value: e164)) }
-            if !handle.isEmpty { attrs.append(.init(.preferredUsername, value: handle)) }
-
-            let res = try await Amplify.Auth.signUp(
-                username: principal,
-                password: password,
-                options: .init(userAttributes: attrs)
-            )
-
-            switch res.nextStep {
-            case .done:
-                await signIn() // auto-confirmed pools
-
-            case let .confirmUser(details, _, _):
-                verifyInfo = String(describing: details?.destination)
-                status = "Code sent — check \(verifyInfo)"
-                if path.last != .verify { path.append(.verify) }
-
-            case .completeAutoSignIn(_):
-                do {
-                    let auto = try await Amplify.Auth.autoSignIn()
-                    await handleNextStep(auto)
-                } catch {
-                    status = "AutoSignIn error: " + explainAuth(error)
-                }
-
-            @unknown default:
-                status = "SignUp next: \(String(describing: res.nextStep))"
-            }
-
-        } catch {
-            status = "SignUp error: " + explainAuth(error)
+        case .awaitingVerification:
+            flow = .collecting(.agree)
+        case .signingIn, .signedIn, .failed:
+            break
         }
     }
 
-    private func confirmSignUp() async {
-        await setBusy(true); defer { Task { await setBusy(false) } }
-        status = ""
-        do {
-            guard let principal = cognitoPrincipal else {
-                status = "Use the same email/phone as sign-up."
-                return
-            }
-            let res = try await Amplify.Auth.confirmSignUp(for: principal, confirmationCode: code)
-            if res.isSignUpComplete {
-                code = ""; status = "Verified"
-                _ = path.popLast() // drop .verify
-                if path.last != .agree { path.append(.agree) }
-                await signIn()
-            } else {
-                status = "Confirm next: \(res.nextStep)"
-            }
-        } catch {
-            status = "Confirm error: " + explainAuth(error)
-        }
+    func advanceFromIdChooser() {
+        banner = .none
+        flow = .collecting(.password)
     }
 
-    private func signIn() async {
-        await setBusy(true); defer { Task { await setBusy(false) } }
-        status = ""; pendingMFA = false; pendingNewPassword = false
-        do {
-            guard let principal = cognitoPrincipal else {
-                status = "Sign in with your email or mobile."
-                return
-            }
-            let res = try await Amplify.Auth.signIn(username: principal, password: password)
-            await handleNextStep(res)
-        } catch {
-            status = "SignIn error: " + explainAuth(error)
+    func advanceFromPassword() {
+        if !passwordScore.ok {
+            banner = .error("Add: " + passwordScore.reasons.joined(separator: ", "))
+            return
         }
+        banner = .none
+        flow = .collecting(.display)
     }
 
-    private func confirmSignIn(with response: String) async {
-        await setBusy(true); defer { Task { await setBusy(false) } }
-        status = ""
-        do {
-            let res = try await Amplify.Auth.confirmSignIn(challengeResponse: response)
-            await handleNextStep(res)
-        } catch {
-            status = "ConfirmSignIn error: " + explainAuth(error)
+    func advanceFromDisplay() {
+        guard !form.displayName.trimmingCharacters(in: .whitespaces).isEmpty else {
+            banner = .error("Enter a display name.")
+            return
         }
+        banner = .none
+        flow = .collecting(.handleDob)
     }
 
-    private func handleNextStep(_ res: AuthSignInResult) async {
-        if res.isSignedIn {
-            status = "Signed in"
-            await fetchIdToken()
-            await registerBackendIfNeeded()
-            if path.last != .done { path.append(.done) }
+    func advanceFromHandleDob() {
+        guard !form.handle.trimmingCharacters(in: .whitespaces).isEmpty else {
+            banner = .error("Pick a username.")
+            return
+        }
+        guard is13OrOlder(form.dobDate) else {
+            banner = .error("You must be at least 13 years old.")
+            return
+        }
+        banner = .none
+        flow = .collecting(.agree)
+    }
+
+    // MARK: - Effects
+
+    func createAccount() async {
+        guard inputsForCreateOK else {
+            banner = .error("Add a valid email or phone, a strong password, display name, and username.")
+            return
+        }
+        guard let principal = principal else {
+            banner = .error("Use a valid email or an E.164 phone like +13125551234.")
             return
         }
 
-        pendingMFA = false
-        pendingNewPassword = false
+        isBusy = true; defer { isBusy = false }
+        banner = .none
 
-        switch res.nextStep {
-        case .confirmSignInWithNewPassword:
-            pendingNewPassword = true
+        do {
+            var attrs: [AuthUserAttribute] = []
+            if emailValid { attrs.append(.init(.email, value: form.email)) }
+            if let p = e164Phone { attrs.append(.init(.phoneNumber, value: p)) }
+            if !form.handle.isEmpty { attrs.append(.init(.preferredUsername, value: form.handle)) }
 
-        case .confirmSignInWithSMSMFACode,
-             .confirmSignInWithTOTPCode,
-             .confirmSignInWithCustomChallenge(_):
-            pendingMFA = true
+            let res = try await auth.signUp(username: principal, password: form.password, attributes: attrs)
 
-        default:
-            // Covers .done/.resetPassword and any newer/unknown steps (incl. MFA selection on newer SDKs).
-            pendingMFA = true
+            switch res.nextStep {
+            case .done:
+                // Pool is auto-confirmed → sign in then register backend
+                try await postSignUpAutoFlow(principal: principal)
+
+            case let .confirmUser(details, _, _):
+                let dest = String(describing: details?.destination)
+                flow = .awaitingVerification(dest)
+                banner = .info("Code sent — check \(dest)")
+
+            case .completeAutoSignIn(_):
+                // Auto-sign-in path
+                let auto = try await auth.autoSignIn()
+                try await handleSignInResult(auto)
+
+            @unknown default:
+                banner = .info("Next: \(String(describing: res.nextStep))")
+            }
+
+        } catch {
+            banner = .error("SignUp: " + explainAuth(error))
+        }
+    }
+
+    func confirmCodeAndFinish() async {
+        guard case let .awaitingVerification(dest) = flow else { return }
+        guard let principal = principal else {
+            banner = .error("Use the same email/phone as sign-up.")
+            return
+        }
+        guard !code.trimmingCharacters(in: .whitespaces).isEmpty else {
+            banner = .error("Enter the verification code.")
+            return
+        }
+        isBusy = true; defer { isBusy = false }
+        banner = .none
+        do {
+            let r = try await auth.confirmSignUp(for: principal, code: code)
+            if r.isSignUpComplete {
+                code = ""
+                try await postSignUpAutoFlow(principal: principal)
+            } else {
+                banner = .info("Confirm next: \(r.nextStep)")
+                flow = .awaitingVerification(dest)
+            }
+        } catch {
+            banner = .error("Confirm: " + explainAuth(error))
+        }
+    }
+
+    private func postSignUpAutoFlow(principal: String) async throws {
+        // sign in
+        let signInRes = try await auth.signIn(username: principal, password: form.password)
+        try await handleSignInResult(signInRes)
+    }
+
+    private func handleSignInResult(_ res: AuthSignInResult) async throws {
+        if res.isSignedIn {
+            let tok = try await auth.fetchTokens() // now returns String idToken
+            do {
+                try await registerBackend(idToken: tok)
+                banner = .success("Provisioned in DB")
+            } catch {
+                banner = .error("Backend register: \(error.localizedDescription)")
+            }
+            flow = .signedIn(idToken: tok)
+            return
         }
 
-        code = ""
-        if path.last != .challenge { path.append(.challenge) }
-        status = "Additional verification required — enter code or new password, then Submit"
+        // No MFA in v1: if we get here with a challenge, surface a friendly error
+        banner = .error("This account requires additional verification not yet supported.")
+        flow = .failed("Pending unsupported challenge")
     }
 
-
-    // MARK: - Token + backend
-
-    private func fetchIdToken() async {
-        do {
-            let s = try await Amplify.Auth.fetchAuthSession()
-            guard s.isSignedIn, let p = s as? AuthCognitoTokensProvider else { status = "Not signed in"; return }
-            idToken = try p.getCognitoTokens().get().idToken
-            status = "ID token fetched"
-        } catch { status = "Fetch token error: \(error.localizedDescription)" }
-    }
-
-    private func registerBackendIfNeeded() async {
-        guard !idToken.isEmpty else { status = "No token; cannot register."; return }
-        await setBusy(true); defer { Task { await setBusy(false) } }
-        do {
-            let payload = UserRegisterModel(
-                username: handle,
-                display_name: displayName,
-                cellphone: e164PhoneForCognito,               // already includes '+'
-                email: emailIsValid ? email : nil,
-                dob: df.string(from: dobDate),
-                first_name: nil,
-                last_name: nil
-            )
-            let res = try await AuthAPI.register(baseURL: baseURL, token: idToken, payload: payload)
-            status = (res.is_success == true) ? "Provisioned in DB ✔︎"
-                 :  "Registered (is_success=\(String(describing: res.is_success)))"
-        } catch { status = "Register error: \(error.localizedDescription)" }
-    }
-
-    // MARK: - misc
-    private func setBusy(_ b: Bool) async {
-        await MainActor.run { isBusy = b }
+    private func registerBackend(idToken: String) async throws {
+        // Uses your existing AuthAPI + UserRegisterModel types
+        let payload = UserRegisterModel(
+            username: form.handle,
+            display_name: form.displayName,
+            cellphone: e164Phone,
+            email: emailValid ? form.email : nil,
+            dob: df.string(from: form.dobDate),
+            first_name: nil,
+            last_name: nil
+        )
+        _ = try await AuthAPI.register(baseURL: baseURL, token: idToken, payload: payload)
     }
 }
 
-// MARK: - Step Views
+// MARK: - Views
 
-private struct PhoneStep: View {
-    @Binding var phone: String
-    let onNext: () -> Void
-    let onUseEmail: () -> Void
-    let phoneIsValid: Bool
+struct UserRegisterFlow: View {
+    @StateObject private var vm = RegisterVM()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Your phone").font(.title2.bold())
-            TextField("Mobile number", text: $phone)
-                .keyboardType(.phonePad)
-                .textFieldStyle(.roundedBorder)
-                .onChange(of: phone, initial: false) {
-                    let digits = phone.filter(\.isNumber)
-                    let formatted = "+" + digits
-                    if formatted != phone { phone = formatted }
+        NavigationStack {
+            VStack(spacing: 0) {
+                bannerView(vm.banner)
+                content
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    if canGoBack { Button(action: vm.back) { Image(systemName: "chevron.left") } }
+                }
+                ToolbarItem(placement: .principal) { Text(titleForStep).font(.headline) }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch vm.flow {
+        case .collecting(let step):
+            switch step {
+            case .idChooser: IdChooserStep(
+                phoneRaw: $vm.form.phoneRaw,
+                email: $vm.form.email,
+                emailValid: vm.emailValid,
+                e164Phone: vm.e164Phone,
+                onNext: vm.advanceFromIdChooser
+            )
+            case .password: PasswordStep(
+                password: $vm.form.password,
+                score: vm.passwordScore,
+                onNext: vm.advanceFromPassword
+            )
+            case .display: DisplayStep(
+                displayName: $vm.form.displayName,
+                onNext: vm.advanceFromDisplay
+            )
+            case .handleDob: HandleDobStep(
+                handle: $vm.form.handle,
+                dob: $vm.form.dobDate,
+                onNext: vm.advanceFromHandleDob
+            )
+            case .agree: AgreeStep(
+                isBusy: vm.isBusy,
+                canCreate: vm.inputsForCreateOK,
+                onCreate: { Task { await vm.createAccount() } }
+            )
+            case .verify(let dest):
+                VerifyStep(
+                    dest: dest,
+                    code: $vm.code,
+                    isBusy: vm.isBusy,
+                    onConfirm: { Task { await vm.confirmCodeAndFinish() } }
+                )
+            case .done:
+                DoneStep(idToken: tokenPreview)
+            }
+
+        case .awaitingVerification(let dest):
+            VerifyStep(
+                dest: dest,
+                code: $vm.code,
+                isBusy: vm.isBusy,
+                onConfirm: { Task { await vm.confirmCodeAndFinish() } }
+            )
+
+        case .signingIn:
+            ProgressView().padding().frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+
+        case .signedIn:
+            DoneStep(idToken: tokenPreview)
+
+        case .failed(let msg):
+            VStack(spacing: 16) {
+                Text("Couldn’t complete sign in.").font(.title3.bold())
+                Text(msg).font(.footnote).foregroundStyle(.secondary)
+            }.padding()
+        }
+    }
+
+    private var canGoBack: Bool {
+        switch vm.flow {
+        case .collecting(let step):
+            return step != .idChooser
+        case .awaitingVerification:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private var titleForStep: String {
+        switch vm.flow {
+        case .collecting(let step):
+            switch step {
+            case .idChooser: return "Phone or Email"
+            case .password: return "Password"
+            case .display: return "Display name"
+            case .handleDob: return "Username"
+            case .agree: return "Create account"
+            case .verify: return "Verify"
+            case .done: return "Done"
+            }
+        case .awaitingVerification: return "Verify"
+        case .signingIn: return "Signing in"
+        case .signedIn: return "Done"
+        case .failed: return "Sign in"
+        }
+    }
+
+    private var tokenPreview: String {
+        if case let .signedIn(idToken) = vm.flow {
+            return String(idToken.prefix(32)) + "…"
+        }
+        return ""
+    }
+
+    @ViewBuilder
+    private func bannerView(_ b: BannerState) -> some View {
+        switch b {
+        case .none: EmptyView()
+        case .info(let s):
+            Text(s).font(.footnote).padding(10).frame(maxWidth: .infinity).background(.blue.opacity(0.15))
+        case .success(let s):
+            Text(s).font(.footnote).padding(10).frame(maxWidth: .infinity).background(.green.opacity(0.15))
+        case .error(let s):
+            Text(s).font(.footnote).padding(10).frame(maxWidth: .infinity).background(.red.opacity(0.15))
+        }
+    }
+}
+
+// MARK: - Step Subviews
+
+private struct IdChooserStep: View {
+    @Binding var phoneRaw: String
+    @Binding var email: String
+    let emailValid: Bool
+    let e164Phone: String?
+    let onNext: () -> Void
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Use your phone or email").font(.title2.bold())
+
+                TextField("mobile (e.g. +13125551234)", text: $phoneRaw)
+                    .keyboardType(.phonePad)
+                    .textFieldStyle(.roundedBorder)
+
+                if let p = e164Phone, !p.isEmpty {
+                    Text("Formatted as \(p)").font(.footnote).foregroundStyle(.secondary)
+                } else if !phoneRaw.isEmpty {
+                    Text("Tip: use + and digits only").font(.footnote).foregroundStyle(.secondary)
                 }
 
+                TextField("email", text: $email)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.emailAddress)
+                    .textFieldStyle(.roundedBorder)
 
+                if !email.isEmpty && !emailValid {
+                    Text("Enter a valid email like name@example.com")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
 
-            Text("We’ll use phone or email as your sign-in.")
-                .font(.footnote).foregroundStyle(.secondary)
-            Button("Use email instead", action: onUseEmail)
-                .buttonStyle(.plain).foregroundStyle(.blue)
+                Button(action: onNext) {
+                    Text("Next")
+                        .frame(maxWidth: .infinity).padding(.vertical, 16)
+                        .font(.title3.weight(.semibold))
+                }
+                .buttonStyle(.borderedProminent)
+                .padding(.top, 10)
 
-            Button(action: onNext) {
-                Text("Next")
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .font(.title3.weight(.semibold))
+                Spacer(minLength: 0)
             }
-            .buttonStyle(.borderedProminent)
-            .disabled(!phoneIsValid)
-            .padding(.top, 24)
-
-            Spacer(minLength: 0)
+            .padding(16)
         }
-        .padding(16)
-    }
-}
-
-private struct EmailStep: View {
-    @Binding var email: String
-    let onNext: () -> Void
-    let onUsePhone: () -> Void
-    let emailIsValid: Bool
-    let allowSkip: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Your email").font(.title2.bold())
-            TextField("email", text: $email)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .keyboardType(.emailAddress)
-                .textFieldStyle(.roundedBorder)
-            if !email.isEmpty && !emailIsValid {
-                Text("Enter a valid email like name@example.com")
-                    .font(.footnote).foregroundStyle(.secondary)
-            }
-            Button("Use phone instead", action: onUsePhone)
-                .buttonStyle(.plain).foregroundStyle(.blue)
-
-            Button(action: onNext) {
-                Text("Next")
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .font(.title3.weight(.semibold))
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(!(emailIsValid || allowSkip))   // allow skip if phone is valid
-            .padding(.top, 24)
-
-            Spacer(minLength: 0)
-        }
-        .padding(16)
-        .toolbar { ToolbarItem(placement: .principal) { Text("Email").font(.headline) } }
-    }
-}
-
-private struct PasswordRulesView: View {
-    let pw: String
-    private var hasMin: Bool { pw.count >= 8 }
-    private var hasDigit: Bool { pw.range(of: "\\d", options: .regularExpression) != nil }
-    private var hasUpper: Bool { pw.range(of: "[A-Z]", options: .regularExpression) != nil }
-    private var hasLower: Bool { pw.range(of: "[a-z]", options: .regularExpression) != nil }
-    private var hasSpec: Bool { pw.range(of: #"[^A-Za-z0-9]"#, options: .regularExpression) != nil }
-    private var noEdge: Bool { pw.range(of: #"^\S+.*\S+$"#, options: .regularExpression) != nil }
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            rule("≥ 8 characters", hasMin)
-            rule("1 uppercase (A–Z)", hasUpper)
-            rule("1 lowercase (a–z)", hasLower)
-            rule("1 number (0–9)", hasDigit)
-            rule("1 special (!@#…)", hasSpec)
-            rule("No leading/trailing spaces", noEdge)
-        }
-    }
-    @ViewBuilder private func rule(_ t: String, _ ok: Bool) -> some View {
-        HStack { Image(systemName: ok ? "checkmark.circle.fill" : "xmark.circle")
-                Text(t) }
-        .foregroundStyle(ok ? .green : .secondary)
-        .font(.footnote)
     }
 }
 
 private struct PasswordStep: View {
     @Binding var password: String
-    let passwordIsValid: Bool
-    let rulesView: () -> PasswordRulesView
+    let score: (ok: Bool, reasons: [String])
     let onNext: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 14) {
             Text("Create a password").font(.title2.bold())
             SecureField("password", text: $password)
                 .textFieldStyle(.roundedBorder)
-            rulesView()
+
+            VStack(alignment: .leading, spacing: 6) {
+                rule("≥ 8 characters", password.count >= 8)
+                rule("1 uppercase (A–Z)", password.range(of: "[A-Z]", options: .regularExpression) != nil)
+                rule("1 lowercase (a–z)", password.range(of: "[a-z]", options: .regularExpression) != nil)
+                rule("1 number (0–9)", password.range(of: "\\d", options: .regularExpression) != nil)
+                rule("1 special (!@#…)", password.range(of: #"[^A-Za-z0-9]"#, options: .regularExpression) != nil)
+                rule("No leading/trailing spaces", password.range(of: #"^\S+.*\S+$"#, options: .regularExpression) != nil)
+            }
 
             Button(action: onNext) {
                 Text("Next")
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
+                    .frame(maxWidth: .infinity).padding(.vertical, 16)
                     .font(.title3.weight(.semibold))
             }
             .buttonStyle(.borderedProminent)
-            .disabled(!passwordIsValid)
-            .padding(.top, 24)
+            .disabled(!score.ok)
+            .padding(.top, 10)
 
             Spacer(minLength: 0)
         }
         .padding(16)
-        .toolbar { ToolbarItem(placement: .principal) { Text("Password").font(.headline) } }
+    }
+
+    @ViewBuilder private func rule(_ t: String, _ ok: Bool) -> some View {
+        HStack { Image(systemName: ok ? "checkmark.circle.fill" : "xmark.circle"); Text(t) }
+            .foregroundStyle(ok ? .green : .secondary)
+            .font(.footnote)
     }
 }
 
@@ -514,70 +569,66 @@ private struct DisplayStep: View {
     let onNext: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 14) {
             Text("Choose a display name").font(.title2.bold())
             TextField("display name", text: $displayName)
                 .textFieldStyle(.roundedBorder)
 
             Button(action: onNext) {
                 Text("Next")
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
+                    .frame(maxWidth: .infinity).padding(.vertical, 16)
                     .font(.title3.weight(.semibold))
             }
             .buttonStyle(.borderedProminent)
             .disabled(displayName.trimmingCharacters(in: .whitespaces).isEmpty)
-            .padding(.top, 24)
+            .padding(.top, 10)
 
             Spacer(minLength: 0)
         }
         .padding(16)
-        .toolbar { ToolbarItem(placement: .principal) { Text("Display name").font(.headline) } }
     }
 }
 
-private struct HandleStep: View {
+private struct HandleDobStep: View {
     @Binding var handle: String
-    @Binding var dobDate: Date
+    @Binding var dob: Date
     let onNext: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 14) {
             Text("Pick a username").font(.title2.bold())
             TextField("username (handle)", text: $handle)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .textFieldStyle(.roundedBorder)
-            DatePicker("DOB (≥13 yrs)", selection: $dobDate, displayedComponents: .date)
+
+            DatePicker("DOB (≥13 yrs)", selection: $dob, displayedComponents: .date)
 
             Button(action: onNext) {
                 Text("Next")
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
+                    .frame(maxWidth: .infinity).padding(.vertical, 16)
                     .font(.title3.weight(.semibold))
             }
             .buttonStyle(.borderedProminent)
             .disabled(handle.trimmingCharacters(in: .whitespaces).isEmpty)
-            .padding(.top, 24)
+            .padding(.top, 10)
 
             Spacer(minLength: 0)
         }
         .padding(16)
-        .toolbar { ToolbarItem(placement: .principal) { Text("Username").font(.headline) } }
     }
 }
 
 private struct AgreeStep: View {
     let isBusy: Bool
-    let onCreate: () -> Void
-    let onSignIn: () -> Void
     let canCreate: Bool
-    let canSignIn: Bool
+    let onCreate: () -> Void
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Agree & create account").font(.title2.bold())
             Text("By tapping **Create Account**, you agree to the Terms & Privacy.")
                 .font(.subheadline)
+
             Button(action: onCreate) {
                 HStack {
                     if isBusy { ProgressView() }
@@ -588,10 +639,6 @@ private struct AgreeStep: View {
             .buttonStyle(.borderedProminent)
             .disabled(isBusy || !canCreate)
 
-            Button("I already have an account – Sign In", action: onSignIn)
-                .buttonStyle(.bordered)
-                .disabled(isBusy || !canSignIn)
-
             Spacer(minLength: 0)
         }
         .padding(16)
@@ -599,23 +646,23 @@ private struct AgreeStep: View {
 }
 
 private struct VerifyStep: View {
-    let info: String
+    let dest: String?
     @Binding var code: String
     let isBusy: Bool
     let onConfirm: () -> Void
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 14) {
             Text("Verify your account").font(.title2.bold())
-            if !info.isEmpty {
-                Text("Enter the code sent to \(info).")
+            if let d = dest, !d.isEmpty {
+                Text("Enter the code sent to \(d).")
                     .font(.footnote).foregroundStyle(.secondary)
             }
             TextField("verification code", text: $code)
                 .textFieldStyle(.roundedBorder)
+
             Button(action: onConfirm) {
                 Text("Confirm")
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
+                    .frame(maxWidth: .infinity).padding(.vertical, 16)
                     .font(.title3.weight(.semibold))
             }
             .buttonStyle(.borderedProminent)
@@ -624,34 +671,6 @@ private struct VerifyStep: View {
             Spacer(minLength: 0)
         }
         .padding(16)
-        .toolbar { ToolbarItem(placement: .principal) { Text("Verify").font(.headline) } }
-    }
-}
-
-private struct ChallengeStep: View {
-    @Binding var code: String
-    let isBusy: Bool
-    let isNewPassword: Bool
-    let onSubmit: () -> Void
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(isNewPassword ? "New password required" : "MFA / challenge")
-                .font(.title2.bold())
-            TextField(isNewPassword ? "NEW PASSWORD" : "MFA / TOTP code", text: $code)
-                .textFieldStyle(.roundedBorder)
-            Button(action: onSubmit) {
-                Text("Submit")
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .font(.title3.weight(.semibold))
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(code.trimmingCharacters(in: .whitespaces).isEmpty || isBusy)
-
-            Spacer(minLength: 0)
-        }
-        .padding(16)
-        .toolbar { ToolbarItem(placement: .principal) { Text("Security check").font(.headline) } }
     }
 }
 
@@ -661,16 +680,16 @@ private struct DoneStep: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("All set!").font(.title2.bold())
             if !idToken.isEmpty {
-                Text("ID: \(idToken.prefix(32))…").font(.footnote).monospaced()
+                Text("ID: \(idToken)").font(.footnote).monospaced()
             }
             Spacer(minLength: 0)
         }
         .padding(16)
-        .toolbar { ToolbarItem(placement: .principal) { Text("Done").font(.headline) } }
     }
 }
 
-// MARK: - Preview (ContentView not needed)
+// MARK: - Preview
+
 #Preview {
     UserRegisterFlow()
 }

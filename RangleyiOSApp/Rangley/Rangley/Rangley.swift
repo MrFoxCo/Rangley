@@ -4,22 +4,20 @@
 //  Created by Anthony Guzzardo on 7/1/25.
 //
 
-// RangleApp.swift
+
 import SwiftUI
 import Amplify
 import AWSCognitoAuthPlugin
 import UIKit
 
 final class AppDelegate: NSObject, UIApplicationDelegate {
-    func application(
-        _ application: UIApplication,
-        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
-    ) -> Bool {
-
+    func application(_ application: UIApplication,
+                     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool
+    {
         Amplify.Logging.logLevel = .verbose
         do {
             try Amplify.add(plugin: AWSCognitoAuthPlugin())
-            try Amplify.configure()   // reads amplifyconfiguration.json from bundle
+            try Amplify.configure()
             print("Amplify configured")
         } catch {
             print("Amplify configure failed:", error)
@@ -31,8 +29,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
 @main
 struct RangleyApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    var body: some Scene { WindowGroup { UserRegisterFlow() } }
+    var body: some Scene {
+        WindowGroup { RootGate() }   // ← was UserRegisterFlow()
+    }
 }
+
 
 
 

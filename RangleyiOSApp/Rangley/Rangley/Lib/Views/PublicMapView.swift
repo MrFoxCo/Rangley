@@ -11,25 +11,6 @@ import Foundation
 import SQLite3
 
 
-struct ContentViewTest: View {
-    var body: some View {
-        NavigationStack {
-            List {
-                NavigationLink("Auth Register") { UserRegisterFlow() }
-                Button("Debug: print ID token") {
-                    Task {
-                        do { print(try await CognitoTokens.idToken()) }
-                        catch { print("No token:", error) }
-                    }
-                }
-            }
-            .navigationTitle("Dev Tools")
-        }
-    }
-}
-#Preview { ContentViewTest() }   // ← match the struct name
-
-
 private enum ActiveSheet: Identifiable, Equatable {
     case CreateMeet
     case Meet(MeetCardData)
@@ -477,6 +458,6 @@ public struct PublicMapView: View {
 
 
 
-//#Preview {
-//    return PublicMap()
-//}
+#Preview {
+    return PublicMapView()
+}

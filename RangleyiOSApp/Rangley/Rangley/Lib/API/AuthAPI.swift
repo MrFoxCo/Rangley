@@ -21,7 +21,7 @@ enum AuthAPIError: Error, LocalizedError {
 struct AuthAPI {
     // POST /i/auth-register  (protected; Bearer ID token)
     static func register(baseURL: URL, token: String, payload: UserRegisterModel) async throws -> UserRegisterResult {
-        var req = URLRequest(url: baseURL.appendingPathComponent("/i/auth-register"))
+        var req = URLRequest(url: baseURL.appendingPathComponent("/auth/register"))
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("application/json", forHTTPHeaderField: "Accept")
