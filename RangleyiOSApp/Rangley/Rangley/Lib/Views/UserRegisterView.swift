@@ -11,7 +11,8 @@ import AWSPluginsCore
 import UIKit
 
 // MARK: - Error explainer (Amplify 2.x)
-fileprivate func explainAuth(_ error: Error) -> String {
+fileprivate func explainAuth(_ error: Error) -> String
+{
     if let ae = error as? AuthError {
         var parts = [ae.errorDescription]
         let rs = ae.recoverySuggestion; if !rs.isEmpty { parts.append(rs) }
@@ -29,7 +30,8 @@ fileprivate func explainAuth(_ error: Error) -> String {
 
 // MARK: - Form & Flow State
 
-private struct FormState: Equatable {
+private struct FormState: Equatable
+{
     var phoneRaw: String = ""          // user-typed (we’ll normalize on advance)
     var email: String = ""
     var password: String = ""
@@ -38,24 +40,28 @@ private struct FormState: Equatable {
     var dobDate: Date = .init(timeIntervalSince1970: 0)
 }
 
-private enum Step: Hashable {
-    case idChooser         // phone/email screen combined
+private enum Step: Hashable
+{
+    case cellphone         // phone/email screen combined
+//    case email
+    case verify(String?)   // NOTE: no label to avoid tuple-with-label error
     case password
     case display
     case handleDob
     case agree
-    case verify(String?)   // NOTE: no label to avoid tuple-with-label error
     case done
 }
 
-private enum BannerState: Equatable {
+private enum BannerState: Equatable
+{
     case none
     case info(String)
     case error(String)
     case success(String)
 }
 
-private enum FlowState: Equatable {
+private enum FlowState: Equatable
+{
     case collecting(Step)          // gather inputs
     case awaitingVerification(String?)
     case signingIn                 // transient
@@ -65,7 +71,8 @@ private enum FlowState: Equatable {
 
 // MARK: - Auth client abstraction (thin wrapper over Amplify)
 
-private protocol AuthClient {
+private protocol AuthClient
+{
     func signUp(username: String, password: String, attributes: [AuthUserAttribute]) async throws -> AuthSignUpResult
     func confirmSignUp(for username: String, code: String) async throws -> AuthSignUpResult
     func signIn(username: String, password: String) async throws -> AuthSignInResult
@@ -73,20 +80,30 @@ private protocol AuthClient {
     func fetchTokens() async throws -> String   // return just the idToken
 }
 
-private struct AmplifyAuthClient: AuthClient {
-    func signUp(username: String, password: String, attributes: [AuthUserAttribute]) async throws -> AuthSignUpResult {
+private struct AmplifyAuthClient: AuthClient
+{
+    func signUp(username: String, password: String, attributes: [AuthUserAttribute]) async throws -> AuthSignUpResult
+    {
         try await Amplify.Auth.signUp(username: username, password: password, options: .init(userAttributes: attributes))
     }
-    func confirmSignUp(for username: String, code: String) async throws -> AuthSignUpResult {
+    
+    func confirmSignUp(for username: String, code: String) async throws -> AuthSignUpResult
+    {
         try await Amplify.Auth.confirmSignUp(for: username, confirmationCode: code)
     }
-    func signIn(username: String, password: String) async throws -> AuthSignInResult {
+    
+    func signIn(username: String, password: String) async throws -> AuthSignInResult
+    {
         try await Amplify.Auth.signIn(username: username, password: password)
     }
-    func autoSignIn() async throws -> AuthSignInResult {
+    
+    func autoSignIn() async throws -> AuthSignInResult
+    {
         try await Amplify.Auth.autoSignIn()
     }
-    func fetchTokens() async throws -> String {
+    
+    func fetchTokens() async throws -> String
+    {
         let s = try await Amplify.Auth.fetchAuthSession()
         guard s.isSignedIn, let p = s as? AuthCognitoTokensProvider else {
             throw NSError(domain: "Auth", code: -1, userInfo: [NSLocalizedDescriptionKey: "Not signed in"])
@@ -99,9 +116,10 @@ private struct AmplifyAuthClient: AuthClient {
 // MARK: - ViewModel (Reducer + Effects)
 
 @MainActor
-private final class RegisterVM: ObservableObject {
+private final class RegisterVM: ObservableObject
+{
     @Published var form = FormState()
-    @Published var flow: FlowState = .collecting(.idChooser)
+    @Published var flow: FlowState = .collecting(.cellphone)
     @Published var banner: BannerState = .none
     @Published var isBusy = false
     @Published var code = ""                // verification code when needed
@@ -113,7 +131,8 @@ private final class RegisterVM: ObservableObject {
     private let auth: AuthClient
     private let df: DateFormatter
 
-    init(auth: AuthClient = AmplifyAuthClient()) {
+    init(auth: AuthClient = AmplifyAuthClient())
+    {
         self.auth = auth
         self.df = DateFormatter()
         self.df.calendar = .init(identifier: .iso8601)
@@ -127,7 +146,8 @@ private final class RegisterVM: ObservableObject {
     private var phoneDigits: String { form.phoneRaw.filter(\.isNumber) }
 
     // Exposed (not private) so the IdChooser step can read it
-    var e164Phone: String? {
+    var e164Phone: String?
+    {
         let ds = phoneDigits
         switch ds.count {
         case 10:                         return "+1" + ds          // US default
@@ -136,12 +156,20 @@ private final class RegisterVM: ObservableObject {
         default:                         return nil
         }
     }
-
-    var emailValid: Bool {
+    // ^^ Connected to this
+    var canAdvanceFromCellphone: Bool {
+        // phone required (email ignored for now)
+        return e164Phone != nil
+    }
+    
+    var emailValid: Bool
+    {
         let pattern = #"^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$"#
         return form.email.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
     }
-    var passwordScore: (ok: Bool, reasons: [String]) {
+    
+    var passwordScore: (ok: Bool, reasons: [String])
+    {
         var reasons: [String] = []
         if form.password.count < 8 { reasons.append("≥ 8 chars") }
         if form.password.range(of: "\\d", options: .regularExpression) == nil { reasons.append("number") }
@@ -151,12 +179,16 @@ private final class RegisterVM: ObservableObject {
         if form.password.range(of: #"^\S+.*\S+$"#, options: .regularExpression) == nil { reasons.append("no edge spaces") }
         return (reasons.isEmpty, reasons)
     }
-    private var principal: String? {
+    
+    private var principal: String?
+    {
         if emailValid { return form.email }
         if let p = e164Phone { return p }
         return nil
     }
-    var inputsForCreateOK: Bool {
+    
+    var inputsForCreateOK: Bool
+    {
         principal != nil
         && passwordScore.ok
         && !form.displayName.trimmingCharacters(in: .whitespaces).isEmpty
@@ -164,7 +196,8 @@ private final class RegisterVM: ObservableObject {
         && is13OrOlder(form.dobDate)
     }
 
-    private func is13OrOlder(_ dob: Date) -> Bool {
+    private func is13OrOlder(_ dob: Date) -> Bool
+    {
         let years = Calendar(identifier: .gregorian).dateComponents([.year], from: dob, to: Date()).year ?? 0
         return years >= 13
     }
@@ -175,8 +208,9 @@ private final class RegisterVM: ObservableObject {
         switch flow {
         case .collecting(let step):
             switch step {
-            case .idChooser: break
-            case .password: flow = .collecting(.idChooser)
+            case .cellphone: break
+//            case .email // setup email
+            case .password: flow = .collecting(.cellphone)
             case .display: flow = .collecting(.password)
             case .handleDob: flow = .collecting(.display)
             case .agree: flow = .collecting(.handleDob)
@@ -190,12 +224,23 @@ private final class RegisterVM: ObservableObject {
         }
     }
 
-    func advanceFromIdChooser() {
+    func advanceFromCellphone() {
+        banner = .none
+        guard canAdvanceFromCellphone else {
+            banner = .error("Enter a valid phone in E.164, e.g. +13125551234 (10 US digits OK).")
+            return
+        }
+        flow = .collecting(.password)
+    }
+    
+    func advanceFromIdChooser()
+    {
         banner = .none
         flow = .collecting(.password)
     }
 
-    func advanceFromPassword() {
+    func advanceFromPassword()
+    {
         if !passwordScore.ok {
             banner = .error("Add: " + passwordScore.reasons.joined(separator: ", "))
             return
@@ -204,7 +249,8 @@ private final class RegisterVM: ObservableObject {
         flow = .collecting(.display)
     }
 
-    func advanceFromDisplay() {
+    func advanceFromDisplay()
+    {
         guard !form.displayName.trimmingCharacters(in: .whitespaces).isEmpty else {
             banner = .error("Enter a display name.")
             return
@@ -213,7 +259,8 @@ private final class RegisterVM: ObservableObject {
         flow = .collecting(.handleDob)
     }
 
-    func advanceFromHandleDob() {
+    func advanceFromHandleDob()
+    {
         guard !form.handle.trimmingCharacters(in: .whitespaces).isEmpty else {
             banner = .error("Pick a username.")
             return
@@ -228,7 +275,8 @@ private final class RegisterVM: ObservableObject {
 
     // MARK: - Effects
 
-    func createAccount() async {
+    func createAccount() async
+    {
         guard inputsForCreateOK else {
             banner = .error("Add a valid email or phone, a strong password, display name, and username.")
             return
@@ -273,7 +321,8 @@ private final class RegisterVM: ObservableObject {
         }
     }
 
-    func confirmCodeAndFinish() async {
+    func confirmCodeAndFinish() async
+    {
         guard case let .awaitingVerification(dest) = flow else { return }
         guard let principal = principal else {
             banner = .error("Use the same email/phone as sign-up.")
@@ -299,13 +348,15 @@ private final class RegisterVM: ObservableObject {
         }
     }
 
-    private func postSignUpAutoFlow(principal: String) async throws {
+    private func postSignUpAutoFlow(principal: String) async throws
+    {
         // sign in
         let signInRes = try await auth.signIn(username: principal, password: form.password)
         try await handleSignInResult(signInRes)
     }
 
-    private func handleSignInResult(_ res: AuthSignInResult) async throws {
+    private func handleSignInResult(_ res: AuthSignInResult) async throws
+    {
         if res.isSignedIn {
             let tok = try await auth.fetchTokens() // now returns String idToken
             do {
@@ -323,7 +374,8 @@ private final class RegisterVM: ObservableObject {
         flow = .failed("Pending unsupported challenge")
     }
 
-    private func registerBackend(idToken: String) async throws {
+    private func registerBackend(idToken: String) async throws
+    {
         // Uses your existing AuthAPI + UserRegisterModel types
         let payload = UserRegisterModel(
             username: form.handle,
@@ -340,10 +392,12 @@ private final class RegisterVM: ObservableObject {
 
 // MARK: - Views
 
-struct UserRegisterFlow: View {
+struct UserRegisterFlow: View
+{
     @StateObject private var vm = RegisterVM()
 
-    var body: some View {
+    var body: some View
+    {
         NavigationStack {
             VStack(spacing: 0) {
                 bannerView(vm.banner)
@@ -359,17 +413,20 @@ struct UserRegisterFlow: View {
     }
 
     @ViewBuilder
-    private var content: some View {
+    private var content: some View
+    {
         switch vm.flow {
         case .collecting(let step):
             switch step {
-            case .idChooser: IdChooserStep(
+            case .cellphone: CellphoneStep(
                 phoneRaw: $vm.form.phoneRaw,
                 email: $vm.form.email,
                 emailValid: vm.emailValid,
                 e164Phone: vm.e164Phone,
-                onNext: vm.advanceFromIdChooser
+                onNext: vm.advanceFromIdChooser,
+                canContinue: vm.canAdvanceFromCellphone
             )
+//            case .email: EmailStep(            )
             case .password: PasswordStep(
                 password: $vm.form.password,
                 score: vm.passwordScore,
@@ -422,10 +479,11 @@ struct UserRegisterFlow: View {
         }
     }
 
-    private var canGoBack: Bool {
+    private var canGoBack: Bool
+    {
         switch vm.flow {
         case .collecting(let step):
-            return step != .idChooser
+            return step != .cellphone
         case .awaitingVerification:
             return true
         default:
@@ -433,11 +491,13 @@ struct UserRegisterFlow: View {
         }
     }
 
-    private var titleForStep: String {
+    private var titleForStep: String
+    {
         switch vm.flow {
         case .collecting(let step):
             switch step {
-            case .idChooser: return "Phone or Email"
+            case .cellphone: return "Mobile Number" // this probably needs to be separate and called .phone
+//            case .email return "email"
             case .password: return "Password"
             case .display: return "Display name"
             case .handleDob: return "Username"
@@ -452,7 +512,8 @@ struct UserRegisterFlow: View {
         }
     }
 
-    private var tokenPreview: String {
+    private var tokenPreview: String
+    {
         if case let .signedIn(idToken) = vm.flow {
             return String(idToken.prefix(32)) + "…"
         }
@@ -460,7 +521,8 @@ struct UserRegisterFlow: View {
     }
 
     @ViewBuilder
-    private func bannerView(_ b: BannerState) -> some View {
+    private func bannerView(_ b: BannerState) -> some View
+    {
         switch b {
         case .none: EmptyView()
         case .info(let s):
@@ -475,19 +537,21 @@ struct UserRegisterFlow: View {
 
 // MARK: - Step Subviews
 
-private struct IdChooserStep: View {
+private struct CellphoneStep: View
+{
     @Binding var phoneRaw: String
     @Binding var email: String
     let emailValid: Bool
     let e164Phone: String?
     let onNext: () -> Void
-
+    let canContinue : Bool
+    
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                Text("Use your phone or email").font(.title2.bold())
+                Text("Please Enter Phone").font(.title2.bold())
 
-                TextField("mobile (e.g. +13125551234)", text: $phoneRaw)
+                TextField("Mobile Number (+13125551234)", text: $phoneRaw)
                     .keyboardType(.phonePad)
                     .textFieldStyle(.roundedBorder)
 
@@ -496,17 +560,24 @@ private struct IdChooserStep: View {
                 } else if !phoneRaw.isEmpty {
                     Text("Tip: use + and digits only").font(.footnote).foregroundStyle(.secondary)
                 }
+                // TODO: - Add EMAIL
+//                TextField("Email (me@email.com)", text: $email)
+//                    .textInputAutocapitalization(.never)
+//                    .autocorrectionDisabled()
+//                    .keyboardType(.emailAddress)
+//                    .textFieldStyle(.roundedBorder)
+                Text(.init("""
+                By continuing, you agree to our [Terms](https://mrfoxco.com/terms) and [Privacy Policy](https://mrfoxco.com/privacy) and consent to receive SMS from Rangley for account verification (OTP) and important account/security notices. Msg & data rates may apply. Reply STOP to opt out, HELP for help.
+                """))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
 
-                TextField("email", text: $email)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .keyboardType(.emailAddress)
-                    .textFieldStyle(.roundedBorder)
-
-                if !email.isEmpty && !emailValid {
-                    Text("Enter a valid email like name@example.com")
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
+//                if !email.isEmpty && !emailValid {
+//                    Text("Enter a valid email like name@example.com")
+//                        .font(.footnote).foregroundStyle(.secondary)
+//                }
 
                 Button(action: onNext) {
                     Text("Next")
@@ -514,6 +585,7 @@ private struct IdChooserStep: View {
                         .font(.title3.weight(.semibold))
                 }
                 .buttonStyle(.borderedProminent)
+                .disabled(!canContinue)
                 .padding(.top, 10)
 
                 Spacer(minLength: 0)
@@ -523,7 +595,8 @@ private struct IdChooserStep: View {
     }
 }
 
-private struct PasswordStep: View {
+private struct PasswordStep: View
+{
     @Binding var password: String
     let score: (ok: Bool, reasons: [String])
     let onNext: () -> Void
@@ -536,8 +609,8 @@ private struct PasswordStep: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 rule("≥ 8 characters", password.count >= 8)
-                rule("1 uppercase (A–Z)", password.range(of: "[A-Z]", options: .regularExpression) != nil)
                 rule("1 lowercase (a–z)", password.range(of: "[a-z]", options: .regularExpression) != nil)
+                rule("1 uppercase (A–Z)", password.range(of: "[A-Z]", options: .regularExpression) != nil)
                 rule("1 number (0–9)", password.range(of: "\\d", options: .regularExpression) != nil)
                 rule("1 special (!@#…)", password.range(of: #"[^A-Za-z0-9]"#, options: .regularExpression) != nil)
                 rule("No leading/trailing spaces", password.range(of: #"^\S+.*\S+$"#, options: .regularExpression) != nil)
@@ -564,7 +637,8 @@ private struct PasswordStep: View {
     }
 }
 
-private struct DisplayStep: View {
+private struct DisplayStep: View
+{
     @Binding var displayName: String
     let onNext: () -> Void
 
@@ -589,7 +663,8 @@ private struct DisplayStep: View {
     }
 }
 
-private struct HandleDobStep: View {
+private struct HandleDobStep: View
+{
     @Binding var handle: String
     @Binding var dob: Date
     let onNext: () -> Void
@@ -619,20 +694,25 @@ private struct HandleDobStep: View {
     }
 }
 
-private struct AgreeStep: View {
+private struct AgreeStep: View
+{
     let isBusy: Bool
     let canCreate: Bool
     let onCreate: () -> Void
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Agree & create account").font(.title2.bold())
-            Text("By tapping **Create Account**, you agree to the Terms & Privacy.")
+            Text("Agree to Rangley's terms and policies").font(.title2.bold())
+            Text(.init("""
+            By tapping **I agree** you agree to create an account and to Rangley's [Terms](https://mrfoxco.com/terms) & [Privacy Policy](https://mrfoxco.com/privacy).
+            
+            Read our [Privacy Policy](https://mrfoxco.com/privacy). We use your phone and (if enabled) location to verify your account and show if you’re **near** an event or **at** it using a geofence. Other users see only “nearby” or “checked in” - never your exact location unless you check in. We don’t use your info for ads.
+            """))
                 .font(.subheadline)
 
             Button(action: onCreate) {
                 HStack {
                     if isBusy { ProgressView() }
-                    Text(isBusy ? "Creating…" : "Create Account").bold()
+                    Text(isBusy ? "Creating…" : "I Agree").bold()
                 }
                 .frame(maxWidth: .infinity).padding(.vertical, 16)
             }
@@ -645,7 +725,8 @@ private struct AgreeStep: View {
     }
 }
 
-private struct VerifyStep: View {
+private struct VerifyStep: View
+{
     let dest: String?
     @Binding var code: String
     let isBusy: Bool
@@ -674,7 +755,8 @@ private struct VerifyStep: View {
     }
 }
 
-private struct DoneStep: View {
+private struct DoneStep: View
+{
     let idToken: String
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {

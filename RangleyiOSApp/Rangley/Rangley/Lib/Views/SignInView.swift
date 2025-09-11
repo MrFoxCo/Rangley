@@ -8,47 +8,91 @@
 import SwiftUI
 import Amplify
 
+extension Color {
+    init(hex: String) {
+        let s = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "#", with: "")
+            .replacingOccurrences(of: "0x", with: "")
+        var v: UInt64 = 0; _ = Scanner(string: s).scanHexInt64(&v)
+        let r, g, b, a: Double
+        switch s.count {
+        case 6: (r,g,b,a) = (Double((v>>16)&0xFF)/255, Double((v>>8)&0xFF)/255, Double(v&0xFF)/255, 1)
+        case 8: (r,g,b,a) = (Double((v>>24)&0xFF)/255, Double((v>>16)&0xFF)/255, Double((v>>8)&0xFF)/255, Double(v&0xFF)/255)
+        default: (r,g,b,a) = (0,0,0,1)
+        }
+        self.init(.sRGB, red: r, green: g, blue: b, opacity: a)
+    }
+}
+
+
 struct SignInView: View {
     let onAuthenticated: () -> Void
     @State private var isBusy = false
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 24) {
-                Spacer()
-                Image("AppLogo").resizable().scaledToFit().frame(width: 140, height: 140)
+        ZStack {
+            // Black → Russian violet (#2E003E). Swap the array to flip direction.
+            LinearGradient(
+                gradient: Gradient(colors: [.black, Color(hex: "#2E003E")]),
+                startPoint: .top, endPoint: .bottom
+            )
+            .ignoresSafeArea()
 
-                Button {
-                    Task {
-                        guard !isBusy else { return }
-                        isBusy = true; defer { isBusy = false }
+            NavigationStack {
+                VStack(spacing: 24) {
+                    Spacer()
+                    Image("RangleySticker")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 200, height: 200)
 
-                        // TODO: replace with your real sign-in UI/flow
-                        // Example (if you add text fields later):
-                        // let _ = try await Amplify.Auth.signIn(username: user, password: pass)
-                        // let s = try await Amplify.Auth.fetchAuthSession()
-                        // guard s.isSignedIn else { return }
-                        onAuthenticated()
+                    Button {
+                        Task {
+                            guard !isBusy else { return }
+                            isBusy = true; defer { isBusy = false }
+                            onAuthenticated()
+                        }
+                    } label: {
+                        HStack {
+                            if isBusy { ProgressView() }
+                            Text(isBusy ? "Signing in…" : "Sign In").bold()
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
                     }
-                } label: {
-                    HStack { if isBusy { ProgressView() }; Text(isBusy ? "Signing in…" : "Sign In").bold() }
-                        .frame(maxWidth: .infinity).padding(.vertical, 16)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(isBusy)
-                .padding(.horizontal, 20)
+                    .buttonStyle(.borderedProminent)
+                    .tint(AppPalette.Purples.pigNeonPink)
+                    .foregroundStyle(.black)
+                    .padding(.horizontal, 20)
+                    .background(AppPalette.Purples.pigNeonPink, in: Capsule())
 
-                Spacer()
+                    Spacer()
 
-                NavigationLink("Create new account") {
-                    UserRegisterFlow()
+                    NavigationLink {
+                        UserRegisterFlow()
+                    } label: {
+                        Text("Create new account")
+                            .font(.headline.weight(.semibold))
+                            .padding(.vertical, 14)
+                            .frame(maxWidth: .infinity)
+                            .background(Color(hex: "#2E003E"), in: Capsule())
+                            .foregroundStyle(.white)
+                            .shadow(radius: 6, x: 0, y: 2)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 24)
                 }
-                .font(.subheadline.weight(.semibold))
-                .padding(.bottom, 24)
+                .padding(.horizontal, 16)
+                .toolbar {
+                    ToolbarItem(placement: .principal) {
+                        Text("Welcome").font(.headline).foregroundStyle(.white)
+                    }
+                }
+                // Make sure the nav bar doesn’t cover the gradient
+                .toolbarBackground(.hidden, for: .navigationBar)
             }
-            .padding(.horizontal, 16)
-            .toolbar { ToolbarItem(placement: .principal) { Text("Welcome").font(.headline) } }
         }
+        .preferredColorScheme(.dark)
     }
 }
 
