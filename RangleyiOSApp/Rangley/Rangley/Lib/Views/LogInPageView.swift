@@ -25,7 +25,8 @@ fileprivate func explainAuth(_ error: Error) -> String
     return String(describing: error)
 }
 
-fileprivate enum BannerState: Equatable {
+fileprivate enum BannerState: Equatable
+{
     case none, info(String), error(String), success(String)
 }
 
@@ -97,7 +98,8 @@ struct LogInPageView: View
     enum Route: Hashable { case map }
     @State private var path = NavigationPath()
 
-    var body: some View {
+    var body: some View
+    {
         NavigationStack(path: $path) {
             VStack(spacing: 0) {
                 Spacer()
@@ -190,6 +192,8 @@ struct LogInPageView: View
                 case .map:
                     PublicMapView()
                         .navigationBarBackButtonHidden(true)
+                        .toolbar(.hidden, for: .navigationBar)            // ← hide bar
+                        .toolbarBackground(.hidden, for: .navigationBar)  // ← hide its bg
                 }
             }
         }

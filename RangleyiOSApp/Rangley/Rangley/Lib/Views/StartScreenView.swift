@@ -56,7 +56,7 @@ struct StartScreenView: View
                 Spacer()
 
                 NavigationLink {
-                    UserRegisterFlow()
+                    UserRegisterNoCodeFlow()
                 } label: {
                     Text("Create new account")
                         .font(.system(size: 18, weight: .semibold))     // slightly smaller

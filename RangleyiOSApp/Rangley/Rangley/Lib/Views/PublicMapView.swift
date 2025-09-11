@@ -8,8 +8,9 @@ import CoreLocation
 import MapKit
 import SwiftUI
 import Foundation
-import SQLite3
-
+import SQLite3 // TODO: remove this when all the sqlite logic is gone
+import Amplify
+import UIKit
 
 private enum ActiveSheet: Identifiable, Equatable {
     case CreateMeet
@@ -24,7 +25,8 @@ private enum ActiveSheet: Identifiable, Equatable {
 }
 
 
-public struct PublicMapView: View {
+public struct PublicMapView: View
+{
     
     // TODO: userManager is a temp solution to not having a session and knowing who is logged in
    // @EnvironmentObject var userManager: UserManager
@@ -133,7 +135,8 @@ public struct PublicMapView: View {
     // =========================================================
     // MARK: - Anchored popup view (PLACE THIS HERE, inside PublicMapView)
     // =========================================================
-    private struct AnchoredMeetCard: View {
+    private struct AnchoredMeetCard: View
+    {
         let meet: MeetCardData
         let anchor: CGPoint
         let mapSize: CGSize
@@ -185,16 +188,36 @@ public struct PublicMapView: View {
     }
 
 
+    // =========================================================
+    // MARK: - Hamburger Menu
+    // =========================================================
+    
+    @State private var showStart        = false
+    @State private var signingOut       = false
+    @State private var confirmSignOut   = false
+    
+    private func signOutAndGoStart() {
+        Task {
+            guard !signingOut else { return }
+            signingOut = true; defer { signingOut = false }
+            _ = await Amplify.Auth.signOut()
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            showStart = true
+        }
+    }
 
+    // =========================================================
+    // MARK: - END Hamburger Menu
+    // =========================================================
+    
+    
     // =========================================================
     // MARK: - Body (your existing body stays below)
     // =========================================================
-
-    
-    // MARK: - Body
-    
-    public var body: some View {
-        ZStack {
+    public var body: some View
+    {
+        ZStack
+        {
             GeometryReader{ geo in
                 MapReader{ proxy in
                     Map(position: $cameraPosition) {
@@ -360,8 +383,31 @@ public struct PublicMapView: View {
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .toolbarBackground(.visible, for: .tabBar)
         .toolbarColorScheme(.dark, for: .tabBar)
-        // ONE sheet for everything
-        .sheet(item: $activeSheet) { which in
+        .safeAreaInset(edge: .bottom)
+        {
+            HStack {
+                Spacer()
+                HamburgerMenu { signOutAndGoStart() }
+                    .padding(.trailing, 16)
+            }
+            .padding(.bottom, 8)
+        }
+        .confirmationDialog("Sign out?", isPresented: $confirmSignOut) // TODO: fix not working
+        {
+            Button("Sign Out", role: .destructive) { signOutAndGoStart() }
+            Button("Cancel", role: .cancel) { }
+        }
+        // Full-screen handoff to StartScreenView after sign-out
+        .fullScreenCover(isPresented: $showStart)
+        {
+            StartScreenView(onAuthenticated: {      // ← add this
+                showStart = false                   // dismiss after successful auth
+            })
+            .preferredColorScheme(.dark)
+        }
+
+        .sheet(item: $activeSheet)
+        { which in
             switch which {
             case .CreateMeet:
                 NavigationView {
@@ -376,8 +422,9 @@ public struct PublicMapView: View {
                 EmptyView()
             }
         }
+        .preferredColorScheme(.dark)
     }
-
+    
     // MARK: - END Body
     
     private func handleDeleteMeet(_ deleted: MeetCardData) {
@@ -444,14 +491,7 @@ public struct PublicMapView: View {
             return nil
         }
     }
-    
-    private func loadMeets()
-    {
-        let (rows, err) = DbRangle.tryViewMeetCardData(DbManager.shared.database!)
-        if let err { print("Error loading meets: \(err.localizedDescription)") }
-        self.meetDisplays = rows
-    }
-    
+
     // MARK: - END Utilities
 
 }
