@@ -45,9 +45,6 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
-				Lib/DatabaseSchema/Delete.txt,
-				Lib/DatabaseSchema/LookupInserts.txt,
-				Lib/DatabaseSchema/UserInsert.txt,
 				Lib/Deprecated/DbInserts.txt,
 				Lib/Deprecated/LibraryIssues_READ.txt,
 				Lib/Utilities/HelpfulComments.txt,

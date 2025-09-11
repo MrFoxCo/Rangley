@@ -12,26 +12,10 @@ import SQLite3 // TODO: remove this when all the sqlite logic is gone
 import Amplify
 import UIKit
 
-private enum ActiveSheet: Identifiable, Equatable {
-    case CreateMeet
-    case Meet(MeetCardData)
-
-    var id: String {
-        switch self {
-        case .CreateMeet: return "create"
-        case .Meet(let m): return "meet:\(m.id)"
-        }
-    }
-}
 
 
 public struct PublicMapView: View
 {
-    
-    // TODO: userManager is a temp solution to not having a session and knowing who is logged in
-   // @EnvironmentObject var userManager: UserManager
-    
-    
     // MARK: - Map Location
     
     // TODO: Place it at the Users location ... or their last location if unknown
@@ -51,35 +35,7 @@ public struct PublicMapView: View
     @State private var selectedCoordinate   : CLLocationCoordinate2D?
     @State private var selectedLocationInfo : LocationInfo?
         
-    // MARK: - MEET POPUP CARD Objects
-    @State private var selectedMeetCardToView    : MeetCardData?  = nil          // popup
-    
-    //TODO: Now we have to delete from this?? or do we want to reload it???
-    // 1) Track a reload token to avoid hammering DB
-    @State private var meetDisplays             : [MeetCardData]    = [] // should this be in a class?? or struct???
-    @State private var needsReloadAfterDelete   : Bool             = false
-    @State private var modifyMeetBatch          : ModifyMeetBatch? = nil // if need to modify mee
 
-    // MARK: - END MEET POPUP CARD Objects
-
-
-    // MARK: MEET CREATE CARD
-    @State private var createDraft = CreateMeetDraft()           // for CreateMeetCard
-
-    
-    // MARK: - TAPPABLE ANNOTATIONS
-    @State private var activeSheet: ActiveSheet?
-
-    // Option 1: Separate @State variables (Recommended)
-
-    @State private var error: Error?
-    
-    // TODO: Consider creating some meetbatch class
-    @State private var currentMeetBatch = MeetBatch(
-        User: User(UserId: 0,FirstName: "",LastName: "",CellPhone: "",Email: "",UID: "")
-    )
-    @State private var currentMeetAddressId     : Int64?
-    @State private var currentMeetId            : Int64?
 
     
     // Keep this in PublicMapView so helpers can see it
@@ -132,60 +88,6 @@ public struct PublicMapView: View
         }
     }
 
-    // =========================================================
-    // MARK: - Anchored popup view (PLACE THIS HERE, inside PublicMapView)
-    // =========================================================
-    private struct AnchoredMeetCard: View
-    {
-        let meet: MeetCardData
-        let anchor: CGPoint
-        let mapSize: CGSize
-        let safeInsets: EdgeInsets
-        var onClose: () -> Void
-        var onDelete: (MeetCardData) -> Void
-
-        private static func cardCenter(anchor: CGPoint, mapSize: CGSize, safeInsets: EdgeInsets) -> CGPoint
-        {
-            let minX = safeInsets.leading + PopupMetrics.buffer
-            let maxX = mapSize.width  - safeInsets.trailing - PopupMetrics.buffer - PopupMetrics.cardW
-            let minY = safeInsets.top + PopupMetrics.buffer
-            let maxY = mapSize.height - safeInsets.bottom   - PopupMetrics.buffer - PopupMetrics.cardH
-
-            let midY = (safeInsets.top + (mapSize.height - safeInsets.bottom)) / 2
-            let pinHalf = PopupMetrics.pinHeight / 2
-            let placeBelow = (anchor.y <= midY)
-
-            // base placement
-            let rawTopY: CGFloat = placeBelow
-                ? (anchor.y + pinHalf + PopupMetrics.clearance)                      // BELOW pin
-                : (anchor.y - pinHalf - PopupMetrics.clearance - PopupMetrics.cardH) // ABOVE pin
-
-            // bump up more when placing ABOVE
-            let aboveBumpFactor: CGFloat = 2.0
-            let adjustedTopY = placeBelow ? rawTopY : (rawTopY - aboveBumpFactor * PopupMetrics.pinHeight)
-
-            let rawLeftX = anchor.x - (PopupMetrics.cardW / 2)
-
-            let clampedX = max(min(rawLeftX, maxX), minX)
-            let clampedY = max(min(adjustedTopY,  maxY), minY)
-
-            return CGPoint(x: clampedX + PopupMetrics.cardW/2,
-                           y: clampedY + PopupMetrics.cardH/2)
-        }
-
-        var body: some View {
-            let center = Self.cardCenter(anchor: anchor, mapSize: mapSize, safeInsets: safeInsets)
-
-            MeetCardView(
-                meetCardData: meet,
-                onCloseMeetCard: { _ in onClose() },
-                onDeleteMeet: { m in onDelete(m) }
-            )
-            .frame(width: PopupMetrics.cardW, height: PopupMetrics.cardH)
-            .position(center)
-            .shadow(color: .black.opacity(0.28), radius: 18, x: 0, y: 8)
-        }
-    }
 
 
     // =========================================================
@@ -221,165 +123,33 @@ public struct PublicMapView: View
             GeometryReader{ geo in
                 MapReader{ proxy in
                     Map(position: $cameraPosition) {
-                        MeetPinsMapContent(Meets: meetDisplays) { m in
-                            isPlacingEvent = false
 
-                            let coord = CLLocationCoordinate2D(latitude: m.Latitude, longitude: m.Longitude)
-                            selectedCoordinate = coord
-
-                            if let pt = proxy.convert(coord, to: .local) {
-                                // Nudge the map if the pin is hugging an edge (Rule 3)
-                                maybeNudgeForEdgeBuffer(
-                                    anchor: pt,
-                                    size: geo.size,
-                                    insets: geo.safeAreaInsets,
-                                    proxy: proxy
-                                )
-                                selectedAnchor = pt
-                            }
-
-                            selectedMeetCardToView = m
-                        }
                     }
                     // Map tap should only create when placing, and not if a sheet is already up
                     .gesture(
                         SpatialTapGesture().onEnded { value in
                             // Don’t queue another sheet if one is already up
-                            guard activeSheet == nil else { return }
+
                             
                             let position = value.location
                             if let coordinate = proxy.convert(position, from: .local) {
                                 let geocoder = CLGeocoder()
                                 let location = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
-                                
-//                                Task {
-//                                    guard
-//                                        let li   = await createLocationInfoObject(geocoder, location),
-//                                        let _ = "aa"
-//                                    else { return }
-//                                    
-//                                    // load dynamic categories once (outside MainActor)
-//                                    let cats = DbRangle.loadCategories(DbManager.shared.database)
-//                                    let initialCategory = UserDefaults.standard.string(forKey: "lastCategory")
-//                                    ?? cats.first?.Name ?? ""
-//                                    
-//                                    await MainActor.run {
-//                                        currentMeetBatch.LocationInfo = li
-//
-//
-//                                        createDraft = CreateMeetDraft(
-//                                            name        : "",
-//                                            notes       : "",
-//                                            categoryName: initialCategory,                 // <-- dynamic
-//                                            dttmStart   : Date().addingTimeInterval(60*30),
-//                                            dttmEnd     :   Date().addingTimeInterval(60*90),
-//                                            capacity    : 4,
-//                                            placeName   : li.Name ?? li.Locality
-//                                        )
-//                                        
-//                                        activeSheet = .CreateMeet
-//                                    }
-//                                    
-//                                }
+
                             }
                         }
                     )
                     
                     .ignoresSafeArea()
-                    .onMapCameraChange(frequency: .onEnd) { context in
-                        visibleRegion = context.region
-                        lastSpan = context.region.span
-                        // keep the callout following the pin when the map moves
-                        if let coord = selectedCoordinate, selectedMeetCardToView != nil,
-                           let pt = proxy.convert(coord, to: .local) {
-                            selectedAnchor = pt
-                        }
 
-                    }
-
-                    .onAppear {
-                        //                    if let u = userManager.anthony { currentMeetBatch.User = u }
-                        loadMeets()
-                    }
                     .tabItem {
                         Image(systemName: "map")
                         Text("Map")
                     }
                 }
-                // FULL SCREEN TARGET TO DISMISS
-                .overlay {
-                    
-                    if let m = selectedMeetCardToView, let anchor = selectedAnchor {
-                        ZStack {
-                            Color.clear
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
-                                        selectedMeetCardToView = nil
-                                        selectedAnchor = nil
-                                    }
-                                }
-//                            print("anchorY:", anchor.y, "midY:", (safeInsets.top + (mapSize.height - safeInsets.bottom))/2,
-//                                  "pinHalf:", PopupMetrics.pinHeight/2, "placeBelow:", anchor.y <= (safeInsets.top + (mapSize.height - safeInsets.bottom))/2)
 
-                            AnchoredMeetCard(
-                                meet: m,
-                                anchor: anchor,
-                                mapSize: geo.size,
-                                safeInsets: geo.safeAreaInsets,
-                                onClose: {
-                                    withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
-                                        selectedMeetCardToView = nil
-                                        selectedAnchor = nil
-                                    }
-                                },
-                                onDelete: { deleted in
-                                    handleDeleteMeet(deleted)
-                                }
-                            )
-                        }
-                        .allowsHitTesting(true)
-                    }
-                }
             }
-
-            // TODO: ADD THE ACTION BAR IT SHOULD WORK ALSO ADD BUTTONS...
-//
-//            VStack {
-//                Spacer()
-//                ActionBar(isPlacingEvent: $isPlacingEvent)
-//                    .padding(.bottom, 40)
-//            }
-            
-            
-//            // TODO: this is blocking the compass that appears when you two finger rotate screen...
-//            .safeAreaInset(edge: .top) {
-//                DateWheel()
-//            }
         }
-
-//        .meetPopup(
-//            item: $selectedMeetCardToView,
-//            onCloseMeetCard: { _ in
-//                // just dismiss / no DB change
-//                withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
-//                    selectedMeetCardToView = nil
-//                }
-//            },
-//            onDeleteMeet: { deleted in
-//                // DB delete already happened inside MeetCard.
-//                // Here, refresh UI / local cache.
-//                if let idx = meetDisplays.firstIndex(where: { $0.id == deleted.id }) {
-//                    meetDisplays.remove(at: idx)
-//                }
-//                // Or just reload from DB:
-//                // loadMeets()
-//
-//                withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
-//                    selectedMeetCardToView = nil
-//                }
-//            }
-//        )
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .toolbarBackground(.visible, for: .tabBar)
         .toolbarColorScheme(.dark, for: .tabBar)
@@ -405,37 +175,12 @@ public struct PublicMapView: View
             })
             .preferredColorScheme(.dark)
         }
-
-        .sheet(item: $activeSheet)
-        { which in
-            switch which {
-            case .CreateMeet:
-                NavigationView {
-                    CreateMeet(meetBatch: currentMeetBatch) {
-                        loadMeets()  // refresh pins on save
-                    }
-                }
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
-
-            case .Meet:
-                EmptyView()
-            }
-        }
         .preferredColorScheme(.dark)
     }
     
     // MARK: - END Body
     
-    private func handleDeleteMeet(_ deleted: MeetCardData) {
-        if let idx = meetDisplays.firstIndex(where: { $0.id == deleted.id }) {
-            meetDisplays.remove(at: idx)
-        }
-        withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
-            selectedMeetCardToView = nil
-            selectedAnchor = nil
-        }
-    }
+
 
     
     // THIS IS FIRST THING GENERATED NEED FOR MEET CREATION
