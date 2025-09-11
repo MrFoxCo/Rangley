@@ -19,7 +19,7 @@ struct RootGate: View {
             } else if isAuthed {
                 PublicMapView()
             } else {
-                SignInView(onAuthenticated: { isAuthed = true })
+                StartScreenView(onAuthenticated: { isAuthed = true })
             }
         }
     }

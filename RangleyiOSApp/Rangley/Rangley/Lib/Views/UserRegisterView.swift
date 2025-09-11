@@ -36,8 +36,8 @@ private struct FormState: Equatable
     var email: String = ""
     var password: String = ""
     var displayName: String = ""
-    var handle: String = ""
-    var dobDate: Date = .init(timeIntervalSince1970: 0)
+    var username: String = ""
+    var dob: Date = .init(timeIntervalSince1970: 0)
 }
 
 private enum Step: Hashable
@@ -47,7 +47,8 @@ private enum Step: Hashable
     case verify(String?)   // NOTE: no label to avoid tuple-with-label error
     case password
     case display
-    case handleDob
+    case username
+    case dob
     case agree
     case done
 }
@@ -192,8 +193,8 @@ private final class RegisterVM: ObservableObject
         principal != nil
         && passwordScore.ok
         && !form.displayName.trimmingCharacters(in: .whitespaces).isEmpty
-        && !form.handle.trimmingCharacters(in: .whitespaces).isEmpty
-        && is13OrOlder(form.dobDate)
+        && !form.username.trimmingCharacters(in: .whitespaces).isEmpty
+        && is13OrOlder(form.dob)
     }
 
     private func is13OrOlder(_ dob: Date) -> Bool
@@ -212,8 +213,9 @@ private final class RegisterVM: ObservableObject
 //            case .email // setup email
             case .password: flow = .collecting(.cellphone)
             case .display: flow = .collecting(.password)
-            case .handleDob: flow = .collecting(.display)
-            case .agree: flow = .collecting(.handleDob)
+            case .username: flow = .collecting(.display)
+            case .dob: flow = .collecting(.display)
+            case .agree: flow = .collecting(.dob)
             case .verify: flow = .collecting(.agree)
             case .done: break
             }
@@ -256,16 +258,26 @@ private final class RegisterVM: ObservableObject
             return
         }
         banner = .none
-        flow = .collecting(.handleDob)
+        flow = .collecting(.dob)
     }
 
-    func advanceFromHandleDob()
+    func advanceFromUsername()
     {
-        guard !form.handle.trimmingCharacters(in: .whitespaces).isEmpty else {
+        guard !form.username.trimmingCharacters(in: .whitespaces).isEmpty else {
             banner = .error("Pick a username.")
             return
         }
-        guard is13OrOlder(form.dobDate) else {
+        guard is13OrOlder(form.dob) else {
+            banner = .error("You must be at least 13 years old.")
+            return
+        }
+        banner = .none
+        flow = .collecting(.agree)
+    }
+    
+    func advanceFromDob()
+    {
+        guard is13OrOlder(form.dob) else {
             banner = .error("You must be at least 13 years old.")
             return
         }
@@ -293,7 +305,7 @@ private final class RegisterVM: ObservableObject
             var attrs: [AuthUserAttribute] = []
             if emailValid { attrs.append(.init(.email, value: form.email)) }
             if let p = e164Phone { attrs.append(.init(.phoneNumber, value: p)) }
-            if !form.handle.isEmpty { attrs.append(.init(.preferredUsername, value: form.handle)) }
+            if !form.username.isEmpty { attrs.append(.init(.preferredUsername, value: form.username)) }
 
             let res = try await auth.signUp(username: principal, password: form.password, attributes: attrs)
 
@@ -378,11 +390,11 @@ private final class RegisterVM: ObservableObject
     {
         // Uses your existing AuthAPI + UserRegisterModel types
         let payload = UserRegisterModel(
-            username: form.handle,
+            username: form.username,
             display_name: form.displayName,
             cellphone: e164Phone,
             email: emailValid ? form.email : nil,
-            dob: df.string(from: form.dobDate),
+            dob: df.string(from: form.dob),
             first_name: nil,
             last_name: nil
         )
@@ -407,7 +419,6 @@ struct UserRegisterFlow: View
                 ToolbarItem(placement: .topBarLeading) {
                     if canGoBack { Button(action: vm.back) { Image(systemName: "chevron.left") } }
                 }
-                ToolbarItem(placement: .principal) { Text(titleForStep).font(.headline) }
             }
             .background(AppPalette.bgGradient.ignoresSafeArea()) // <- palette bg here
         }
@@ -437,10 +448,13 @@ struct UserRegisterFlow: View
                 displayName: $vm.form.displayName,
                 onNext: vm.advanceFromDisplay
             )
-            case .handleDob: HandleDobStep(
-                handle: $vm.form.handle,
-                dob: $vm.form.dobDate,
-                onNext: vm.advanceFromHandleDob
+            case .username: UsernameStep(
+                username: $vm.form.username,
+                onNext: vm.advanceFromUsername
+            )
+            case .dob: DobStep(
+                dob: $vm.form.dob,
+                onNext: vm.advanceFromDob
             )
             case .agree: AgreeStep(
                 isBusy: vm.isBusy,
@@ -492,27 +506,6 @@ struct UserRegisterFlow: View
         }
     }
 
-    private var titleForStep: String
-    {
-        switch vm.flow {
-        case .collecting(let step):
-            switch step {
-            case .cellphone: return "Mobile Number" // this probably needs to be separate and called .phone
-//            case .email return "email"
-            case .password: return "Password"
-            case .display: return "Display name"
-            case .handleDob: return "Username"
-            case .agree: return "Create account"
-            case .verify: return "Verify"
-            case .done: return "Done"
-            }
-        case .awaitingVerification: return "Verify"
-        case .signingIn: return "Signing in"
-        case .signedIn: return "Done"
-        case .failed: return "Sign in"
-        }
-    }
-
     private var tokenPreview: String
     {
         if case let .signedIn(idToken) = vm.flow {
@@ -538,7 +531,8 @@ struct UserRegisterFlow: View
 
 // MARK: - Step Subviews
 
-private struct CellphoneStep: View {
+private struct CellphoneStep: View
+{
     @Binding var phoneRaw: String
     @Binding var email: String
     let emailValid: Bool
@@ -573,8 +567,9 @@ private struct CellphoneStep: View {
 
                 Text(.init("""
                 By continuing, you agree to our [Terms](https://mrfoxco.com/terms) and [Privacy Policy](https://mrfoxco.com/privacy) and consent to receive SMS from Rangley for account verification (OTP) and important account/security notices. Msg & data rates may apply. Reply STOP to opt out, HELP for help.
+                **Email regisration will be available next update**
                 """))
-                .font(.footnote)
+                .font(.subheadline)
                 .foregroundStyle(AppPalette.Text.tertiary)
                 .tint(AppPalette.Brand.neonPink)          // link color
 
@@ -591,11 +586,12 @@ private struct CellphoneStep: View {
 }
 
 
-private struct PasswordStep: View {
+private struct PasswordStep: View
+{
     @Binding var password: String
     let score: (ok: Bool, reasons: [String])
     let onNext: () -> Void
-
+    
     @FocusState private var passFocused: Bool
 
     var body: some View {
@@ -626,10 +622,17 @@ private struct PasswordStep: View {
                 rule("1 special (!@#…)", password.range(of: #"[^A-Za-z0-9]"#, options: .regularExpression) != nil)
                 rule("No leading/trailing spaces", password.range(of: #"^\S+.*\S+$"#, options: .regularExpression) != nil)
             }
-
+//            if let p = e164Phone, !p.isEmpty {
+//                Text("Formatted as \(p)").font(.footnote)
+//                    .foregroundStyle(AppPalette.Text.secondary)
+//            } else if !phoneRaw.isEmpty {
+//                Text("Tip: use + and digits only").font(.footnote)
+//                    .foregroundStyle(AppPalette.Text.secondary)
+//            }
             Button(action: onNext) { Text("Next") }
                 .buttonStyle(PrimaryCapsuleButton())
                 .disabled(!score.ok)
+                .opacity(score.ok ? 1 : 0.45)
                 .padding(.top, 10)
 
             Spacer(minLength: 0)
@@ -645,7 +648,8 @@ private struct PasswordStep: View {
 }
 
 
-private struct DisplayStep: View {
+private struct DisplayStep: View
+{
     @Binding var displayName: String
     let onNext: () -> Void
     @FocusState private var focused: Bool
@@ -668,9 +672,12 @@ private struct DisplayStep: View {
             .focused($focused)
             .darkField(focused: focused)
 
+            let isNameFilled = !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+
             Button(action: onNext) { Text("Next") }
                 .buttonStyle(PrimaryCapsuleButton())
-                .disabled(displayName.trimmingCharacters(in: .whitespaces).isEmpty)
+                .disabled(!isNameFilled)
+                .opacity(isNameFilled ? 1 : 0.45)
                 .padding(.top, 10)
 
             Spacer(minLength: 0)
@@ -680,9 +687,9 @@ private struct DisplayStep: View {
 }
 
 
-private struct HandleDobStep: View {
-    @Binding var handle: String
-    @Binding var dob: Date
+private struct UsernameStep: View
+{
+    @Binding var username: String
     let onNext: () -> Void
 
     @FocusState private var handleFocused: Bool
@@ -694,8 +701,8 @@ private struct HandleDobStep: View {
                 .foregroundStyle(AppPalette.Text.primary)
 
             TextField(
-                "", text: $handle,
-                prompt: Text("username (handle)").foregroundStyle(.white.opacity(0.95))
+                "", text: $username,
+                prompt: Text("username").foregroundStyle(.white.opacity(0.95))
             )
             .textFieldStyle(.plain)
             .textInputAutocapitalization(.never)
@@ -705,11 +712,35 @@ private struct HandleDobStep: View {
             .tint(AppPalette.Brand.neonPink)
             .focused($handleFocused)
             .darkField(focused: handleFocused)
+            
+            Button(action: onNext) { Text("Next") }
+                .buttonStyle(PrimaryCapsuleButton())
+                .disabled(username.trimmingCharacters(in: .whitespaces).isEmpty)
+                .padding(.top, 10)
 
-            Text("DOB (≥13 yrs)")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(AppPalette.Text.secondary)
+            Spacer(minLength: 0)
+        }
+        .padding(16)
+    }
+}
 
+private struct DobStep: View
+{
+    @Binding var dob: Date
+    let onNext: () -> Void
+
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("What's your birthday?")
+                .font(.title2.bold())
+                .foregroundStyle(AppPalette.Text.primary)
+            Text(.init("""
+            Use your real date of birth. We use it only to confirm eligibility (13+) and safety; it isn’t shown publicly by default. [Why do we ask?](https://mrfoxco.com/privacy#dob)
+            """))
+            .font(.subheadline)
+            .foregroundStyle(AppPalette.Text.tertiary)
+            .tint(AppPalette.Brand.neonPink)          // link color
             // Skinned DatePicker to match fields
             DatePicker("", selection: $dob, displayedComponents: .date)
                 .labelsHidden()
@@ -727,7 +758,6 @@ private struct HandleDobStep: View {
 
             Button(action: onNext) { Text("Next") }
                 .buttonStyle(PrimaryCapsuleButton())
-                .disabled(handle.trimmingCharacters(in: .whitespaces).isEmpty)
                 .padding(.top, 10)
 
             Spacer(minLength: 0)
@@ -736,8 +766,8 @@ private struct HandleDobStep: View {
     }
 }
 
-
-private struct AgreeStep: View {
+private struct AgreeStep: View
+{
     let isBusy: Bool
     let canCreate: Bool
     let onCreate: () -> Void
@@ -751,7 +781,7 @@ private struct AgreeStep: View {
             Text(.init("""
             By tapping **I agree** you agree to create an account and to Rangley's [Terms](https://mrfoxco.com/terms) & [Privacy Policy](https://mrfoxco.com/privacy).
 
-            We use your phone and (if enabled) location to verify your account and show if you’re **near** an event or **at** it using a geofence. Other users see only “nearby” or “checked in” — never your exact location unless you check in. We don’t use your info for ads.
+            We use your phone and (if enabled) location to verify your account and show if you’re **near** an event or **at** it using a geofence. Other users see only “checked in”, never your exact location unless you check in. We don’t use your info for ads.
             """))
             .font(.subheadline)
             .foregroundStyle(AppPalette.Text.tertiary)

@@ -33,6 +33,7 @@
 /* Begin PBXFileReference section */
 		65052A212E14ECCF00DD3D81 /* config.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = config.json; sourceTree = "<group>"; };
 		6550883E2E1AE49F004F48A3 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
+		655F25272E732D820097AC05 /* TODO.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = TODO.md; sourceTree = "<group>"; };
 		65CD85012E146C8D0095C7F3 /* .gitignore */ = {isa = PBXFileReference; lastKnownFileType = text; path = .gitignore; sourceTree = "<group>"; };
 		65FAB4502E1468F0004AFBE8 /* Rangley.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Rangley.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		65FAB45E2E1468F1004AFBE8 /* RangleyTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RangleyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -129,6 +130,7 @@
 				65FAB4512E1468F0004AFBE8 /* Products */,
 				65CD85012E146C8D0095C7F3 /* .gitignore */,
 				65052A212E14ECCF00DD3D81 /* config.json */,
+				655F25272E732D820097AC05 /* TODO.md */,
 				6550883E2E1AE49F004F48A3 /* README.md */,
 				655F250F2E68D7A80097AC05 /* Frameworks */,
 			);

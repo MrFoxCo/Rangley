@@ -302,6 +302,6 @@ Useful for “log out of other devices,” analytics, and support.
  * /
 
 
-
+select * from rangley.vw_meets;
 
 

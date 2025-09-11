@@ -25,34 +25,33 @@ extension Color {
 }
 
 
-struct SignInView: View {
+struct StartScreenView: View
+{
     let onAuthenticated: () -> Void
     @State private var isBusy = false
 
-    var body: some View {
+    var body: some View
+    {
         NavigationStack {
             VStack(spacing: 24)
             {
                 Spacer()
                 Image("RangleySticker")
                     .resizable().scaledToFit().frame(width: 200, height: 200)
+                
+                let neonPink = AppPalette.Brand.neonPink
 
-                Button {
-                    Task {
-                        guard !isBusy else { return }
-                        isBusy = true; defer { isBusy = false }
-                        onAuthenticated()
-                    }
+                NavigationLink {
+                    LogInPageView()
                 } label: {
-                    HStack { if isBusy { ProgressView() }
-                        Text(isBusy ? "Signing in…" : "Sign In").bold()
+                    HStack {
+                        Text("Log In").font(.system(size: 25, weight: .semibold))
                     }
-                    .frame(maxWidth: .infinity).padding(.vertical, 16)
+
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(AppPalette.Brand.pigNeonPink)
-                .foregroundStyle(.black)
                 .padding(.horizontal, 20)
+                .buttonStyle(OutlineCapsuleButton(color: neonPink))
+                // ensure text is neon
 
                 Spacer()
 
@@ -60,35 +59,37 @@ struct SignInView: View {
                     UserRegisterFlow()
                 } label: {
                     Text("Create new account")
-                        .font(.headline.weight(.semibold))
+                        .font(.system(size: 18, weight: .semibold))     // slightly smaller
+                        .kerning(0.2)
+                        .foregroundStyle(.white.opacity(0.98))
                         .padding(.vertical, 14)
                         .frame(maxWidth: .infinity)
-                        .background(Color(hex: "#2E003E"), in: Capsule())
-                        .foregroundStyle(.white)
-                        .shadow(radius: 6, x: 0, y: 2)
+                        .background(
+                            Capsule().fill(
+                                LinearGradient(
+                                    colors: [AppPalette.Brand.violetMid.opacity(0.98),
+                                             AppPalette.Brand.russianViolet.opacity(0.98)],
+                                    startPoint: .top, endPoint: .bottom
+                                )
+                            )
+                        )
+                        .overlay(Capsule().stroke(Color.white.opacity(0.22), lineWidth: 1))
+                        .shadow(color: .black.opacity(0.55), radius: 12, y: 6)
+                        .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 24)
+
+
             }
             .padding(.horizontal, 16)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Text("Welcome").font(.headline).foregroundStyle(.white)
-                }
-            }
-            .background(
-                LinearGradient(
-                    gradient: Gradient(colors: [
-                        Color(hex: "#2E003E"),
-                        Color(hex: "#2E003E"),
-                        Color(hex: "#2E003E"),
-                        .black
-
-                    ]),
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
+            // We don't want title
+//            .toolbar {
+//                ToolbarItem(placement: .principal) {
+//                    Text("Welcome").font(.headline).foregroundStyle(.white)
+//                }
+//            }
+            .background(AppPalette.bgGradient.ignoresSafeArea()) 
         }
         // <- THIS is what makes it show
         .toolbarBackground(.clear, for: .navigationBar)  // keep the bar transparent
@@ -98,4 +99,4 @@ struct SignInView: View {
 }
 
 
-#Preview { SignInView(onAuthenticated: {}) }
+#Preview { StartScreenView(onAuthenticated: {}) }

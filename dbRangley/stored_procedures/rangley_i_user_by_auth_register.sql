@@ -47,7 +47,7 @@ BEGIN
     ,'a.asldjfalsdkj.banana'
     ,'HISISWORKING'
     ,'ORKING '
-    ,'+10881112222'
+    ,'10881112222'
     ,'baana@f.com'
     ,'1999-01-01'
     ,'trry'
@@ -57,6 +57,8 @@ BEGIN
 END $$;
 
 select * from rangley.vw_users;
+
+delete from rangley.tb_users where user_id between 4 and 50;
 
 
 
