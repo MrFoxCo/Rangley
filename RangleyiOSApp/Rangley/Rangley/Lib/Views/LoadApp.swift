@@ -42,3 +42,6 @@ struct LoadApp: View {
 }
 
 // Hex Color Extension
+#Preview {
+    LoadApp()
+}

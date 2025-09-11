@@ -409,6 +409,7 @@ struct UserRegisterFlow: View
                 }
                 ToolbarItem(placement: .principal) { Text(titleForStep).font(.headline) }
             }
+            .background(AppPalette.bgGradient.ignoresSafeArea()) // <- palette bg here
         }
     }
 
@@ -537,56 +538,50 @@ struct UserRegisterFlow: View
 
 // MARK: - Step Subviews
 
-private struct CellphoneStep: View
-{
+private struct CellphoneStep: View {
     @Binding var phoneRaw: String
     @Binding var email: String
     let emailValid: Bool
     let e164Phone: String?
     let onNext: () -> Void
     let canContinue : Bool
-    
+
+    @FocusState private var phoneFocused: Bool
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                Text("Please Enter Phone").font(.title2.bold())
+                Text("Please Enter Phone")
+                    .font(.title2.bold())
+                    .foregroundStyle(AppPalette.Text.primary)
 
                 TextField("Mobile Number (+13125551234)", text: $phoneRaw)
                     .keyboardType(.phonePad)
-                    .textFieldStyle(.roundedBorder)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .textFieldStyle(.plain)                 // <- ditch the white default
+                    .focused($phoneFocused)
+                    .darkField(focused: phoneFocused)
 
                 if let p = e164Phone, !p.isEmpty {
-                    Text("Formatted as \(p)").font(.footnote).foregroundStyle(.secondary)
+                    Text("Formatted as \(p)").font(.footnote)
+                        .foregroundStyle(AppPalette.Text.secondary)
                 } else if !phoneRaw.isEmpty {
-                    Text("Tip: use + and digits only").font(.footnote).foregroundStyle(.secondary)
+                    Text("Tip: use + and digits only").font(.footnote)
+                        .foregroundStyle(AppPalette.Text.secondary)
                 }
-                // TODO: - Add EMAIL
-//                TextField("Email (me@email.com)", text: $email)
-//                    .textInputAutocapitalization(.never)
-//                    .autocorrectionDisabled()
-//                    .keyboardType(.emailAddress)
-//                    .textFieldStyle(.roundedBorder)
+
                 Text(.init("""
                 By continuing, you agree to our [Terms](https://mrfoxco.com/terms) and [Privacy Policy](https://mrfoxco.com/privacy) and consent to receive SMS from Rangley for account verification (OTP) and important account/security notices. Msg & data rates may apply. Reply STOP to opt out, HELP for help.
                 """))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
+                .foregroundStyle(AppPalette.Text.tertiary)
+                .tint(AppPalette.Brand.neonPink)          // link color
 
-//                if !email.isEmpty && !emailValid {
-//                    Text("Enter a valid email like name@example.com")
-//                        .font(.footnote).foregroundStyle(.secondary)
-//                }
-
-                Button(action: onNext) {
-                    Text("Next")
-                        .frame(maxWidth: .infinity).padding(.vertical, 16)
-                        .font(.title3.weight(.semibold))
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(!canContinue)
-                .padding(.top, 10)
+                Button(action: onNext) { Text("Next") }
+                    .buttonStyle(PrimaryCapsuleButton())
+                    .disabled(!canContinue)
+                    .opacity(canContinue ? 1 : 0.45)
 
                 Spacer(minLength: 0)
             }
@@ -595,17 +590,33 @@ private struct CellphoneStep: View
     }
 }
 
-private struct PasswordStep: View
-{
+
+private struct PasswordStep: View {
     @Binding var password: String
     let score: (ok: Bool, reasons: [String])
     let onNext: () -> Void
 
+    @FocusState private var passFocused: Bool
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Create a password").font(.title2.bold())
-            SecureField("password", text: $password)
-                .textFieldStyle(.roundedBorder)
+            Text("Create a password")
+                .font(.title2.bold())
+                .foregroundStyle(AppPalette.Text.primary)
+
+            SecureField(
+                "", text: $password,
+                prompt: Text("Password").foregroundStyle(.white.opacity(0.95))
+            )
+            .textFieldStyle(.plain)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .textContentType(.newPassword)
+            .keyboardType(.default)
+            .foregroundColor(.white)
+            .tint(AppPalette.Brand.neonPink)
+            .focused($passFocused)
+            .darkField(focused: passFocused)
 
             VStack(alignment: .leading, spacing: 6) {
                 rule("≥ 8 characters", password.count >= 8)
@@ -616,14 +627,10 @@ private struct PasswordStep: View
                 rule("No leading/trailing spaces", password.range(of: #"^\S+.*\S+$"#, options: .regularExpression) != nil)
             }
 
-            Button(action: onNext) {
-                Text("Next")
-                    .frame(maxWidth: .infinity).padding(.vertical, 16)
-                    .font(.title3.weight(.semibold))
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(!score.ok)
-            .padding(.top, 10)
+            Button(action: onNext) { Text("Next") }
+                .buttonStyle(PrimaryCapsuleButton())
+                .disabled(!score.ok)
+                .padding(.top, 10)
 
             Spacer(minLength: 0)
         }
@@ -632,30 +639,39 @@ private struct PasswordStep: View
 
     @ViewBuilder private func rule(_ t: String, _ ok: Bool) -> some View {
         HStack { Image(systemName: ok ? "checkmark.circle.fill" : "xmark.circle"); Text(t) }
-            .foregroundStyle(ok ? .green : .secondary)
+            .foregroundStyle(ok ? .green : AppPalette.Text.secondary)
             .font(.footnote)
     }
 }
 
-private struct DisplayStep: View
-{
+
+private struct DisplayStep: View {
     @Binding var displayName: String
     let onNext: () -> Void
+    @FocusState private var focused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Choose a display name").font(.title2.bold())
-            TextField("display name", text: $displayName)
-                .textFieldStyle(.roundedBorder)
+            Text("Choose a display name")
+                .font(.title2.bold())
+                .foregroundStyle(AppPalette.Text.primary)
 
-            Button(action: onNext) {
-                Text("Next")
-                    .frame(maxWidth: .infinity).padding(.vertical, 16)
-                    .font(.title3.weight(.semibold))
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(displayName.trimmingCharacters(in: .whitespaces).isEmpty)
-            .padding(.top, 10)
+            TextField(
+                "", text: $displayName,
+                prompt: Text("Display name").foregroundStyle(.white.opacity(0.95))
+            )
+            .textFieldStyle(.plain)
+            .textInputAutocapitalization(.words)
+            .autocorrectionDisabled()
+            .foregroundColor(.white)
+            .tint(AppPalette.Brand.neonPink)
+            .focused($focused)
+            .darkField(focused: focused)
+
+            Button(action: onNext) { Text("Next") }
+                .buttonStyle(PrimaryCapsuleButton())
+                .disabled(displayName.trimmingCharacters(in: .whitespaces).isEmpty)
+                .padding(.top, 10)
 
             Spacer(minLength: 0)
         }
@@ -663,30 +679,56 @@ private struct DisplayStep: View
     }
 }
 
-private struct HandleDobStep: View
-{
+
+private struct HandleDobStep: View {
     @Binding var handle: String
     @Binding var dob: Date
     let onNext: () -> Void
 
+    @FocusState private var handleFocused: Bool
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Pick a username").font(.title2.bold())
-            TextField("username (handle)", text: $handle)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .textFieldStyle(.roundedBorder)
+            Text("Pick a username")
+                .font(.title2.bold())
+                .foregroundStyle(AppPalette.Text.primary)
 
-            DatePicker("DOB (≥13 yrs)", selection: $dob, displayedComponents: .date)
+            TextField(
+                "", text: $handle,
+                prompt: Text("username (handle)").foregroundStyle(.white.opacity(0.95))
+            )
+            .textFieldStyle(.plain)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .textContentType(.username)
+            .foregroundColor(.white)
+            .tint(AppPalette.Brand.neonPink)
+            .focused($handleFocused)
+            .darkField(focused: handleFocused)
 
-            Button(action: onNext) {
-                Text("Next")
-                    .frame(maxWidth: .infinity).padding(.vertical, 16)
-                    .font(.title3.weight(.semibold))
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(handle.trimmingCharacters(in: .whitespaces).isEmpty)
-            .padding(.top, 10)
+            Text("DOB (≥13 yrs)")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(AppPalette.Text.secondary)
+
+            // Skinned DatePicker to match fields
+            DatePicker("", selection: $dob, displayedComponents: .date)
+                .labelsHidden()
+                .tint(AppPalette.Brand.neonPink)
+                .colorScheme(.dark)
+                .padding(.horizontal, 12).padding(.vertical, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color.white.opacity(0.22))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(Color.white.opacity(0.5), lineWidth: 1)
+                )
+
+            Button(action: onNext) { Text("Next") }
+                .buttonStyle(PrimaryCapsuleButton())
+                .disabled(handle.trimmingCharacters(in: .whitespaces).isEmpty)
+                .padding(.top, 10)
 
             Spacer(minLength: 0)
         }
@@ -694,29 +736,32 @@ private struct HandleDobStep: View
     }
 }
 
-private struct AgreeStep: View
-{
+
+private struct AgreeStep: View {
     let isBusy: Bool
     let canCreate: Bool
     let onCreate: () -> Void
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Agree to Rangley's terms and policies").font(.title2.bold())
+            Text("Agree to Rangley's terms and policies")
+                .font(.title2.bold())
+                .foregroundStyle(AppPalette.Text.primary)
+
             Text(.init("""
             By tapping **I agree** you agree to create an account and to Rangley's [Terms](https://mrfoxco.com/terms) & [Privacy Policy](https://mrfoxco.com/privacy).
-            
-            Read our [Privacy Policy](https://mrfoxco.com/privacy). We use your phone and (if enabled) location to verify your account and show if you’re **near** an event or **at** it using a geofence. Other users see only “nearby” or “checked in” - never your exact location unless you check in. We don’t use your info for ads.
+
+            We use your phone and (if enabled) location to verify your account and show if you’re **near** an event or **at** it using a geofence. Other users see only “nearby” or “checked in” — never your exact location unless you check in. We don’t use your info for ads.
             """))
-                .font(.subheadline)
+            .font(.subheadline)
+            .foregroundStyle(AppPalette.Text.tertiary)
+            .tint(AppPalette.Brand.neonPink)
 
             Button(action: onCreate) {
-                HStack {
-                    if isBusy { ProgressView() }
-                    Text(isBusy ? "Creating…" : "I Agree").bold()
-                }
-                .frame(maxWidth: .infinity).padding(.vertical, 16)
+                HStack { if isBusy { ProgressView() }; Text(isBusy ? "Creating…" : "I Agree").bold() }
+                    .frame(maxWidth: .infinity).padding(.vertical, 16)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(PrimaryCapsuleButton())
             .disabled(isBusy || !canCreate)
 
             Spacer(minLength: 0)
@@ -725,29 +770,43 @@ private struct AgreeStep: View
     }
 }
 
+
 private struct VerifyStep: View
 {
     let dest: String?
     @Binding var code: String
     let isBusy: Bool
     let onConfirm: () -> Void
+
+    @FocusState private var codeFocused: Bool
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Verify your account").font(.title2.bold())
+            Text("Verify your account")
+                .font(.title2.bold())
+                .foregroundStyle(AppPalette.Text.primary)
+
             if let d = dest, !d.isEmpty {
                 Text("Enter the code sent to \(d).")
-                    .font(.footnote).foregroundStyle(.secondary)
+                    .font(.footnote)
+                    .foregroundStyle(AppPalette.Text.secondary)
             }
-            TextField("verification code", text: $code)
-                .textFieldStyle(.roundedBorder)
 
-            Button(action: onConfirm) {
-                Text("Confirm")
-                    .frame(maxWidth: .infinity).padding(.vertical, 16)
-                    .font(.title3.weight(.semibold))
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(code.trimmingCharacters(in: .whitespaces).isEmpty || isBusy)
+            TextField(
+                "", text: $code,
+                prompt: Text("Verification code").foregroundStyle(.white.opacity(0.95))
+            )
+            .keyboardType(.numberPad)
+            .textContentType(.oneTimeCode)
+            .textFieldStyle(.plain)
+            .foregroundColor(.white)
+            .tint(AppPalette.Brand.neonPink)
+            .focused($codeFocused)
+            .darkField(focused: codeFocused)
+
+            Button(action: onConfirm) { Text("Confirm") }
+                .buttonStyle(PrimaryCapsuleButton())
+                .disabled(code.trimmingCharacters(in: .whitespaces).isEmpty || isBusy)
 
             Spacer(minLength: 0)
         }
@@ -760,15 +819,21 @@ private struct DoneStep: View
     let idToken: String
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("All set!").font(.title2.bold())
+            Text("All set!")
+                .font(.title2.bold())
+                .foregroundStyle(AppPalette.Text.primary)
+
             if !idToken.isEmpty {
-                Text("ID: \(idToken)").font(.footnote).monospaced()
+                Text("ID: \(idToken)")
+                    .font(.footnote).monospaced()
+                    .foregroundStyle(AppPalette.Text.secondary)
             }
             Spacer(minLength: 0)
         }
         .padding(16)
     }
 }
+
 
 // MARK: - Preview
 

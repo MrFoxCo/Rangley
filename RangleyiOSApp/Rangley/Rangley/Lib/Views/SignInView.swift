@@ -30,70 +30,72 @@ struct SignInView: View {
     @State private var isBusy = false
 
     var body: some View {
-        ZStack {
-            // Black → Russian violet (#2E003E). Swap the array to flip direction.
-            LinearGradient(
-                gradient: Gradient(colors: [.black, Color(hex: "#2E003E")]),
-                startPoint: .top, endPoint: .bottom
-            )
-            .ignoresSafeArea()
+        NavigationStack {
+            VStack(spacing: 24)
+            {
+                Spacer()
+                Image("RangleySticker")
+                    .resizable().scaledToFit().frame(width: 200, height: 200)
 
-            NavigationStack {
-                VStack(spacing: 24) {
-                    Spacer()
-                    Image("RangleySticker")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 200, height: 200)
+                Button {
+                    Task {
+                        guard !isBusy else { return }
+                        isBusy = true; defer { isBusy = false }
+                        onAuthenticated()
+                    }
+                } label: {
+                    HStack { if isBusy { ProgressView() }
+                        Text(isBusy ? "Signing in…" : "Sign In").bold()
+                    }
+                    .frame(maxWidth: .infinity).padding(.vertical, 16)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(AppPalette.Brand.pigNeonPink)
+                .foregroundStyle(.black)
+                .padding(.horizontal, 20)
 
-                    Button {
-                        Task {
-                            guard !isBusy else { return }
-                            isBusy = true; defer { isBusy = false }
-                            onAuthenticated()
-                        }
-                    } label: {
-                        HStack {
-                            if isBusy { ProgressView() }
-                            Text(isBusy ? "Signing in…" : "Sign In").bold()
-                        }
+                Spacer()
+
+                NavigationLink {
+                    UserRegisterFlow()
+                } label: {
+                    Text("Create new account")
+                        .font(.headline.weight(.semibold))
+                        .padding(.vertical, 14)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(AppPalette.Purples.pigNeonPink)
-                    .foregroundStyle(.black)
-                    .padding(.horizontal, 20)
-                    .background(AppPalette.Purples.pigNeonPink, in: Capsule())
-
-                    Spacer()
-
-                    NavigationLink {
-                        UserRegisterFlow()
-                    } label: {
-                        Text("Create new account")
-                            .font(.headline.weight(.semibold))
-                            .padding(.vertical, 14)
-                            .frame(maxWidth: .infinity)
-                            .background(Color(hex: "#2E003E"), in: Capsule())
-                            .foregroundStyle(.white)
-                            .shadow(radius: 6, x: 0, y: 2)
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 24)
+                        .background(Color(hex: "#2E003E"), in: Capsule())
+                        .foregroundStyle(.white)
+                        .shadow(radius: 6, x: 0, y: 2)
                 }
-                .padding(.horizontal, 16)
-                .toolbar {
-                    ToolbarItem(placement: .principal) {
-                        Text("Welcome").font(.headline).foregroundStyle(.white)
-                    }
-                }
-                // Make sure the nav bar doesn’t cover the gradient
-                .toolbarBackground(.hidden, for: .navigationBar)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 24)
             }
+            .padding(.horizontal, 16)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("Welcome").font(.headline).foregroundStyle(.white)
+                }
+            }
+            .background(
+                LinearGradient(
+                    gradient: Gradient(colors: [
+                        Color(hex: "#2E003E"),
+                        Color(hex: "#2E003E"),
+                        Color(hex: "#2E003E"),
+                        .black
+
+                    ]),
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
         }
+        // <- THIS is what makes it show
+        .toolbarBackground(.clear, for: .navigationBar)  // keep the bar transparent
+        .toolbarBackground(.visible, for: .navigationBar)
         .preferredColorScheme(.dark)
     }
 }
+
 
 #Preview { SignInView(onAuthenticated: {}) }
