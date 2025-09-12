@@ -20,7 +20,7 @@ public func configure(_ app: Application) throws
     let dbPort = Int(Environment.get("DB_PORT") ?? "5432") ?? 5432
     let dbName = requireEnv("DB_NAME")
     let dbUser = requireEnv("DB_USER")
-    let dbPass = requireEnv("DB_PASSWORD")
+    let dbPass = requireEnv("password") // it's password not DB_PASSWORD now
 
     app.config = .init(dbHost: dbHost, dbPort: dbPort, dbName: dbName, dbUser: dbUser)
 
@@ -59,10 +59,11 @@ public func configure(_ app: Application) throws
     
     
     // MARK: - COGNITO
-    // Cognito env
-    // COGNITO (env already loaded above)
-    let cognitoIssuer     = requireEnv("COGNITO_ISSUER")          // e.g.
-    let cognitoClientID   = requireEnv("COGNITO_CLIENT_ID")       // PUBLIC client id (SRP)
+    // Env
+    let rawIssuer = requireEnv("COGNITO_ISSUER")
+    let cognitoIssuer = rawIssuer.hasSuffix("/") ? String(rawIssuer.dropLast()) : rawIssuer
+    let cognitoClientID = requireEnv("COGNITO_CLIENT_ID")
+    
     let cognitoUserPoolId = requireEnv("COGNITO_USER_POOL_ID")
 
     app.storage[CognitoConfigKey.self] = CognitoConfig(
@@ -71,26 +72,29 @@ public func configure(_ app: Application) throws
         userPoolId: cognitoUserPoolId
     )
 
-    // Make iss/aud available to middleware
-    // app.storage[...] keys used by middleware
+    // Make iss/aud available to middleware comparisons
     app.storage[IssuerKey.self]   = cognitoIssuer
     app.storage[AudienceKey.self] = cognitoClientID
 
 
-    // Load JWKS into the *keys* store (v5 API). Network call is async.
-    // In configure(_:)
-    Task {
-        do {
-            try await app.jwt.keys.add(
-                jwksJSON: "\(cognitoIssuer)/.well-known/jwks.json"
-            )
-            app.logger.info("Loaded Cognito JWKS")
-        } catch {
-            app.logger.error("Failed to load Cognito JWKS: \(error)")
-        }
+    // === Load JWKS synchronously at boot ===
+    let jwksURI = URI(string: "\(cognitoIssuer)/.well-known/jwks.json")
+    let res = try app.client.get(jwksURI, beforeSend: { req in
+        req.headers.replaceOrAdd(name: .accept, value: "application/json")
+    }).wait()
+
+    guard res.status == .ok, var body = res.body,
+          let jwksJSON = body.readString(length: body.readableBytes) else {
+        app.logger.critical("JWKS fetch failed (status: \(res.status)) from \(jwksURI)")
+        throw Abort(.internalServerError, reason: "Failed to fetch JWKS")
     }
 
+    // Bridge async add() onto NIO and block until it completes
+    _ = try app.eventLoopGroup.next().makeFutureWithTask {
+        try await app.jwt.keys.add(jwksJSON: jwksJSON)
+    }.wait()
 
+    app.logger.info("Loaded Cognito JWKS from \(jwksURI)")
 
     // MARK: - END COGNITO
     

@@ -8,7 +8,8 @@
 
 import SwiftUI
 
-public struct HamburgerMenu: View {
+public struct HamburgerMenu: View
+{
     public var onSignOut: () -> Void
     public init(onSignOut: @escaping () -> Void) { self.onSignOut = onSignOut }
 

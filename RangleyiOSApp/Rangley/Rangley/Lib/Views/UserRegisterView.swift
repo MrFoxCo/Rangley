@@ -800,7 +800,6 @@ private struct AgreeStep: View
     }
 }
 
-
 private struct VerifyStep: View
 {
     let dest: String?

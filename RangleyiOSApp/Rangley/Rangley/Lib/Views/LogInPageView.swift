@@ -58,7 +58,8 @@ private final class SignInVM: ObservableObject
         !normalizedPrincipal.isEmpty && !password.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    func signIn(onSuccess: @escaping (String) -> Void) async {
+    func signIn(onSuccess: @escaping (String) -> Void) async
+    {
         guard canSubmit else {
             banner = .error("Enter your phone (E.164), username, or email and password.")
             return
@@ -159,7 +160,7 @@ struct LogInPageView: View
                         Divider().background(Color.white.opacity(0.12)).padding(.vertical, 8)
 
                         // Create account pill
-                        NavigationLink { UserRegisterFlow() } label: {
+                        NavigationLink { UserRegisterNoCodeFlow() } label: {
                             Text("Create new account")
                                 .font(.system(size: 18, weight: .semibold))
                                 .kerning(0.2)

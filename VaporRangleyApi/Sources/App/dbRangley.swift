@@ -89,45 +89,55 @@ enum Proc
     /// MUST match: CREATE PROCEDURE rangley.rangley_i_user_by_auth_register(...)
     enum InsertUserByAuthRegister: PgCallableRow
     {
-            static let procName: RangleyProcName = .i_user_by_auth_register
+        static let procName: RangleyProcName = .i_user_by_auth_register
 
-            struct Params: Content, Sendable {
-                let cognito_sub  : String
-                let username     : String
-                let display_name : String
-                let cellphone    : String?
-                let email        : String?
-                let dob          : String          // "YYYY-MM-DD"
-                let first_name   : String?
-                let last_name    : String?
-            }
-
-            struct Result: Content, Sendable {
-                let is_success: Bool?
-            }
-
-            // OUT goes first (your convention)
-            static func query(_ i: Params, _ o: Result) -> SQLQueryString {
-                """
-                CALL \(unsafeRaw: procName.rawValue)
-                (
-                     \(bind: o.is_success)::boolean
-                    ,\(bind: i.cognito_sub)::text
-                    ,\(bind: i.username)::varchar(50)
-                    ,\(bind: i.display_name)::varchar(50)
-                    ,\(bind: i.cellphone)::varchar(16)
-                    ,\(bind: i.email)::varchar(256)
-                    ,\(bind: i.dob)::date
-                    ,COALESCE(\(bind: i.first_name)::varchar(50), ''::varchar(50))
-                    ,COALESCE(\(bind: i.last_name)::varchar(50),  ''::varchar(50))
-                );
-                """
-            }
-
-            static func decode(_ row: any SQLRow) throws -> Result {
-                try .init(is_success: row.decode(column: "is_success", as: Bool?.self))
-            }
+        struct RegisterBody: Content, Sendable {
+            let username    : String
+            let display_name: String
+            let cellphone   : String?
+            let email       : String?
+            let dob         : String
+            let first_name  : String?
+            let last_name   : String?
         }
+        
+        struct Params: Content, Sendable {
+            let cognito_sub  : String
+            let username     : String
+            let display_name : String
+            let cellphone    : String?
+            let email        : String?
+            let dob          : String          // "YYYY-MM-DD"
+            let first_name   : String?
+            let last_name    : String?
+        }
+
+        struct Result: Content, Sendable {
+            let is_success: Bool?
+        }
+
+        // OUT goes first (your convention)
+        static func query(_ i: Params, _ o: Result) -> SQLQueryString {
+            """
+            CALL \(unsafeRaw: procName.rawValue)
+            (
+                 \(bind: o.is_success)::boolean
+                ,\(bind: i.cognito_sub)::text
+                ,\(bind: i.username)::varchar(50)
+                ,\(bind: i.display_name)::varchar(50)
+                ,\(bind: i.cellphone)::varchar(16)
+                ,\(bind: i.email)::varchar(256)
+                ,\(bind: i.dob)::date
+                ,COALESCE(\(bind: i.first_name)::varchar(50), ''::varchar(50))
+                ,COALESCE(\(bind: i.last_name)::varchar(50),  ''::varchar(50))
+            );
+            """
+        }
+
+        static func decode(_ row: any SQLRow) throws -> Result {
+            try .init(is_success: row.decode(column: "is_success", as: Bool?.self))
+        }
+    }
 
     
     // MARK: - END INSERT USER NOT TESTED

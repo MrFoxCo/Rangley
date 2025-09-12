@@ -156,13 +156,41 @@ public func routes(_ app: Application) throws
     {
         req async throws -> Proc.InsertUserByAuthRegister.Result in
         
-        let body = try req.content.decode(Proc.InsertUserByAuthRegister.Params.self)
+        let body = try req.content.decode(Proc.InsertUserByAuthRegister.RegisterBody.self)
+        
+        let sub = req.cognito.sub.value
+        
+        let p = Proc.InsertUserByAuthRegister.Params(
+                cognito_sub:  sub,
+                username:     body.username,
+                display_name: body.display_name,
+                cellphone:    body.cellphone,
+                email:        body.email,
+                dob:          body.dob,
+                first_name:   body.first_name,
+                last_name:    body.last_name
+            )
         
         guard let sql = req.db as? (any SQLDatabase)
-        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
-        
-        return try await Proc.InsertUserByAuthRegister.call(on: sql, body, .init(is_success: nil))
+            else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+
+            return try await Proc.InsertUserByAuthRegister.call(on: sql, p, .init(is_success: nil))
     }
+    /**
+     
+     curl -X POST https://api.mrfoxco.com/register \
+       -H "Content-Type: application/json" \
+       -d '{
+         "cognito_sub": "123e4567-e89b-12d3-a456-426614174000",
+         "username": "rangleytest",
+         "display_name": "Rangley Test User",
+         "cellphone": "+13125551234",
+         "email": "rangleytest@example.com",
+         "dob": "2000-05-21",
+         "first_name": "Rangley",
+         "last_name": "Tester"
+       }'
+     */
     
 //    auth.post("forgot-password")
 //    {

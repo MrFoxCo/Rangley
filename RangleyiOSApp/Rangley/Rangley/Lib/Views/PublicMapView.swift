@@ -27,68 +27,18 @@ public struct PublicMapView: View
     @State private var selectedAnchor: CGPoint?
 
     // MARK: - END Map Location
-    
-    
-    @State private var isPlacingEvent       : Bool = false
-    @State private var visibleRegion        : MKCoordinateRegion?
-    @State private var tappedRegion         : MKCoordinateRegion?
-    @State private var selectedCoordinate   : CLLocationCoordinate2D?
-    @State private var selectedLocationInfo : LocationInfo?
         
-
-
-    
     // Keep this in PublicMapView so helpers can see it
     @State private var lastSpan = MKCoordinateSpan(latitudeDelta: 0.15, longitudeDelta: 0.15)
 
     // =========================================================
-    // MARK: - Helpers (PLACE THESE HERE, inside PublicMapView)
-    
-    
+    // MARK: - Meet Creation FLow
     // =========================================================
-    private enum PopupMetrics
-    {
-        static let cardW    : CGFloat = 320
-        static let cardH    : CGFloat = 200
-        static let clearance: CGFloat = 28
-        static let pinHeight: CGFloat = 40   // match your pin size
-        static let buffer   : CGFloat = 20
-    }
-
-    // Rule 3: nudge camera if the pin is too close to screen edges (buffer)
-    private func maybeNudgeForEdgeBuffer(anchor: CGPoint, size: CGSize, insets: EdgeInsets, proxy: MapProxy)
-    {
-        let safeMinX = insets.leading
-        let safeMaxX = size.width  - insets.trailing
-        let safeMinY = insets.top
-        let safeMaxY = size.height - insets.bottom
-
-        let leftGap   = anchor.x - safeMinX
-        let rightGap  = safeMaxX - anchor.x
-        let topGap    = anchor.y - safeMinY
-        let bottomGap = safeMaxY - anchor.y
-
-        var dx: CGFloat = 0
-        var dy: CGFloat = 0
-        if leftGap   < PopupMetrics.buffer { dx += (PopupMetrics.buffer - leftGap) }
-        if rightGap  < PopupMetrics.buffer { dx -= (PopupMetrics.buffer - rightGap) }
-        if topGap    < PopupMetrics.buffer { dy += (PopupMetrics.buffer - topGap) }
-        if bottomGap < PopupMetrics.buffer { dy -= (PopupMetrics.buffer - bottomGap) }
-
-        guard dx != 0 || dy != 0 else { return }
-
-        let centerX = (safeMinX + safeMaxX) / 2
-        let centerY = (safeMinY + safeMaxY) / 2
-        let newCenterScreen = CGPoint(x: centerX - dx, y: centerY - dy)
-
-        if let newCenterCoord = proxy.convert(newCenterScreen, from: .local) {
-            withAnimation(.easeInOut(duration: 0.22)) {
-                cameraPosition = .region(MKCoordinateRegion(center: newCenterCoord, span: lastSpan))
-            }
-        }
-    }
-
-
+    @State private var selectedLocation: LocationInfo?
+    @State private var showLocationPopup = false
+    // =========================================================
+    // MARK: - END Meet Creation FLow
+    // =========================================================
 
     // =========================================================
     // MARK: - Hamburger Menu
@@ -120,11 +70,11 @@ public struct PublicMapView: View
     {
         ZStack
         {
-            GeometryReader{ geo in
-                MapReader{ proxy in
-                    Map(position: $cameraPosition) {
-
-                    }
+            GeometryReader
+            { geo in
+                MapReader
+                { proxy in
+                    Map(position: $cameraPosition) {}
                     // Map tap should only create when placing, and not if a sheet is already up
                     .gesture(
                         SpatialTapGesture().onEnded { value in
@@ -135,7 +85,25 @@ public struct PublicMapView: View
                             if let coordinate = proxy.convert(position, from: .local) {
                                 let geocoder = CLGeocoder()
                                 let location = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
-
+                                
+                                // Log the tapped coordinates to console
+                                print("--- Map Tapped ---")
+                                print("Latitude: \(coordinate.latitude)")
+                                print("Longitude: \(coordinate.longitude)")
+                                print("Position: (\(coordinate.latitude), \(coordinate.longitude))")
+                                
+                                // Get detailed location information
+                                Task {
+                                    if let locationInfo = await createLocationInfoObject(geocoder, location)
+                                    {
+                                        // Location info is now available for use
+                                        // The function already logs all the details to console
+                                        await MainActor.run {
+                                               selectedLocation = locationInfo
+                                               showLocationPopup = true
+                                           }
+                                    }
+                                }
                             }
                         }
                     )
@@ -147,8 +115,26 @@ public struct PublicMapView: View
                         Text("Map")
                     }
                 }
-
             }
+            // ADD THIS: Pink location popup overlay
+            // ADD THIS: Meet creation overlay with two-step flow
+            MeetCreationOverlay(
+                selectedLocation: $selectedLocation,
+                showPopup: $showLocationPopup,
+                onCreateMeet: { locationInfo, name, startTime, endTime, maxCapacity in
+                    // Handle meet creation here
+                    print("Creating meet:")
+                    print("  Name: \(name)")
+                    print("  Location: \(locationInfo.Name ?? "Unknown")")
+                    print("  Start: \(startTime)")
+                    print("  End: \(endTime)")
+                    print("  Capacity: \(maxCapacity ?? 0) (0 = unlimited)")
+                    print("  Category ID: 1 (default)")
+                    
+                    // TODO: Call your API to create the meet with these values
+                    // let meet_category_id = 1  // Default as requested
+                }
+            )
         }
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .toolbarBackground(.visible, for: .tabBar)
