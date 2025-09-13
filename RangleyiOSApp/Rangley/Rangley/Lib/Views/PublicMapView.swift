@@ -121,14 +121,14 @@ public struct PublicMapView: View
             MeetCreationOverlay(
                 selectedLocation: $selectedLocation,
                 showPopup: $showLocationPopup,
-                onCreateMeet: { locationInfo, name, startTime, endTime, maxCapacity in
+                onCreateMeet: { locationInfo, name, startTime, endTime in
                     // Handle meet creation here
                     print("Creating meet:")
                     print("  Name: \(name)")
                     print("  Location: \(locationInfo.Name ?? "Unknown")")
                     print("  Start: \(startTime)")
                     print("  End: \(endTime)")
-                    print("  Capacity: \(maxCapacity ?? 0) (0 = unlimited)")
+                    //dprint("  Capacity: \(maxCapacity ?? 0) (0 = unlimited)")
                     print("  Category ID: 1 (default)")
                     
                     // TODO: Call your API to create the meet with these values

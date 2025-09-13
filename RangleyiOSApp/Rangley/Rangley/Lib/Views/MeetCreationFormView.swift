@@ -1,37 +1,38 @@
 //
-//  MeetCreationFomView.swift
+//  MeetCreationFormView.swift
 //  Rangley
 //
 //  Created by Anthony Guzzardo on 9/12/25.
 //
 
+import UIKit
 import SwiftUI
 import CoreLocation
 
-struct MeetCreationFormView: View {
+struct MeetCreationFormView: View
+{
     let locationInfo: LocationInfo
-    let onConfirm: (String, Date, Date, Int?) -> Void
+    let onConfirm: (String, Date, Date) -> Void
     let onBack: () -> Void
 
     @State private var meetName = ""
     @State private var startTime = Date()
     @State private var endTime = Date().addingTimeInterval(3600) // Default 1 hour later
-    @State private var maxCapacity = ""
+
     @State private var isAnimating = false
     @State private var currentFieldStep: FieldStep = .name
 
     @FocusState private var isNameFieldFocused: Bool
-    @FocusState private var isCapacityFieldFocused: Bool
 
-    enum FieldStep: CaseIterable {
-        case name, startTime, endTime, capacity, review
+    enum FieldStep: CaseIterable
+    {
+        case name, startTime, endTime, review
 
         var title: String {
             switch self {
             case .name: return "Name your meet"
             case .startTime: return "When does it start?"
             case .endTime: return "When does it end?"
-            case .capacity: return "Set capacity (optional)"
             case .review: return "Review & Create"
             }
         }
@@ -41,20 +42,23 @@ struct MeetCreationFormView: View {
             case .name: return 1
             case .startTime: return 2
             case .endTime: return 3
-            case .capacity: return 4
-            case .review: return 5
+            case .review: return 4
             }
         }
     }
 
-    private var locationDisplayName: String {
+    private var totalSteps: Int { FieldStep.allCases.count }
+
+    private var locationDisplayName: String
+    {
         if let name = locationInfo.Name, !name.isEmpty { return name }
         if let thoroughfare = locationInfo.ThoroughFare { return thoroughfare }
         if let locality = locationInfo.Locality { return locality }
         return "Selected location"
     }
 
-    private var canProceed: Bool {
+    private var canProceed: Bool
+    {
         switch currentFieldStep {
         case .name:
             return !meetName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -62,14 +66,14 @@ struct MeetCreationFormView: View {
             return true
         case .endTime:
             return endTime > startTime
-        case .capacity:
-            return true
         case .review:
-            return !meetName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && endTime > startTime
+            return !meetName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && endTime > startTime
         }
     }
 
-    private func nextStep() {
+    private func nextStep()
+    {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
             switch currentFieldStep {
             case .name:
@@ -77,17 +81,15 @@ struct MeetCreationFormView: View {
             case .startTime:
                 currentFieldStep = .endTime
             case .endTime:
-                currentFieldStep = .capacity
-            case .capacity:
                 currentFieldStep = .review
             case .review:
-                let capacity = Int(maxCapacity)
-                onConfirm(meetName, startTime, endTime, capacity)
+                onConfirm(meetName, startTime, endTime)
             }
         }
     }
 
-    private func previousStep() {
+    private func previousStep()
+    {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
             switch currentFieldStep {
             case .name:
@@ -96,15 +98,32 @@ struct MeetCreationFormView: View {
                 currentFieldStep = .name
             case .endTime:
                 currentFieldStep = .startTime
-            case .capacity:
-                currentFieldStep = .endTime
             case .review:
-                currentFieldStep = .capacity
+                currentFieldStep = .endTime
             }
         }
     }
-
-    var body: some View {
+    struct DetailRow: View
+    {
+        let label: String
+        let value: String
+    
+        var body: some View {
+            HStack {
+                Text(label)
+                    .font(.system(size: 14))
+                    .foregroundColor(AppPalette.Text.secondary)
+    
+                Spacer()
+    
+                Text(value)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(AppPalette.Text.primary)
+            }
+        }
+    }
+    var body: some View
+    {
         VStack(spacing: 0) {
             // Header with back button and progress
             VStack(spacing: 16) {
@@ -121,13 +140,13 @@ struct MeetCreationFormView: View {
 
                     Spacer()
 
-                    // Step indicator
-                    Text("Step \(currentFieldStep.stepNumber) of 5")
+                    // Dynamic step indicator
+                    Text("Step \(currentFieldStep.stepNumber) of \(totalSteps)")
                         .font(.system(size: 14, weight: .medium))
                         .foregroundColor(AppPalette.Text.secondary)
                 }
 
-                // Progress bar
+                // Progress bar (dynamic)
                 GeometryReader { geometry in
                     ZStack(alignment: .leading) {
                         RoundedRectangle(cornerRadius: 2)
@@ -137,7 +156,7 @@ struct MeetCreationFormView: View {
                         RoundedRectangle(cornerRadius: 2)
                             .fill(AppPalette.Brand.neonPink)
                             .frame(
-                                width: geometry.size.width * (Double(currentFieldStep.stepNumber) / 5.0),
+                                width: geometry.size.width * (Double(currentFieldStep.stepNumber) / Double(totalSteps)),
                                 height: 4
                             )
                             .animation(.spring(response: 0.3, dampingFraction: 0.8), value: currentFieldStep)
@@ -263,48 +282,6 @@ struct MeetCreationFormView: View {
                         }
                         .padding(.horizontal, 24)
 
-                    case .capacity:
-                        VStack(alignment: .leading, spacing: 16) {
-                            TextField("", text: $maxCapacity, prompt: Text("Leave empty for unlimited").foregroundColor(AppPalette.Text.tertiary))
-                                .font(.system(size: 18))
-                                .foregroundColor(AppPalette.Text.primary)
-                                .keyboardType(.numberPad)
-                                .focused($isCapacityFieldFocused)
-                                .padding(16)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .fill(AppPalette.Surface.fieldFill)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 12)
-                                                .stroke(
-                                                    isCapacityFieldFocused ? AppPalette.Surface.focusStroke : AppPalette.Surface.fieldStroke,
-                                                    lineWidth: isCapacityFieldFocused ? 2 : 1
-                                                )
-                                        )
-                                )
-                                .onAppear {
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                        isCapacityFieldFocused = true
-                                    }
-                                }
-                                .onChange(of: maxCapacity) { newVal in
-                                    // keep only digits
-                                    let digits = newVal.filter(\.isNumber)
-                                    if digits != newVal { maxCapacity = digits }
-                                }
-
-                            Button(action: {
-                                maxCapacity = ""
-                                nextStep()
-                            }) {
-                                Text("Skip this step")
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(AppPalette.Text.secondary)
-                                    .underline()
-                            }
-                        }
-                        .padding(.horizontal, 24)
-
                     case .review:
                         VStack(spacing: 20) {
                             VStack(alignment: .leading, spacing: 16) {
@@ -312,7 +289,7 @@ struct MeetCreationFormView: View {
                                 DetailRow(label: "Start", value: formatDate(startTime))
                                 DetailRow(label: "End", value: formatDate(endTime))
                                 DetailRow(label: "Duration", value: formatDuration(from: startTime, to: endTime))
-                                DetailRow(label: "Capacity", value: maxCapacity.isEmpty ? "Unlimited" : maxCapacity)
+                                // Capacity intentionally removed (feature paused)
                             }
                             .padding(20)
                             .background(
@@ -337,7 +314,7 @@ struct MeetCreationFormView: View {
 
             // Action button
             Button(action: nextStep) {
-                Text(currentFieldStep == .review ? "Create Meet" : (currentFieldStep == .capacity ? "Continue" : "Next"))
+                Text(currentFieldStep == .review ? "Create Meet" : "Next")
                     .font(.system(size: 16, weight: .bold))
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
@@ -366,15 +343,13 @@ struct MeetCreationFormView: View {
             withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                 isAnimating = true
             }
-            // keep end >= start if user scrolls start earlier
             if endTime <= startTime { endTime = startTime.addingTimeInterval(3600) }
         }
-        .onChange(of: startTime) { newStart in
+        .onChange(of: startTime) { _, newStart in
             if endTime <= newStart { endTime = newStart.addingTimeInterval(3600) }
         }
         .onTapGesture {
             isNameFieldFocused = false
-            isCapacityFieldFocused = false
         }
     }
 
@@ -394,36 +369,43 @@ struct MeetCreationFormView: View {
     }
 }
 
-struct DetailRow: View {
-    let label: String
-    let value: String
-
-    var body: some View {
-        HStack {
-            Text(label)
-                .font(.system(size: 14))
-                .foregroundColor(AppPalette.Text.secondary)
-
-            Spacer()
-
-            Text(value)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundColor(AppPalette.Text.primary)
-        }
-    }
-}
-
-// Updated Overlay with both popups
-struct MeetCreationOverlay: View {
+struct MeetCreationOverlay: View
+{
     @Binding var selectedLocation: LocationInfo?
     @Binding var showPopup: Bool
-    let onCreateMeet: (LocationInfo, String, Date, Date, Int?) -> Void
+    let onCreateMeet: (LocationInfo, String, Date, Date) -> Void
 
     @State private var currentStep: Step = .locationConfirm
 
+    //================================================
+    // MARK: - MeetCreation Effect Flow
+    //================================================
+    @State private var isExploding = false
+    @State private var showConfetti = false
+    
+    private func explodeThenDismiss()
+    {
+        guard !isExploding else { return }
+        isExploding = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) { showConfetti = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            showConfetti = false
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                showPopup = false
+                currentStep = .locationConfirm
+                isExploding = false
+            }
+        }
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+    }
+    //================================================
+    // MARK: - END MeetCreation Effect Flow
+    //================================================
+    
     enum Step { case locationConfirm, meetDetails }
 
-    var body: some View {
+    var body: some View
+    {
         ZStack {
             if showPopup, let location = selectedLocation {
                 Color.black.opacity(0.4)
@@ -438,7 +420,8 @@ struct MeetCreationOverlay: View {
                     }
 
                 Group {
-                    switch currentStep {
+                    switch currentStep
+                    {
                     case .locationConfirm:
                         LocationConfirmationPopupView(
                             locationInfo: location,
@@ -460,31 +443,116 @@ struct MeetCreationOverlay: View {
                         ))
 
                     case .meetDetails:
-                        MeetCreationFormView(
-                            locationInfo: location,
-                            onConfirm: { name, startTime, endTime, capacity in
-                                onCreateMeet(location, name, startTime, endTime, capacity)
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                    showPopup = false
-                                    currentStep = .locationConfirm
+                        ZStack
+                        {
+                            MeetCreationFormView(
+                                locationInfo: location,
+                                onConfirm: { name, start, end in
+                                    onCreateMeet(location, name, start, end)  // your create
+                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
+                                        explodeThenDismiss()
+                                    }
+                                },
+                                onBack: {
+                                    guard !isExploding else { return }
+                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                        currentStep = .locationConfirm
+                                    }
                                 }
-                            },
-                            onBack: {
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                    currentStep = .locationConfirm
-                                }
+                            )
+                            .frame(maxWidth: 400, maxHeight: 650)
+                            .scaleEffect(isExploding ? 0.6 : 1.0)
+                            .opacity(isExploding ? 0.0 : 1.0)
+                            .allowsHitTesting(!isExploding)
+                            .animation(.spring(response: 0.35, dampingFraction: 0.85), value: isExploding)
+
+                            if showConfetti {
+                                ConfettiBurst(color: UIColor(AppPalette.Brand.neonPink), duration: 1.0, intensity: 1.0)
+                                    .allowsHitTesting(false)
+                                    .transition(.opacity)
                             }
-                        )
-                        .frame(maxWidth: 400, maxHeight: 650)
-                        .transition(.asymmetric(
-                            insertion: .move(edge: .trailing).combined(with: .opacity),
-                            removal: .scale(scale: 0.95).combined(with: .opacity)
-                        ))
+                            
+                        }
+                       
                     }
                 }
             }
         }
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showPopup)
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: currentStep)
+    }
+}
+private struct ConfettiBurst: UIViewRepresentable {
+    var color: UIColor = .systemPink
+    var duration: TimeInterval = 1.0
+    var intensity: CGFloat = 1.0
+
+    func makeUIView(context: Context) -> ConfettiUIView {
+        let v = ConfettiUIView()
+        v.emit(color: color, duration: duration, intensity: intensity)
+        return v
+    }
+    func updateUIView(_ uiView: ConfettiUIView, context: Context) {}
+}
+
+private final class ConfettiUIView: UIView {
+    private var emitter: CAEmitterLayer?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false
+        backgroundColor = .clear
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        emitter?.emitterPosition = CGPoint(x: bounds.midX, y: bounds.midY)
+    }
+
+    func emit(color: UIColor, duration: TimeInterval, intensity: CGFloat) {
+        let emitter = CAEmitterLayer()
+        emitter.emitterShape = .point
+        emitter.emitterPosition = CGPoint(x: bounds.midX, y: bounds.midY)
+        emitter.beginTime = CACurrentMediaTime()
+
+        let cell = CAEmitterCell()
+        cell.contents = particleImage(color: color).cgImage
+        cell.birthRate = 400 * Float(intensity)   // big burst
+        cell.lifetime = 2.0
+        cell.velocity = 280 * intensity
+        cell.velocityRange = 120 * intensity
+        cell.emissionRange = .pi * 2              // 360 degrees
+        cell.scale = 0.9
+        cell.scaleRange = 0.5
+        cell.spin = 2.5
+        cell.spinRange = 4.0
+        cell.alphaSpeed = -0.8
+        cell.yAcceleration = 340                  // gravity drop
+
+        emitter.emitterCells = [cell]
+        layer.addSublayer(emitter)
+        self.emitter = emitter
+
+        // Stop birthing quickly so it feels like an explosion, not a stream
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            emitter.birthRate = 0
+        }
+        // Clean up
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration) {
+            emitter.removeFromSuperlayer()
+        }
+    }
+
+    private func particleImage(color: UIColor) -> UIImage {
+        // small rounded-rect “confetti”
+        let size: CGFloat = 8
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: size, height: size))
+        return renderer.image { ctx in
+            let rect = CGRect(x: 0, y: 0, width: size, height: size)
+            let path = UIBezierPath(roundedRect: rect, cornerRadius: 2)
+            color.setFill()
+            path.fill()
+        }
     }
 }
