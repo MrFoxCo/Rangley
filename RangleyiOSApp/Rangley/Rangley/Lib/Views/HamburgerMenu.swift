@@ -8,13 +8,22 @@
 
 import SwiftUI
 
-public struct HamburgerMenu: View
-{
+public struct HamburgerMenu: View {
     public var onSignOut: () -> Void
+    @State private var showAccount = false
+
     public init(onSignOut: @escaping () -> Void) { self.onSignOut = onSignOut }
 
     public var body: some View {
         Menu {
+            Button {
+                showAccount = true
+            } label: {
+                Label("View Account", systemImage: "person.crop.circle")
+            }
+
+            Divider()
+
             Button(role: .destructive, action: onSignOut) {
                 Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
             }
@@ -22,23 +31,26 @@ public struct HamburgerMenu: View
             Image(systemName: "line.horizontal.3")
                 .font(.system(size: 18, weight: .semibold))
                 .imageScale(.large)
-                .foregroundStyle(AppPalette.Brand.neonPink)                 // solid neon lines
+                .foregroundStyle(AppPalette.Brand.neonPink)
                 .padding(10)
                 .background(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(AppPalette.Brand.neonPink.opacity(0.14))     // slightly opaque neon bg
+                        .fill(AppPalette.Brand.neonPink.opacity(0.14))
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .stroke(AppPalette.Brand.neonPink.opacity(0.55), lineWidth: 1)
                 )
                 .contentShape(RoundedRectangle(cornerRadius: 12))
-                // .shadow(color: AppPalette.Brand.neonPink.opacity(0.4), radius: 8) // optional neon glow
                 .frame(minWidth: 44, minHeight: 44)
-
         }
         .tint(AppPalette.Brand.neonPink)
         .accessibilityLabel("Menu")
+        .sheet(isPresented: $showAccount) {
+            AccountView() // below
+                .preferredColorScheme(.dark)
+        }
     }
 }
+
 

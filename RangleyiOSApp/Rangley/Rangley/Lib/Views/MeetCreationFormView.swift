@@ -373,9 +373,20 @@ struct MeetCreationOverlay: View
 {
     @Binding var selectedLocation: LocationInfo?
     @Binding var showPopup: Bool
-    let onCreateMeet: (LocationInfo, String, Date, Date) -> Void
+    // Make this async + throws
+ 
+    //================================================
+    // MARK: - MeetCreation API Flow
+    //================================================
+    let onCreateMeet: (LocationInfo, String, Date, Date) async throws -> Void
 
     @State private var currentStep: Step = .locationConfirm
+    @State private var isSubmitting = false
+    @State private var submitError: String?
+    
+    //================================================
+    // MARK: - END MeetCreation API Flow
+    //================================================
 
     //================================================
     // MARK: - MeetCreation Effect Flow
@@ -443,14 +454,27 @@ struct MeetCreationOverlay: View
                         ))
 
                     case .meetDetails:
-                        ZStack
-                        {
+                        ZStack {
                             MeetCreationFormView(
                                 locationInfo: location,
                                 onConfirm: { name, start, end in
-                                    onCreateMeet(location, name, start, end)  // your create
-                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
-                                        explodeThenDismiss()
+                                    guard !isSubmitting else { return }
+                                    submitError = nil
+                                    isSubmitting = true
+                                    Task {
+                                        do {
+                                            try await onCreateMeet(location, name, start, end)
+                                            await MainActor.run {
+                                                withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
+                                                    explodeThenDismiss()
+                                                }
+                                            }
+                                        } catch {
+                                            await MainActor.run {
+                                                submitError = error.localizedDescription
+                                            }
+                                        }
+                                        await MainActor.run { isSubmitting = false }
                                     }
                                 },
                                 onBack: {
@@ -461,11 +485,28 @@ struct MeetCreationOverlay: View
                                 }
                             )
                             .frame(maxWidth: 400, maxHeight: 650)
+                            .allowsHitTesting(!isSubmitting && !isExploding)
                             .scaleEffect(isExploding ? 0.6 : 1.0)
                             .opacity(isExploding ? 0.0 : 1.0)
-                            .allowsHitTesting(!isExploding)
                             .animation(.spring(response: 0.35, dampingFraction: 0.85), value: isExploding)
+                            
+                            if isSubmitting {
+                                ProgressView("Creating…")
+                                    .padding(12)
+                                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                            }
 
+                            if let submitError {
+                                VStack {
+                                    Spacer()
+                                    Text(submitError)
+                                        .font(.footnote)
+                                        .foregroundStyle(.red)
+                                        .padding(.bottom, 8)
+                                }
+                                .transition(.opacity)
+                            }
+                            
                             if showConfetti {
                                 ConfettiBurst(color: UIColor(AppPalette.Brand.neonPink), duration: 1.0, intensity: 1.0)
                                     .allowsHitTesting(false)
@@ -482,6 +523,7 @@ struct MeetCreationOverlay: View
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: currentStep)
     }
 }
+
 private struct ConfettiBurst: UIViewRepresentable {
     var color: UIColor = .systemPink
     var duration: TimeInterval = 1.0

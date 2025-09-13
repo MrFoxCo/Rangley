@@ -20,6 +20,7 @@ enum RangleyProcName: String
     case i_meet_id               = "rangley.rangley_i_meet_id"
     case i_meet_coordinate       = "rangley.rangley_i_meet_coordinate"
     case i_meet                  = "rangley.rangley_i_meet"
+    case s_insert_meet           = "rangley.rangley_s_insert_meet"
     case i_change_stamp          = "rangley.rangley_i_change_stamp"
     case i_updated_meet          = "rangley.rangley_i_updated_meet"
     case m_user                  = "rangley.rangley_m_user"
@@ -28,9 +29,9 @@ enum RangleyProcName: String
 // Essentially these are views because postgres doesn't allow procedural views in an easy way
 enum RangleyFunc: String
 {
-    case v_user_by_user_id   = "rangley.rangley_fn_v_user_by_user_id"
-    case v_meets             = "rangley.rangley_fn_v_meets"
-    case v_meet_categories   = "rangley.rangley_fn_v_meet_categories"
+    case v_user_by_cognito_sub  = "rangley.rangley_fn_v_user_by_cognito_sub"
+    case v_meets                = "rangley.rangley_fn_v_meets"
+    case v_meet_categories      = "rangley.rangley_fn_v_meet_categories"
 }
 
 // MARK: - Generic call shapes
@@ -295,7 +296,71 @@ enum Proc
             try .init(num_inserted: row.decode(column: "num_inserted", as: Int32?.self))
         }
     }
+    
+    enum SystemInsertMeet: PgCallableRow {
+        static let procName: RangleyProcName = .s_insert_meet  // ensure this resolves to schema-qualified "rangley.rangley_s_insert_meet" or your search_path includes 'rangley'
+        
+        struct Params: Content, Sendable {
+            // Required
+            let cognito_sub     : String
+            let latitude        : Double
+            let longitude       : Double
+            let region_latitude : Double
+            let region_longitude: Double
+            let region_radius   : Double
+            let name            : String          // p_name
+            let dttm_start_utc  : Date
+            let dttm_end_utc    : Date
 
+            // Optional
+            let description     : String?         // p_description
+            let change_reason   : String?         // p_change_reason
+            let meet_category_id: Int16?          // p_meet_category_id
+            let max_capacity    : Int32?          // p_max_capacity
+        }
+
+        struct Result: Content, Sendable {
+            let new_meet_id: Int64
+            let new_meet_coordinate_id: Int64
+            let num_inserted: Int32
+        }
+
+        static func query(_ i: Params, _ o: Result) -> SQLQueryString {
+            """
+            CALL \(unsafeRaw: procName.rawValue)
+            (
+                 \(bind: o.new_meet_id)::int8
+                ,\(bind: o.new_meet_coordinate_id)::int8
+                ,\(bind: o.num_inserted)::int4
+            
+                ,\(bind: i.cognito_sub              )::text
+                ,\(bind: i.latitude                 )::float8
+                ,\(bind: i.longitude                )::float8
+                ,\(bind: i.region_latitude          )::float8
+                ,\(bind: i.region_longitude         )::float8
+                ,\(bind: i.region_radius            )::float8
+                ,\(bind: i.name                     )::varchar(50)
+                ,\(bind: i.dttm_start_utc           )::timestamptz
+                ,\(bind: i.dttm_end_utc             )::timestamptz
+                ,COALESCE(\(bind: i.description     )::varchar(50), ''::varchar(50))
+                ,COALESCE(\(bind: i.change_reason   )::varchar(50), ''::varchar(50))
+                ,COALESCE(\(bind: i.meet_category_id)::int2, 1::int2)
+                ,COALESCE(\(bind: i.max_capacity    )::int4, 2::int4)
+            );
+            """
+        }
+
+        static func decode(_ row: any SQLRow) throws -> Result {
+            try .init(
+                new_meet_id: row.decode(column: "new_meet_id", as: Int64.self),
+                new_meet_coordinate_id: row.decode(column: "new_meet_coordinate_id", as: Int64.self),
+                num_inserted: row.decode(column: "num_inserted", as: Int32.self)
+            )
+        }
+    }
+
+
+    
     // MARK: - END INSERT MEET WORKING
     
     
@@ -604,39 +669,40 @@ enum Func
         }
     }
 
-
     enum ViewUser: PgFunctionRows
     {
-        static let funcName: RangleyFunc = .v_user_by_user_id  // or .v_user_clean
+        static let funcName: RangleyFunc = .v_user_by_cognito_sub  // or .v_user_clean
 
         struct Param: Content, Sendable
         {
-            let user_id: Int64
+            let cognito_sub: String
         }
 
         struct Results: Content, Sendable
         {
-            let cognito_sub     : String?
-            let username        : String?
-            let display_name    : String?
-            let cellphone       : String?
-            let email           : String?
+            let username            : String
+            let display_name        : String
+            let cellphone           : String?
+            let email               : String?
+            let dob                 : Date
+            let dttm_created_utc    : Date
         }
         
-        struct In: Sendable { let user_id: Int64 }
+        struct In: Sendable { let cognito_sub: String }
 
         static func query(_ input: In) -> SQLQueryString {
-            "SELECT * FROM \(unsafeRaw: funcName.rawValue)(\(bind: input.user_id));"
+            "SELECT * FROM \(unsafeRaw: funcName.rawValue)(\(bind: input.cognito_sub));"
         }
 
         static func decode(_ r: any SQLRow) throws -> Results
         {
             try .init(
-                cognito_sub     : r.decode(column: "cognito_sub",   as: String?.self),
-                username        : r.decode(column: "username",      as: String?.self),
-                display_name    : r.decode(column: "display_name",  as: String?.self),
-                cellphone       : r.decode(column: "cellphone",     as: String?.self),
-                email           : r.decode(column: "email",         as: String?.self)
+                username            : r.decode(column: "username",          as: String.self),
+                display_name        : r.decode(column: "display_name",      as: String.self),
+                cellphone           : r.decode(column: "cellphone",         as: String?.self),
+                email               : r.decode(column: "email",             as: String?.self),
+                dob                 : r.decode(column: "dob",               as: Date.self),
+                dttm_created_utc    : r.decode(column: "dttm_created_utc",  as: Date.self)
             )
         }
     }
