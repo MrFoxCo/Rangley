@@ -153,33 +153,22 @@ struct LogInPageView: View
                                 Text(vm.isBusy ? "Logging in…" : "Log In").bold()
                             }
                         }
-                        .buttonStyle(PrimaryCapsuleButton())
+                        .buttonStyle(PrimaryCapsuleButton(font: FontStyles.headline))
                         .disabled(!vm.canSubmit || vm.isBusy)
                         .opacity((!vm.canSubmit || vm.isBusy) ? 0.45 : 1)
 
                         Divider().background(Color.white.opacity(0.12)).padding(.vertical, 8)
 
                         // Create account pill
-                        NavigationLink { UserRegisterNoCodeFlow() } label: {
+                        NavigationLink
+                        {
+                            UserRegisterNoCodeFlow()
+                        } label: {
                             Text("Create new account")
-                                .font(.system(size: 18, weight: .semibold))
-                                .kerning(0.2)
-                                .foregroundStyle(.white.opacity(0.98))
-                                .padding(.vertical, 14)
-                                .frame(maxWidth: .infinity)
-                                .background(
-                                    Capsule().fill(
-                                        LinearGradient(
-                                            colors: [AppPalette.Brand.violetMid.opacity(0.98),
-                                                     AppPalette.Brand.russianViolet.opacity(0.98)],
-                                            startPoint: .top, endPoint: .bottom
-                                        )
-                                    )
-                                )
-                                .overlay(Capsule().stroke(Color.white.opacity(0.22), lineWidth: 1))
-                                .shadow(color: .black.opacity(0.55), radius: 12, y: 6)
-                                .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
                         }
+                        .buttonStyle(CreateNewAccountCapsuleButton(font: FontStyles.headline))
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 24)
                     }
                     .padding(16)
                 }

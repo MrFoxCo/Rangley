@@ -38,19 +38,13 @@ struct StartScreenView: View
                 Spacer()
                 Image("RangleySticker")
                     .resizable().scaledToFit().frame(width: 200, height: 200)
-                
-                let neonPink = AppPalette.Brand.neonPink
 
                 NavigationLink {
                     LogInPageView()
                 } label: {
-                    HStack {
-                        Text("Log In").font(.system(size: 25, weight: .semibold))
-                    }
-
+                        Text("Log In")
                 }
-                .padding(.horizontal, 20)
-                .buttonStyle(OutlineCapsuleButton(color: neonPink))
+                .buttonStyle(OutlineCapsuleButton(font: FontStyles.title1))
                 // ensure text is neon
 
                 Spacer()
@@ -59,24 +53,8 @@ struct StartScreenView: View
                     UserRegisterNoCodeFlow()
                 } label: {
                     Text("Create new account")
-                        .font(.system(size: 18, weight: .semibold))     // slightly smaller
-                        .kerning(0.2)
-                        .foregroundStyle(.white.opacity(0.98))
-                        .padding(.vertical, 14)
-                        .frame(maxWidth: .infinity)
-                        .background(
-                            Capsule().fill(
-                                LinearGradient(
-                                    colors: [AppPalette.Brand.violetMid.opacity(0.98),
-                                             AppPalette.Brand.russianViolet.opacity(0.98)],
-                                    startPoint: .top, endPoint: .bottom
-                                )
-                            )
-                        )
-                        .overlay(Capsule().stroke(Color.white.opacity(0.22), lineWidth: 1))
-                        .shadow(color: .black.opacity(0.55), radius: 12, y: 6)
-                        .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
                 }
+                .buttonStyle(CreateNewAccountCapsuleButton(font: FontStyles.headline))
                 .padding(.horizontal, 20)
                 .padding(.bottom, 24)
 

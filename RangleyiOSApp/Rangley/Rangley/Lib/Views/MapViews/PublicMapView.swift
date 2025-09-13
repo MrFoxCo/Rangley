@@ -222,6 +222,8 @@ public struct PublicMapView: View
             meetsError = String(describing: error)
         }
     }
+    
+    
     // =========================================================
     // MARK: - END Display MeetMarkers + MeetCard
     // =========================================================
@@ -342,6 +344,7 @@ public struct PublicMapView: View
                         do
                         {
                             try await submitMeet(locationInfo: location, name: name, startTime: start, endTime: end)
+                            await loadMeets() // refresh screen when new meets?
                         }
                         catch { print("createMeet error:", error) }
                     }
@@ -364,8 +367,6 @@ public struct PublicMapView: View
                         .padding(.top, 8)
                 }
             }
-            
-            
         }
         .onAppear { lm.requestWhenInUse() }
 

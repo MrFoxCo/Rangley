@@ -34,17 +34,23 @@ public final class LocationManager: NSObject, ObservableObject, CLLocationManage
             print("⚠️ Location Services OFF at system level.")
             return
         }
-        Task { @MainActor in
-            switch self.status {
-            case .notDetermined:
-                self.manager.requestWhenInUseAuthorization()
-            case .authorizedWhenInUse, .authorizedAlways:
-                self.manager.requestLocation()
-            default:
-                break
+        // Check authorization status without blocking the main thread
+        let currentStatus = manager.authorizationStatus
+        
+        // Only request authorization if not determined
+        if currentStatus == .notDetermined {
+            DispatchQueue.main.async { [weak self] in
+                self?.manager.requestWhenInUseAuthorization()
             }
+            // The actual location request will happen in locationManagerDidChangeAuthorization
+            // when the user grants permission
+        } else {
+            // Status is already determined, handle it immediately
+            handle(currentStatus)
         }
+
     }
+
 
     private func handle(_ s: CLAuthorizationStatus) {
         Task { @MainActor in

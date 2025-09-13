@@ -80,38 +80,3 @@ struct RangleyApp: App
         WindowGroup { RootGate() }   // ← was UserRegisterFlow()
     }
 }
-
-
-
-
-
-// V1
-//import SwiftUI
-//import Amplify
-//import AWSCognitoAuthPlugin
-//
-//@main
-//struct RangleyApp: App {
-//    init() {
-//        configureAmplify()
-//    }
-//
-//    @StateObject private var locationManager = LocationManager()
-//
-//    var body: some Scene {
-//        WindowGroup {
-//            RootView()
-//                .environmentObject(locationManager)
-//        }
-//    }
-//}
-//
-//func configureAmplify() {
-//    do {
-//        try Amplify.add(plugin: AWSCognitoAuthPlugin())
-//        try Amplify.configure()
-//        print("Amplify configured")
-//    } catch {
-//        print("Amplify configure failed: \(error)")
-//    }
-//}
