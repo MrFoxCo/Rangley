@@ -252,11 +252,14 @@ public struct PublicMapView: View
             { geo in
                 MapReader
                 { proxy in
-                    Map(position: $cameraPosition) {
-                        ForEach(meets.filter { isInVisibleRegion($0) }, id: \.meet_id) { meet in
+                    Map(position: $cameraPosition)
+                    {
+                        ForEach(meets.filter { isInVisibleRegion($0) }, id: \.meet_id)
+                        { meet in
                             Annotation(
                                 meet.name, // Add a title/label as the first parameter
-                                coordinate: CLLocationCoordinate2D(latitude: meet.latitude, longitude: meet.longitude),
+                                coordinate: CLLocationCoordinate2D(
+                                    latitude: meet.latitude, longitude: meet.longitude),
                                 anchor: .center
                             ) {
                                 MeetBubbleButton(meet: meet, ns: meetNS) {
@@ -270,10 +273,26 @@ public struct PublicMapView: View
                         lastSpan = ctx.region.span
                         currentRegion = ctx.region
                     }
-                    .simultaneousGesture(
-                        SpatialTapGesture().onEnded { handleMapTap(proxy, $0) }
-                    )
-
+                    .onTapGesture { location in
+                        guard !showLocationPopup && !showMeetOverlay else { return }
+                        
+                        // cancel previous debounce
+                        tapTask?.cancel()
+                        tapTask = Task {
+                            try? await Task.sleep(nanoseconds: 300_000_000) // 0.3s
+                            
+                            if let coordinate = proxy.convert(location, from: .local) {
+                                let geocoder = CLGeocoder()
+                                let clLocation = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+                                if let locationInfo = await createLocationInfoObject(geocoder, clLocation) {
+                                    await MainActor.run {
+                                        selectedLocation = locationInfo
+                                        showLocationPopup = true
+                                    }
+                                }
+                            }
+                        }
+                    }
                     .ignoresSafeArea()
                 }
             }
@@ -283,7 +302,10 @@ public struct PublicMapView: View
                 showPopup: $showLocationPopup,
                 onCreateMeet: { location, name, start, end in
                     Task {
-                        do { try await submitMeet(locationInfo: location, name: name, startTime: start, endTime: end) }
+                        do
+                        {
+                            try await submitMeet(locationInfo: location, name: name, startTime: start, endTime: end)
+                        }
                         catch { print("createMeet error:", error) }
                     }
                 }

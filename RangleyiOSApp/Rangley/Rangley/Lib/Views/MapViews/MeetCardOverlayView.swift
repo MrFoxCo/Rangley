@@ -26,27 +26,13 @@ struct MeetBubbleButton: View
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { onTap() }
         } label: {
-            ZStack {
-                RoundedRectangle(cornerRadius: 999, style: .continuous)
-                    .fill(AppPalette.bgGradient)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 999, style: .continuous)
-                            .stroke(AppPalette.Brand.neonPink.opacity(0.85), lineWidth: 2)
-                    )
-                    .matchedGeometryEffect(id: "meet-bg-\(meet.meet_id)", in: ns)
-
-                VStack(spacing: 2) {
-                    Text(initials.isEmpty ? "•" : initials)
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(AppPalette.Text.primary)
-                    Image(systemName: "mappin.and.ellipse")
-                        .imageScale(.small)
-                        .foregroundStyle(AppPalette.Text.tertiary)
-                }
-                .padding(.vertical, 6)
-            }
-            .frame(width: 52, height: 52)
-            .shadow(radius: 10, y: 4)
+            Image("RangleySticker")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 40, height: 40)
+                .shadow(color: AppPalette.Brand.neonPink, radius: 8, x: 0, y: 0)
+                .shadow(color: AppPalette.Brand.neonPink.opacity(0.6), radius: 16, x: 0, y: 0)
+                .shadow(color: AppPalette.Brand.neonPink.opacity(0.3), radius: 24, x: 0, y: 0)
         }
         .buttonStyle(.plain)
     }
