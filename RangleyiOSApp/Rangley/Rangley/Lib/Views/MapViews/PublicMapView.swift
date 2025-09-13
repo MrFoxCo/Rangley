@@ -65,11 +65,17 @@ public struct PublicMapView: View
     //        }
     //    }
     
-    // TODO: Place it at the Users location ... or their last location if unknown
-    // PUBLIC MAP ALWAYS STARTS HERE
-    @State private var cameraPosition : MapCameraPosition = .region( MKCoordinateRegion(
-        center: CLLocationCoordinate2D(latitude: 41.9211, longitude: -87.6338), // Lincoln Park Zoo approx
-        span: MKCoordinateSpan(latitudeDelta: 0.15, longitudeDelta: 0.15)))
+    // =========================================================
+    // MARK: - USER LOCATION
+    // =========================================================
+    @StateObject private var lm = LocationManager()
+    
+    
+    
+    @State private var cameraPosition: MapCameraPosition = .region(MKCoordinateRegion(
+        center: CLLocationCoordinate2D(latitude: 41.9211, longitude: -87.6338),
+        span: MKCoordinateSpan(latitudeDelta: 0.04, longitudeDelta: 0.04) // ~3 mile radius
+    ))
     
     @State private var selectedAnchor: CGPoint?
     
@@ -77,6 +83,9 @@ public struct PublicMapView: View
     
     // Keep this in PublicMapView so helpers can see it
     @State private var lastSpan = MKCoordinateSpan(latitudeDelta: 0.15, longitudeDelta: 0.15)
+    // =========================================================
+    // MARK: - END USER LOCATION
+    // =========================================================
     
     // =========================================================
     // MARK: - Meet Creation FLow
@@ -163,7 +172,8 @@ public struct PublicMapView: View
     }
 
 
-    private func checkBounds(meet: ViewMeetsModel, region: MKCoordinateRegion) -> Bool {
+    private func checkBounds(meet: ViewMeetsModel, region: MKCoordinateRegion) -> Bool
+    {
         let meetCoordinate = CLLocationCoordinate2D(latitude: meet.latitude, longitude: meet.longitude)
         
         let latMin = region.center.latitude - region.span.latitudeDelta / 2
@@ -174,7 +184,6 @@ public struct PublicMapView: View
         return meetCoordinate.latitude >= latMin && meetCoordinate.latitude <= latMax &&
         meetCoordinate.longitude >= lonMin && meetCoordinate.longitude <= lonMax
     }
-    
     
     // =========================================================
     // MARK: - END Meet Creation FLow
@@ -218,6 +227,15 @@ public struct PublicMapView: View
     // =========================================================
     
     // =========================================================
+    // MARK: - Meets in Radius
+    // =========================================================
+    @State private var selectedRadius: Double = 2.0 // Default 2 mile radius
+    @State private var userLocation: CLLocationCoordinate2D = CLLocationCoordinate2D(latitude: 41.9211, longitude: -87.6338) // Default to Lincoln Park
+    // =========================================================
+    // MARK: - END Meets in Radius
+    // =========================================================
+    
+    // =========================================================
     // MARK: - Hamburger Menu
     // =========================================================
     @State private var showStart        = false
@@ -257,10 +275,9 @@ public struct PublicMapView: View
                         ForEach(meets.filter { isInVisibleRegion($0) }, id: \.meet_id)
                         { meet in
                             Annotation(
-                                meet.name, // Add a title/label as the first parameter
-                                coordinate: CLLocationCoordinate2D(
-                                    latitude: meet.latitude, longitude: meet.longitude),
-                                anchor: .center
+                                meet.name,
+                                coordinate: CLLocationCoordinate2D(latitude: meet.latitude, longitude: meet.longitude),
+                                anchor: .bottom // or .top, experiment with different anchors
                             ) {
                                 MeetBubbleButton(meet: meet, ns: meetNS) {
                                     selectedMeet = meet
@@ -274,20 +291,23 @@ public struct PublicMapView: View
                         currentRegion = ctx.region
                     }
                     .onTapGesture { location in
-                        guard !showLocationPopup && !showMeetOverlay else { return }
-                        
-                        // cancel previous debounce
-                        tapTask?.cancel()
-                        tapTask = Task {
-                            try? await Task.sleep(nanoseconds: 300_000_000) // 0.3s
+                        Task {
+                            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s - let button taps process first
+                            guard !showLocationPopup && !showMeetOverlay else { return }
                             
-                            if let coordinate = proxy.convert(location, from: .local) {
-                                let geocoder = CLGeocoder()
-                                let clLocation = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
-                                if let locationInfo = await createLocationInfoObject(geocoder, clLocation) {
-                                    await MainActor.run {
-                                        selectedLocation = locationInfo
-                                        showLocationPopup = true
+                            // cancel previous debounce
+                            tapTask?.cancel()
+                            tapTask = Task {
+                                try? await Task.sleep(nanoseconds: 300_000_000) // 0.3s - debounce delay
+                                
+                                if let coordinate = proxy.convert(location, from: .local) {
+                                    let geocoder = CLGeocoder()
+                                    let clLocation = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+                                    if let locationInfo = await createLocationInfoObject(geocoder, clLocation) {
+                                        await MainActor.run {
+                                            selectedLocation = locationInfo
+                                            showLocationPopup = true
+                                        }
                                     }
                                 }
                             }
@@ -296,6 +316,23 @@ public struct PublicMapView: View
                     .ignoresSafeArea()
                 }
             }
+            // Nearby Meets Badge - positioned in top-right
+            VStack {
+                HStack {
+                    Spacer()
+                    
+                    NearbyMeetsBadgeView(
+                        meets: meets,
+                        userLocation: userLocation,
+                        selectedRadius: $selectedRadius
+                    )
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
+                
+                Spacer()
+            }
+            .allowsHitTesting(!showMeetOverlay && !showLocationPopup)
             // ADD THIS: Pink location popup overlay
             MeetCreationOverlay(
                 selectedLocation: $selectedLocation,
@@ -329,6 +366,14 @@ public struct PublicMapView: View
             }
             
             
+        }
+        .onAppear { lm.requestWhenInUse() }
+
+        .task(id: lm.userLocation) {
+            if let c = lm.userLocation?.coordinate {
+                userLocation = c
+                cameraPosition = .region(.init(center: c, span: .init(latitudeDelta: 0.04, longitudeDelta: 0.04)))
+            }
         }
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .toolbarBackground(.visible, for: .tabBar)

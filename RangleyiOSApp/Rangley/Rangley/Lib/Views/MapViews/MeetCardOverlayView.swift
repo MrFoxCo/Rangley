@@ -5,6 +5,8 @@
 //  Created by Anthony Guzzardo on 9/12/25.
 //
 
+import MapKit
+import CoreLocation
 import SwiftUI
 
 // MARK: - Bubble (the little circle)
@@ -29,12 +31,14 @@ struct MeetBubbleButton: View
             Image("RangleySticker")
                 .resizable()
                 .scaledToFit()
-                .frame(width: 40, height: 40)
+                .frame(width: 80, height: 80)
                 .shadow(color: AppPalette.Brand.neonPink, radius: 8, x: 0, y: 0)
                 .shadow(color: AppPalette.Brand.neonPink.opacity(0.6), radius: 16, x: 0, y: 0)
                 .shadow(color: AppPalette.Brand.neonPink.opacity(0.3), radius: 24, x: 0, y: 0)
         }
         .buttonStyle(.plain)
+        .frame(width: 90, height: 90) // Slightly larger hit area
+        .contentShape(Rectangle()) // Ensure entire frame is tappable
     }
 }
 
@@ -74,7 +78,8 @@ struct MeetCardOverlay: View
         .animation(.spring(response: 0.35, dampingFraction: 0.88), value: isPresented)
     }
 
-    private func close() {
+    private func close()
+    {
         withAnimation(.spring(response: 0.35, dampingFraction: 0.88)) { isPresented = false }
     }
 }
@@ -84,12 +89,68 @@ private struct MeetCardView: View
 {
     let meet: ViewMeetsModel
     let onClose: () -> Void
-
+    
+    @State private var addressText: String = "Loading address..."
+    @State private var geocodingTask: Task<Void, Never>?
+    @State private var displayName          : String = ""
+    @State private var displayAddress       : String = ""
+    @State private var displayCityAndState  : String = ""
+    @State private var displaySubLocality   : String = ""
     private var dateRangeText: String {
         let f = DateIntervalFormatter()
         f.dateStyle = .medium
         f.timeStyle = .short
         return f.string(from: meet.dttm_start_utc, to: meet.dttm_end_utc)
+    }
+    
+    // Geocoding function to get address from coordinates
+    private func loadAddress() {
+        geocodingTask?.cancel()
+        geocodingTask = Task {
+            let geocoder = CLGeocoder()
+            let location = CLLocation(latitude: meet.latitude, longitude: meet.longitude)
+            
+            do {
+                let placemarks = try await geocoder.reverseGeocodeLocation(location)
+                guard let placemark = placemarks.first else {
+                    await MainActor.run {
+                        addressText = "Address unavailable"
+                    }
+                    return
+                }
+                
+                // Create address string similar to your LocationInfo.address computed property
+                let addressComponents = [
+                    placemark.name,
+                    placemark.thoroughfare,
+                    placemark.subThoroughfare,
+                    placemark.subLocality,
+                    placemark.locality,
+                    placemark.administrativeArea,
+                    placemark.postalCode,
+                    placemark.country
+                ]
+                .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                
+                let address = addressComponents.joined(separator: ", ")
+                
+                displayName    = addressComponents[0]
+                displayAddress = addressComponents[2] +  " " + addressComponents[1]
+                displaySubLocality = addressComponents[3]
+                displayCityAndState = addressComponents[4] + ", " + addressComponents[5]
+                
+                
+                await MainActor.run {
+                    addressText = address.isEmpty ? "Address unavailable" : address
+                }
+            } catch {
+                await MainActor.run {
+                    addressText = "Address unavailable"
+                }
+                print("Geocoding error: \(error)")
+            }
+        }
     }
 
     var body: some View {
@@ -131,12 +192,54 @@ private struct MeetCardView: View
                     .font(.subheadline)
             }
 
-            HStack(spacing: 10) {
-                Image(systemName: "mappin.and.ellipse")
-                    .foregroundStyle(AppPalette.Brand.neonPink)
-                Text("\(meet.latitude, specifier: "%.5f"), \(meet.longitude, specifier: "%.5f")")
-                    .foregroundStyle(AppPalette.Text.tertiary)
-                    .font(.footnote)
+            HStack(alignment: .top, spacing: 12) {
+                // Glowing map pin
+                ZStack {
+                    Circle()
+                        .fill(AppPalette.Brand.neonPink.opacity(0.15))
+                        .frame(width: 32, height: 32)
+                    
+                    Image(systemName: "mappin.circle.fill")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(AppPalette.Brand.neonPink)
+                        .shadow(color: AppPalette.Brand.neonPink.opacity(0.4), radius: 4, x: 0, y: 0)
+                }
+                
+                VStack(alignment: .leading, spacing: 3) {
+                    // Main place name - bold and prominent
+                    if !displayName.isEmpty {
+                        Text(displayName)
+                            .font(.system(size: 16, weight: .semibold, design: .rounded))
+                            .foregroundStyle(AppPalette.Text.primary)
+                            .lineLimit(2)
+                    }
+                    
+                    // Street address - clean and readable
+                    if !displayAddress.isEmpty {
+                        Text(displayAddress)
+                            .font(.system(size: 15, weight: .medium, design: .default))
+                            .foregroundStyle(AppPalette.Text.secondary)
+                            .lineLimit(1)
+                    }
+                    
+                    // Neighborhood/area - subtle
+                    if !displaySubLocality.isEmpty {
+                        Text(displaySubLocality)
+                            .font(.system(size: 14, weight: .regular, design: .default))
+                            .foregroundStyle(AppPalette.Text.tertiary)
+                            .lineLimit(1)
+                    }
+                    
+                    // City, State - final context
+                    if !displayCityAndState.isEmpty {
+                        Text(displayCityAndState)
+                            .font(.system(size: 14, weight: .medium, design: .default))
+                            .foregroundStyle(AppPalette.Text.secondary)
+                            .lineLimit(1)
+                    }
+                }
+                
+                Spacer()
             }
 
             if !meet.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -155,6 +258,12 @@ private struct MeetCardView: View
         }
         .padding(20)
         .shadow(radius: 24, y: 8)
+        .task {
+            loadAddress()
+        }
+        .onDisappear {
+            geocodingTask?.cancel()
+        }
     }
 }
 
