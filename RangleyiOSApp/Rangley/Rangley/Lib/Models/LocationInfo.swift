@@ -9,7 +9,7 @@ import MapKit
 public struct LocationInfo: Sendable, Codable, Hashable {
     public let Coordinate           : Coordinate              // required
     public let RegionCoordinate     : Coordinate             // geofencing center (optional)
-    public let RegionRadius         : Double?                 // meters (optional)
+    public let RegionRadius         : Double                 // meters (optional)
     public let Name                 : String?
     public let ThoroughFare         : String?
     public let SubThoroughFare      : String?
@@ -27,7 +27,7 @@ public struct LocationInfo: Sendable, Codable, Hashable {
     public init(
         Coordinate: Coordinate,
         RegionCoordinate: Coordinate,
-        RegionRadius: Double? = nil,
+        RegionRadius: Double,
         Name: String? = nil,
         ThoroughFare: String? = nil,
         SubThoroughFare: String? = nil,

@@ -8,7 +8,7 @@
 import UIKit
 import SwiftUI
 import CoreLocation
-
+import QuartzCore // for confetti supports the CA_* stuff
 struct MeetCreationFormView: View
 {
     let locationInfo: LocationInfo
@@ -72,21 +72,21 @@ struct MeetCreationFormView: View
         }
     }
 
-    private func nextStep()
-    {
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-            switch currentFieldStep {
-            case .name:
-                currentFieldStep = .startTime
-            case .startTime:
-                currentFieldStep = .endTime
-            case .endTime:
-                currentFieldStep = .review
-            case .review:
-                onConfirm(meetName, startTime, endTime)
-            }
+    private func nextStep() {
+      withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+        switch currentFieldStep {
+        case .name:
+          isNameFieldFocused = false   // hide keyboard before moving on
+          currentFieldStep = .startTime
+        case .startTime: currentFieldStep = .endTime
+        case .endTime:   currentFieldStep = .review
+        case .review:
+          let trimmed = meetName.trimmingCharacters(in: .whitespacesAndNewlines)
+          onConfirm(String(trimmed.prefix(50)), startTime, endTime)
         }
+      }
     }
+
 
     private func previousStep()
     {
@@ -243,7 +243,7 @@ struct MeetCreationFormView: View
                             DatePicker("", selection: $startTime, displayedComponents: [.date, .hourAndMinute])
                                 .datePickerStyle(.wheel)
                                 .labelsHidden()
-                                .accentColor(AppPalette.Brand.neonPink)
+                                .tint(AppPalette.Brand.neonPink)
                                 .frame(height: 200)
                                 .padding(.horizontal, 8)
                                 .background(
@@ -262,7 +262,7 @@ struct MeetCreationFormView: View
                             DatePicker("", selection: $endTime, in: startTime..., displayedComponents: [.date, .hourAndMinute])
                                 .datePickerStyle(.wheel)
                                 .labelsHidden()
-                                .accentColor(AppPalette.Brand.neonPink)
+                                .tint(AppPalette.Brand.neonPink)
                                 .frame(height: 200)
                                 .padding(.horizontal, 8)
                                 .background(
@@ -353,19 +353,25 @@ struct MeetCreationFormView: View
         }
     }
 
+    private static let reviewFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .short
+        return f
+    }()
     private func formatDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMM d, yyyy 'at' h:mm a"
-        return formatter.string(from: date)
+        Self.reviewFormatter.string(from: date)
     }
+
 
     private func formatDuration(from start: Date, to end: Date) -> String {
         let interval = max(0, end.timeIntervalSince(start))
         let hours = Int(interval) / 3600
         let minutes = (Int(interval) % 3600) / 60
         if hours > 0 && minutes > 0 { return "\(hours)h \(minutes)m" }
-        if hours > 0 { return "\(hours) hour\(hours > 1 ? "s" : "")" }
-        return "\(minutes) minutes"
+        if hours > 0 { return "\(hours) hour\(hours == 1 ? "" : "s")" }
+        return "\(minutes) minute\(minutes == 1 ? "" : "s")"
+
     }
 }
 

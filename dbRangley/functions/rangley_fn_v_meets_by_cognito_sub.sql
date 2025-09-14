@@ -4,8 +4,8 @@ CREATE OR REPLACE FUNCTION rangley.rangley_fn_v_meets_by_cognito_sub(p_cognito_s
 RETURNS TABLE
 (
   meet_id_uuid			UUID,
-  change_stamp        	int8,      -- match Swift Int64
   meet_status_id      	int2,      -- match Swift Int16
+  change_stamp			int8,
   latitude            	float8,
   longitude           	float8,
   region_latitude     	float8,
@@ -15,6 +15,7 @@ RETURNS TABLE
   dttm_end_utc        	timestamptz,
   name                	varchar(50),
   category_name      	varchar(50),
+  meet_category_id      int2,
   description         	varchar(50),
   max_capacity        	int4,
   created_by_user_uuid  UUID,
@@ -30,6 +31,7 @@ WITH me AS (
 SELECT
   utdm.meet_id_uuid,
   utdm.meet_status_id,
+  utdm.change_stamp,
   utdm.latitude,
   utdm.longitude,
   utdm.region_latitude,
@@ -39,6 +41,7 @@ SELECT
   utdm.dttm_end_utc,
   utdm.name,
   utdm.category_name,
+  utdm.meet_category_id,
   utdm.description,
   utdm.max_capacity,
   utdm.created_by_user_uuid,

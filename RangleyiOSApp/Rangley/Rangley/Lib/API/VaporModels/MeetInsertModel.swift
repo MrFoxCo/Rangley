@@ -22,12 +22,10 @@ struct MeetInsertBody: Codable {
     let dttm_end_utc: Date
     // Optional
     let description: String?
-    let change_reason: String?
     let meet_category_id: Int16?
     let max_capacity: Int32?
 }
 
 struct MeetInsertResponse: Codable {
-    let meet_id: Int64
-    let meet_coordinate_id: Int64
+    let num_inserted: Int32
 }

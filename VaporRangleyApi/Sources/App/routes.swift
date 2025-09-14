@@ -310,8 +310,6 @@ public func routes(_ app: Application) throws
     
     // MARK: - System INSERTS (s*) or POST ROUTES
 
-    // TODO: - CONSIDER DOING THIS WITH EVERYTHING
-    // TODO: - SWAPOUT NUM_INSERTED for is_success or something
     s.post("meet")
     {
         req async throws -> HTTPDTO.Meets.InsertResponse in
@@ -340,7 +338,6 @@ public func routes(_ app: Application) throws
             dttm_start_utc: body.dttm_start_utc,
             dttm_end_utc: body.dttm_end_utc,
             description: body.description,
-            change_reason: body.change_reason,
             meet_category_id: body.meet_category_id,
             max_capacity: body.max_capacity
         )
@@ -367,6 +364,71 @@ public func routes(_ app: Application) throws
             } else {
                 req.logger.error("Database error creating meet: \(error)")
                 throw Abort(.internalServerError, reason: "Failed to create meet")
+            }
+        }
+    }
+    
+    s.post("updated-meet")
+    {
+        req async throws -> HTTPDTO.Meets.InsertResponse in
+        
+        let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
+
+        let body = try req.content.decode(HTTPDTO.Meets.InsertUpdatedBody.self)  // Use InsertUpdatedBody
+
+        // Only validate fields that are provided
+        if let name = body.name {
+            guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            else { throw Abort(.badRequest, reason: "name cannot be empty if provided") }
+        }
+        
+        if let startTime = body.dttm_start_utc, let endTime = body.dttm_end_utc {
+            guard startTime < endTime
+            else { throw Abort(.badRequest, reason: "dttm_start_utc must be before dttm_end_utc") }
+        }
+
+        guard let sql = req.db as? any SQLDatabase
+        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+
+        let params = Proc.SystemInsertUpdatedMeet.Params(
+            cognito_sub: sub,
+            meet_id_uuid: body.meet_id_uuid,  // Now available from body
+            latitude: body.latitude,
+            longitude: body.longitude,
+            region_latitude: body.region_latitude,
+            region_longitude: body.region_longitude,
+            region_radius: body.region_radius,
+            meet_status_id: body.meet_status_id,
+            name: body.name,
+            dttm_start_utc: body.dttm_start_utc,
+            dttm_end_utc: body.dttm_end_utc,
+            description: body.description,
+            change_reason: body.change_reason,
+            meet_category_id: body.meet_category_id,
+            max_capacity: body.max_capacity
+        )
+
+        do {
+            let dbResult = try await Proc.SystemInsertUpdatedMeet.call(
+                on: sql,
+                params,
+                .init(num_inserted: 0)
+            )
+            
+            guard dbResult.num_inserted == 1
+            else { throw Abort(.internalServerError, reason: "Failed to update meet") }
+
+            return .init(num_inserted: dbResult.num_inserted)
+                        
+        } catch let error as PSQLError {
+            if error.serverInfo?[.sqlState] == "22023" {
+                throw Abort(.badRequest, reason: "Invalid input parameters")
+            } else if error.serverInfo?[.sqlState] == "P0002" {
+                throw Abort(.notFound, reason: "Meet not found")
+            } else {
+                req.logger.error("Database error updating meet: \(error)")
+                throw Abort(.internalServerError, reason: "Failed to update meet")
             }
         }
     }

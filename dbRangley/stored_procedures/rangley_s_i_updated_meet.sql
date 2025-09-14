@@ -60,7 +60,10 @@ DECLARE
 	final_dttm_start_utc   timestamptz;
 	final_dttm_end_utc     timestamptz;
 	
-	coordinates_changed     BOOLEAN := FALSE;
+	-- for coordinates
+  	_provided INT;
+	_eps FLOAT8 := 1e-7; -- optional: no-op guard tolerance
+	_eps_radius FLOAT8 := 1e-3;  -- meters (or your unit)
 BEGIN
     -- OUT sentinels
     num_inserted := 0;
@@ -72,18 +75,27 @@ BEGIN
           ERRCODE='22023', MESSAGE='[ERRO] p_cognito_sub is required (non-empty)';
     END IF;
 
+	-- AUTHENTICATING USER
+	SELECT rangley.rangley_fn_v_user_id_by_cognito_sub(v_sub)
+	INTO created_by_user_id;
+	
+	IF created_by_user_id IS NULL OR created_by_user_id <= 0 THEN
+	  RAISE EXCEPTION USING ERRCODE='22023',
+	    MESSAGE='[ERRO] Could not resolve user_id from cognito_sub',
+	    DETAIL=format('cognito_sub=%s', v_sub);
+	END IF;
 
-	-- MAKE SURE THAT THE USER EXISTS
-    SELECT rangley.rangley_fn_v_user_id_by_cognito_sub(v_sub)
-      INTO created_by_user_id;
+	IF NOT EXISTS (
+	  SELECT 1
+	  FROM rangley.tb_meet_ids mid
+	  JOIN rangley.vw_up_to_date_meets v ON v.meet_id = mid.meet_id
+	  WHERE v.meet_id_uuid = p_meet_id_uuid
+	    AND mid.created_by_user_id = created_by_user_id
+	) THEN
+	  RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='[ERRO] Not authorized to update this meet';
+	END IF;
 
-    IF created_by_user_id IS NULL OR created_by_user_id <= 0 THEN
-        RAISE EXCEPTION USING
-          ERRCODE='22023',
-          MESSAGE='[ERRO] Could not resolve user_id from cognito_sub',
-          DETAIL=format('cognito_sub=%s', v_sub),
-          HINT='Ensure the user exists in tb_users and the sub is correct.';
-    END IF;
+
 
     -- ===== Get current values from latest version
 
@@ -147,34 +159,76 @@ BEGIN
           DETAIL=format('max_capacity=%s', final_max_capacity);
     END IF;
 
-    -- ===== Determine if coordinates changed
-    coordinates_changed := (
-        p_latitude 			IS NOT NULL OR 
-        p_longitude 		IS NOT NULL OR 
-        p_region_latitude 	IS NOT NULL OR 
-        p_region_longitude 	IS NOT NULL OR 
-        p_region_radius 	IS NOT NULL
-    );
+	_provided := (CASE WHEN p_latitude         IS NULL THEN 0 ELSE 1 END)
+	             + (CASE WHEN p_longitude        IS NULL THEN 0 ELSE 1 END)
+	             + (CASE WHEN p_region_latitude  IS NULL THEN 0 ELSE 1 END)
+	             + (CASE WHEN p_region_longitude IS NULL THEN 0 ELSE 1 END)
+	             + (CASE WHEN p_region_radius    IS NULL THEN 0 ELSE 1 END);
 
-    -- ===== Handle coordinates (same pattern as insert)
-    IF coordinates_changed THEN
-        -- Create new coordinate record
-        CALL rangley.rangley_i_meet_coordinate(
-            new_meet_coordinate_id,
-            p_latitude, 
-            p_longitude, 
-            p_region_latitude, 
-            p_region_longitude, 
-            p_region_radius
-        );
-        final_coordinate_id := new_meet_coordinate_id;
-        
-        RAISE LOG '[INFO] Created new meet_coordinate_id=%', final_coordinate_id;
-    ELSE
-        -- Reuse existing coordinate record
-        final_coordinate_id := current_coordinate_id;
-        RAISE LOG '[INFO] Reusing existing meet_coordinate_id=%', final_coordinate_id;
-    END IF;
+
+
+	
+ 	IF _provided = 0 THEN
+	    -- reuse current
+	    final_coordinate_id := current_coordinate_id;
+	
+	ELSIF _provided = 5 THEN
+	-- bounds (point + region center)
+	  IF p_latitude          < -90  OR p_latitude          >  90
+	     OR p_longitude      < -180 OR p_longitude         > 180
+	     OR p_region_latitude  < -90  OR p_region_latitude  >  90
+	     OR p_region_longitude < -180 OR p_region_longitude > 180
+	     OR p_region_radius <= 0
+	  THEN
+	     RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='[ERRO] Invalid coordinate bounds';
+	  END IF;
+	
+	  -- epsilon no-op
+	  PERFORM 1
+	  FROM rangley.tb_meet_coordinates c
+	  WHERE c.meet_coordinate_id = current_coordinate_id
+	    AND abs(c.latitude         - p_latitude        ) < _eps
+	    AND abs(c.longitude        - p_longitude       ) < _eps
+	    AND abs(c.region_latitude  - p_region_latitude ) < _eps
+	    AND abs(c.region_longitude - p_region_longitude) < _eps
+	    AND abs(c.region_radius    - p_region_radius   ) < _eps_radius;
+	
+	IF FOUND THEN
+	      final_coordinate_id := current_coordinate_id; -- no-op
+	ELSE
+	      -- create new full coordinate (your inserter can still do range checks)
+  		CALL rangley.rangley_i_meet_coordinate(
+	        new_meet_coordinate_id,
+	        p_latitude, p_longitude, p_region_latitude,
+			p_region_longitude, p_region_radius
+      	);
+	      final_coordinate_id := new_meet_coordinate_id;
+	    END IF;
+	
+  	ELSE
+	    RAISE EXCEPTION USING
+			ERRCODE='22023',
+	      	MESSAGE='[ERRO] Provide all 5 coordinate fields or none',
+	      	HINT='Required set: latitude, longitude, region_latitude, region_longitude, region_radius.';
+	END IF;
+
+
+
+	-- NO IDENTICAL INSERT "no-op"
+
+	IF final_coordinate_id = current_coordinate_id
+	   AND final_meet_status_id = current_meet_status_id
+	   AND final_name = current_name
+	   AND final_description IS NOT DISTINCT FROM current_description
+	   AND final_category_id = current_category_id
+	   AND final_max_capacity = current_max_capacity
+	   AND final_dttm_start_utc = current_dttm_start_utc
+	   AND final_dttm_end_utc   = current_dttm_end_utc
+	THEN
+	   RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='[ERRO] No changes provided';
+	END IF;
+
+
 
     -- ===== Create new change_stamp for this update
 	-- new_change_stamp is an OUT 
@@ -186,6 +240,8 @@ BEGIN
           MESSAGE='[ERRO] Failed to create new change_stamp',
           DETAIL=format('meet_id=%s', meet_id);
     END IF;
+
+
 
     -- ===== Insert new version (same structure as insert)
     INSERT INTO rangley.tb_meets

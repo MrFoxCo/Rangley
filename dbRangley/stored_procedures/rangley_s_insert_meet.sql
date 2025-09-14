@@ -29,7 +29,9 @@ AS $procedure$
 DECLARE
     _state  text; _msg text; _detail text; _hint text; _ctx text;
     v_sub                text;
-    created_by_user_id   bigint;
+    created_by_user_id   	bigint;
+	new_meet_id          	bigint;
+	new_meet_coordinate_id 	bigint;          
 BEGIN
     -- OUT sentinel
     num_inserted           := 0;

@@ -164,7 +164,8 @@ public struct PublicMapView: View
         center: CLLocationCoordinate2D(latitude: 41.9211, longitude: -87.6338),
         span: MKCoordinateSpan(latitudeDelta: 0.15, longitudeDelta: 0.15)
     )
-    private func isInVisibleRegion(_ meet: ViewMeetsModel) -> Bool {
+    private func isInVisibleRegion(_ meet: ViewMeetsModel) -> Bool
+    {
         let r = currentRegion
         let latMin = r.center.latitude  - r.span.latitudeDelta  / 2
         let latMax = r.center.latitude  + r.span.latitudeDelta  / 2
@@ -193,6 +194,16 @@ public struct PublicMapView: View
     // MARK: - END Meet Creation FLow
     // =========================================================
     
+    // =========================================================
+    // MARK: - Edit Meet FLow
+    // =========================================================
+    
+    @State private var showEditSheet = false
+    
+    // =========================================================
+    // MARK: - END Edit Meet FLow
+    // =========================================================
+
     // =========================================================
     // MARK: - Display MeetMarkers + MeetCard
     // =========================================================
@@ -358,10 +369,46 @@ public struct PublicMapView: View
             MeetCardOverlay(
                 selectedMeet: $selectedMeet,
                 isPresented: $showMeetOverlay,
-                ns: meetNS
-                // onDelete: { meet in /* call Vapor later */ }
+                ns: meetNS,
+                onEdit: { meet in
+                    selectedMeet = meet
+                    showEditSheet = true
+                },
+                onDelete: { meet in
+                    // TODO: call your delete API; backend will also enforce ownership
+                }
             )
+
             .allowsHitTesting(showMeetOverlay)
+            .sheet(isPresented: $showEditSheet) {
+                if let editing = selectedMeet {
+                    MeetFormView(
+                        mode: .update(existing: editing),
+                        onCreate: { _ in /* not used here */ },
+                        onUpdate: { vm in
+                            Task {
+                                do {
+                                    guard let body = vm.makeUpdateBody() else {
+                                        showEditSheet = false
+                                        return
+                                    }
+                                    let token = try await fetchIdToken()
+                                    _ = try await AuthAPI.updateMeet(baseURL: Env.apiBaseURL, token: token, body: body)
+                                    await loadMeets()
+                                    await MainActor.run {
+                                        showEditSheet = false
+                                        showMeetOverlay = false
+                                    }
+                                } catch {
+                                    print("Update failed:", error)
+                                }
+                            }
+                        },
+                        onClose: { showEditSheet = false }
+                    )
+                }
+            }
+
             
             // Add this after MeetCardOverlay in your ZStack
             if isLoadingMeets {

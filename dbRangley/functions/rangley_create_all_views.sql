@@ -223,6 +223,7 @@ select
     ,m.dttm_end_utc
     ,m.name
     ,mc.name AS category_name
+    ,m.meet_category_id
     ,m.description
     ,m.max_capacity
     ,u.uuid as created_by_user_uuid

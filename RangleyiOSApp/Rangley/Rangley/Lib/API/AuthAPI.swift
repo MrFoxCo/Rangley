@@ -17,34 +17,38 @@ enum AuthAPIError: Error, LocalizedError {
         }
     }
 }
-// JSON encoder with ISO8601 dates (to match Vapor)
-private extension AuthAPI {
-    static var isoEncoder: JSONEncoder {
+
+
+struct AuthAPI {
+    
+    // JSON enc/dec with ISO-8601 dates
+    private static var isoEncoder: JSONEncoder {
         let e = JSONEncoder()
         e.dateEncodingStrategy = .iso8601
         return e
     }
-}
-
-struct AuthAPI {
+    private static var isoDecoder: JSONDecoder {
+        let d = JSONDecoder()
+        d.dateDecodingStrategy = .iso8601
+        return d
+    }
+    
     // POST /i/auth-register  (protected; Bearer ID token)
     static func register(baseURL: URL, token: String, payload: UserRegisterModel) async throws -> UserRegisterResult
     {
-        var req = URLRequest(url: baseURL.appendingPathComponent("/auth/register"))
+        var req = URLRequest(url: makeURL(baseURL, ["auth", "register"]))  // ← use makeURL
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        req.httpBody = try JSONEncoder().encode(payload)
+        req.httpBody = try isoEncoder.encode(payload)                      // ← use isoEncoder
 
         let (data, resp) = try await URLSession.shared.data(for: req)
         guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
         guard (200..<300).contains(http.statusCode) else { throw AuthAPIError.http(http.statusCode, extractReason(from: data)) }
 
-        // Some handlers may return 204/empty on success.
         if data.isEmpty { return UserRegisterResult(is_success: true) }
-
-        do { return try JSONDecoder().decode(UserRegisterResult.self, from: data) }
+        do { return try isoDecoder.decode(UserRegisterResult.self, from: data) } // safe if dates appear later
         catch { throw AuthAPIError.decode }
     }
 
@@ -103,6 +107,7 @@ struct AuthAPI {
         return String(data: data, encoding: .utf8) ?? ""
     }
     
+    // THE VERY FIRST MEET corresponds to SystemInsertMeet
     static func createMeet(baseURL: URL, token: String, body: MeetInsertBody) async throws -> MeetInsertResponse
     {
         var req = URLRequest(url: makeURL(baseURL, ["s", "meet"]))
@@ -120,6 +125,31 @@ struct AuthAPI {
         do { return try JSONDecoder().decode(MeetInsertResponse.self, from: data) }
         catch { throw AuthAPIError.decode }
     }
+    
+    // THE VERY FIRST MEET corresponds to SystemInsertMeet
+    static func updateMeet(baseURL: URL,
+                           token: String, body: UpdatedMeetInsertBody) async throws -> UpdatedMeetInsertResponse
+    {
+        guard body.isCoordinateSetValid else {
+            throw AuthAPIError.http(400, "Provide all 5 coordinate fields or none")
+        }
+
+        var req = URLRequest(url: makeURL(baseURL, ["s", "updated-meet"]))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.httpBody = try isoEncoder.encode(body)
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
+        guard (200..<300).contains(http.statusCode) else {
+            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        }
+        do { return try JSONDecoder().decode(UpdatedMeetInsertResponse.self, from: data) }
+        catch { throw AuthAPIError.decode }
+    }
+
     
     /// GET /v/meets  (protected; Bearer ID token)
     static func viewMeets(baseURL: URL, token: String) async throws -> [ViewMeetsModel]
@@ -154,12 +184,5 @@ struct AuthAPI {
     // Build URLs safely without %2F issues
     private static func makeURL(_ base: URL, _ segments: [String]) -> URL {
         segments.reduce(base) { $0.appendingPathComponent($1) }
-    }
-
-    // JSON decoder with ISO8601 dates (matches Vapor config)
-    private static var isoDecoder: JSONDecoder {
-        let d = JSONDecoder()
-        d.dateDecodingStrategy = .iso8601
-        return d
     }
 }

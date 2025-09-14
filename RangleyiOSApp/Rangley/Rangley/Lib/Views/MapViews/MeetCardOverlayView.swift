@@ -8,6 +8,8 @@
 import MapKit
 import CoreLocation
 import SwiftUI
+import Amplify
+import AWSPluginsCore
 
 // MARK: - Bubble (the little circle)
 struct MeetBubbleButton: View
@@ -43,16 +45,12 @@ struct MeetBubbleButton: View
 }
 
 // MARK: - Overlay (expanded card)
-struct MeetCardOverlay: View
-{
-    @EnvironmentObject private var session: SessionModel
-    
+struct MeetCardOverlay: View {
     @Binding var selectedMeet: ViewMeetsModel?
     @Binding var isPresented: Bool
     let ns: Namespace.ID
 
-    // NEW: pass the signed-in user's ID and a delete callback you can wire later
-    let currentUserID: Int64
+    var onEdit:   (ViewMeetsModel) -> Void = { _ in }
     var onDelete: (ViewMeetsModel) -> Void = { _ in }
 
     var body: some View {
@@ -64,8 +62,8 @@ struct MeetCardOverlay: View
 
                 MeetCardView(
                     meet: meet,
-                    myUserID: session.me?.uuid,   // ← drives Delete visibility
                     onClose: close,
+                    onEdit: onEdit,
                     onDelete: onDelete
                 )
                 .frame(maxWidth: 420, maxHeight: 600)
@@ -76,7 +74,7 @@ struct MeetCardOverlay: View
                             RoundedRectangle(cornerRadius: 20, style: .continuous)
                                 .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
                         )
-                        .matchedGeometryEffect(id: "meet-bg-\(meet.meet_uuid)", in: ns)
+                        .matchedGeometryEffect(id: "meet-bg-\(meet.meet_id_uuid)", in: ns)
                 )
                 .transition(.asymmetric(
                     insertion: .opacity.combined(with: .scale),
@@ -88,19 +86,19 @@ struct MeetCardOverlay: View
         .animation(.spring(response: 0.35, dampingFraction: 0.88), value: isPresented)
     }
 
-    private func close()
-    {
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.88)) { isPresented = false }
-    }
+    private func close() { withAnimation(.spring(response: 0.35, dampingFraction: 0.88)) { isPresented = false } }
 }
+
 
 // MARK: - Card content (no background; background is provided by overlay for the morph)
 private struct MeetCardView: View
 {
     let meet: ViewMeetsModel
-    let myUserID: Int64
     let onClose: () -> Void
+    let onEdit: (ViewMeetsModel) -> Void
     let onDelete: (ViewMeetsModel) -> Void
+
+    @State private var showDeleteConfirm = false
 
     @State private var addressText: String = "Loading address..."
     @State private var geocodingTask: Task<Void, Never>?
@@ -108,8 +106,6 @@ private struct MeetCardView: View
     @State private var displayAddress      : String = ""
     @State private var displayCityAndState : String = ""
     @State private var displaySubLocality  : String = ""
-
-    @State private var showDeleteConfirm: Bool = false
 
     private var dateRangeText: String {
         let f = DateIntervalFormatter()
@@ -119,7 +115,8 @@ private struct MeetCardView: View
     }
 
     // Geocoding function to get address from coordinates
-    private func loadAddress() {
+    private func loadAddress()
+    {
         geocodingTask?.cancel()
         geocodingTask = Task {
             let geocoder = CLGeocoder()
@@ -162,16 +159,28 @@ private struct MeetCardView: View
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 16)
+        {
             // Creator + actions
-            HStack(alignment: .firstTextBaseline) {
+            HStack(alignment: .firstTextBaseline)
+            {
                 Text(meet.display_name)
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(AppPalette.Text.primary)
 
                 Spacer()
 
-                if meet.created_by_user_uuid == myUserID {
+                if meet.is_owner {
+                    Button { onEdit(meet) } label: {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 14, weight: .bold))
+                            .padding(8)
+                            .background(AppPalette.Surface.fieldFill, in: Circle())
+                            .overlay(Circle().stroke(AppPalette.Surface.fieldStroke, lineWidth: 1))
+                            .foregroundStyle(AppPalette.Brand.neonPink)
+                    }
+                    .buttonStyle(.plain)
+
                     Button(role: .destructive) { showDeleteConfirm = true } label: {
                         Image(systemName: "trash")
                             .font(.system(size: 14, weight: .bold))
@@ -181,7 +190,6 @@ private struct MeetCardView: View
                             .foregroundStyle(AppPalette.Brand.neonPink)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Delete meet")
                 }
 
                 Button(action: onClose) {
@@ -197,7 +205,8 @@ private struct MeetCardView: View
 
             // Optional: show a compact date/address line if you want to surface it
             // Remove if you don't need it rendered here.
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 6)
+            {
                 Text(dateRangeText)
                     .foregroundStyle(AppPalette.Text.secondary)
                     .font(.subheadline)
@@ -241,15 +250,12 @@ private struct MeetCardView: View
 
             Spacer(minLength: 0)
         }
-        .padding(20)
         .shadow(radius: 24, y: 8) // keep if you have an extension; otherwise use .shadow(color: .black.opacity(0.2), radius: 24, x: 0, y: 8)
         .task { loadAddress() }
         .onDisappear { geocodingTask?.cancel() }
+        .padding(20)
         .alert("Delete this meet?", isPresented: $showDeleteConfirm) {
-            Button("Delete", role: .destructive) {
-                onDelete(meet)
-                onClose()
-            }
+            Button("Delete", role: .destructive) { onDelete(meet); onClose() }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This action cannot be undone.")

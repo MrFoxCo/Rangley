@@ -42,14 +42,34 @@ enum HTTPDTO {
             let dttm_end_utc    : Date
             // Optional
             let description     : String?
+            let meet_category_id: Int16?
+            let max_capacity    : Int32?
+        }
+        
+
+        
+        struct InsertUpdatedBody: Content, Sendable {
+            // Required - must know which meet to update
+            let meet_id_uuid    : String
+            
+            // ALL OPTIONAL - only send fields that are changing
+            let latitude        : Double?
+            let longitude       : Double?
+            let region_latitude : Double?
+            let region_longitude: Double?
+            let region_radius   : Double?
+            let meet_status_id  : Int16?
+            let name            : String?
+            let dttm_start_utc  : Date?
+            let dttm_end_utc    : Date?
+            let description     : String?
             let change_reason   : String?
             let meet_category_id: Int16?
             let max_capacity    : Int32?
         }
         
         struct InsertResponse: Content, Sendable {
-            let meet_id: Int64
-            let meet_coordinate_id: Int64
+            let num_inserted: Int32
         }
     }
 }

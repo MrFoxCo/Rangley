@@ -316,7 +316,6 @@ enum Proc
 
             // Optional
             let description     : String?         // p_description
-            let change_reason   : String?         // p_change_reason
             let meet_category_id: Int16?          // p_meet_category_id
             let max_capacity    : Int32?          // p_max_capacity
         }
@@ -341,7 +340,6 @@ enum Proc
                 ,\(bind: i.dttm_start_utc           )::timestamptz
                 ,\(bind: i.dttm_end_utc             )::timestamptz
                 ,COALESCE(\(bind: i.description     )::varchar(50), ''::varchar(50))
-                ,COALESCE(\(bind: i.change_reason   )::varchar(50), ''::varchar(50))
                 ,COALESCE(\(bind: i.meet_category_id)::int2, 1::int2)
                 ,COALESCE(\(bind: i.max_capacity    )::int4, 2::int4)
             );
@@ -358,24 +356,26 @@ enum Proc
     {
         static let procName: RangleyProcName = .s_insert_updated_meet  // ensure this resolves to schema-qualified "rangley.rangley_s_insert_meet" or your search_path includes 'rangley'
         
-        struct Params: Content, Sendable {
+        struct Params: Content, Sendable
+        {
             // Required
-            let cognito_sub     : String
-            let meet_id_uuid    : String
-            let latitude        : Double
-            let longitude       : Double
-            let region_latitude : Double
-            let region_longitude: Double
-            let region_radius   : Double
-            let name            : String          // p_name
-            let dttm_start_utc  : Date
-            let dttm_end_utc    : Date
-
-            // Optional
-            let description     : String?         // p_description
-            let change_reason   : String?         // p_change_reason
-            let meet_category_id: Int16?          // p_meet_category_id
-            let max_capacity    : Int32?          // p_max_capacity
+            let cognito_sub         : String
+            let meet_id_uuid        : String  // This is required for updates
+            
+            // Optional fields - only pass what's changing
+            let latitude            : Double?
+            let longitude           : Double?
+            let region_latitude     : Double?
+            let region_longitude    : Double?
+            let region_radius       : Double?
+            let meet_status_id      : Int16?
+            let name                : String?
+            let dttm_start_utc      : Date?
+            let dttm_end_utc        : Date?
+            let description         : String?
+            let change_reason       : String?
+            let meet_category_id    : Int16?
+            let max_capacity        : Int32?
         }
 
         struct Result: Content, Sendable {
@@ -386,26 +386,28 @@ enum Proc
             """
             CALL \(unsafeRaw: procName.rawValue)
             (
-                 \(bind: o.num_inserted)::int4
-            
-                ,\(bind: i.cognito_sub              )::text
-                ,\(bind: i.cognito_sub              )::uuid
-                ,\(bind: i.latitude                 )::float8
-                ,\(bind: i.longitude                )::float8
-                ,\(bind: i.region_latitude          )::float8
-                ,\(bind: i.region_longitude         )::float8
-                ,\(bind: i.region_radius            )::float8
-                ,\(bind: i.name                     )::varchar(50)
-                ,\(bind: i.dttm_start_utc           )::timestamptz
-                ,\(bind: i.dttm_end_utc             )::timestamptz
-                ,COALESCE(\(bind: i.description     )::varchar(50))
-                ,COALESCE(\(bind: i.change_reason   )::varchar(50))
-                ,COALESCE(\(bind: i.meet_category_id)::int2)
-                ,COALESCE(\(bind: i.max_capacity    )::int4)
+                \(bind: o.num_inserted      )::int4
+                
+                ,\(bind: i.cognito_sub      )::text
+                ,\(bind: i.meet_id_uuid     )::uuid  -- FIX: was cognito_sub
+                
+                ,\(bind: i.latitude         )::float8
+                ,\(bind: i.longitude        )::float8
+                ,\(bind: i.region_latitude  )::float8
+                ,\(bind: i.region_longitude )::float8
+                ,\(bind: i.region_radius    )::float8
+                
+                ,\(bind: i.meet_status_id   )::int2  -- ADD: was missing
+                ,\(bind: i.name             )::varchar(50)
+                ,\(bind: i.dttm_start_utc   )::timestamptz
+                ,\(bind: i.dttm_end_utc     )::timestamptz
+                ,\(bind: i.description      )::varchar(50)
+                ,\(bind: i.change_reason    )::varchar(50)
+                ,\(bind: i.meet_category_id )::int2
+                ,\(bind: i.max_capacity     )::int4
             );
             """
         }
-
         static func decode(_ row: any SQLRow) throws -> Result
         {
             try .init(num_inserted: row.decode(column: "num_inserted", as: Int32.self))
@@ -461,7 +463,7 @@ enum Proc
     // MARK: INSERT UPDATED MEET WORKING
     
     /// Contains Insert Params and Results
-    enum InsertUpdatedMeet: PgCallableRow
+    enum InsertUpdatedMeet: PgCallableRow // deprecated
     {
         static let procName: RangleyProcName = .i_updated_meet
         
@@ -684,6 +686,7 @@ enum Func
             let dttm_end_utc            : Date
             let name                    : String
             let category_name           : String
+            let meet_category_id        : Int16
             let description             : String
             let max_capacity            : Int32
             let created_by_user_uuid    : String
@@ -713,6 +716,7 @@ enum Func
                 ,dttm_end_utc         : r.decode(column: "dttm_end_utc",       as: Date.self)
                 ,name                 : r.decode(column: "name",               as: String.self)
                 ,category_name        : r.decode(column: "category_name",      as: String.self)
+                ,meet_category_id     : r.decode(column: "meet_category_id",   as: Int16.self)
                 ,description          : r.decode(column: "description",        as: String.self)
                 ,max_capacity         : r.decode(column: "max_capacity",       as: Int32.self)
                 ,created_by_user_uuid : r.decode(column: "created_by_user_id", as: String.self)
