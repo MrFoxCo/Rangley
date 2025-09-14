@@ -65,62 +65,24 @@ struct AppPalette {
         static let focusStroke = Brand.neonPink
     }
 
-
+    
+//    // Option 5: Dusty Rose Twilight (subtle magenta hint) #1
 //    static let bgGradient = LinearGradient(
-//        colors: [Brand.russianViolet, Brand.electricViolet, Brand.vibrantBlue, Brand.deepCyan],
+//        colors: [Brand.deepRose, Brand.dustyRose, Brand.softLavender.opacity(0.9)],
 //        startPoint: .top, endPoint: .bottom
 //    )
 
-    // Add these gradient options to your AppPalette struct
+    
+    
+    
 
-    // Option 1: Professional Gradient (Charcoal to Blue)
-//    static let bgGradient = LinearGradient(
-//        colors: [Brand.nearBlack, Brand.blueMid, Brand.coolBlue],
-//        startPoint: .top, endPoint: .bottom
-//    )
-
-    // Option 2: Monochrome Depth (Black to Gray)
+    // Solid – Russian Violet (darkest; avoid edge crush if too dim)
     static let bgGradient = LinearGradient(
-        colors: [Brand.nearBlack, Brand.modernGray, Brand.lightSlate],
+        colors: [Brand.russianViolet],
         startPoint: .top, endPoint: .bottom
     )
-//
-//    // Option 3: Subtle Warm Corporate
-//    static let bgGradient = LinearGradient(
-//        colors: [Brand.nearBlack, Brand.modernGray, Brand.warmCoral],
-//        startPoint: .top, endPoint: .bottom
-//    )
-//
-//    // Option 4: Deep Navy Professional
-//    static let bgGradient = LinearGradient(
-//        colors: [Brand.nearBlack, Brand.blueMid, Brand.royalBlue],
-//        startPoint: .top, endPoint: .bottom
-//    )
-//
-//    // Option 5: Sophisticated Purple-Gray
-//    static let bgGradient = LinearGradient(
-//        colors: [Brand.nearBlack, Brand.techPurple, Brand.modernGray],
-//        startPoint: .top, endPoint: .bottom
-//    )
-//
-//    // Option 6: Clean Corporate Blue
-//    static let bgGradient = LinearGradient(
-//        colors: [Brand.modernGray, Brand.blueMid, Brand.vibrantBlue],
-//        startPoint: .top, endPoint: .bottom
-//    )
-//
-//    // Option 7: Minimal Dark (Very subtle)
-//    static let bgGradient = LinearGradient(
-//        colors: [Brand.nearBlack, Brand.modernGray],
-//        startPoint: .top, endPoint: .bottom
-//    )
-//
-//    // Option 8: Warm Professional (Sunset-inspired but muted)
-//    static let bgGradient = LinearGradient(
-//        colors: [Brand.modernGray, Brand.warmCoral, Brand.sunsetOrange],
-//        startPoint: .top, endPoint: .bottom
-//    )
-//
-//    
+
+
+
     
 }

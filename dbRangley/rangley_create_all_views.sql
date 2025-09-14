@@ -4,7 +4,7 @@ DROP VIEW IF EXISTS rangley.vw_meet_category_id_and_name;
 DROP VIEW IF EXISTS rangley.vw_meets_accessible;
 DROP VIEW IF EXISTS rangley.vw_meet_changestamps_desc;
 DROP VIEW IF EXISTS rangley.vw_version_features;
-DROP VIEW IF EXISTS rangley.vw_particpant_status;
+DROP VIEW IF EXISTS rangley.vw_participant_status;
 DROP VIEW IF EXISTS rangley.vw_meet_status;
 DROP VIEW IF EXISTS rangley.vw_features;
 DROP VIEW IF EXISTS rangley.vw_meet_category;
@@ -33,6 +33,7 @@ SELECT
     ,max_capacity
     ,dttm_start_utc
     ,dttm_end_utc
+    ,uuid
 FROM rangley.tb_meets;
 
 CREATE OR REPLACE VIEW rangley.vw_meet_coordinates AS
@@ -58,6 +59,7 @@ SELECT
      meet_id
     ,created_by_user_id
     ,dttm_created_utc
+    ,uuid
 FROM rangley.tb_meet_ids;
 
 CREATE OR REPLACE VIEW rangley.vw_users AS
@@ -73,7 +75,7 @@ SELECT
     ,dob
     ,dttm_created_utc
     ,dttm_modified_utc
-    ,uid
+    ,uuid
 FROM rangley.tb_users;
 
 CREATE OR REPLACE VIEW rangley.vw_notifications AS
@@ -84,7 +86,6 @@ SELECT
     ,created_by_user_id
     ,payload_json
     ,dttm_created_utc
-    ,uid
 FROM rangley.tb_notifications;
 
 CREATE OR REPLACE VIEW rangley.vw_user_inboxes AS
@@ -93,7 +94,6 @@ select
     ,notification_id
     ,dttm_received_utc
     ,dttm_opened_utc
-    ,uid
 FROM rangley.tb_user_inboxes;
 
 CREATE OR REPLACE VIEW rangley.vw_meet_participants AS
@@ -106,7 +106,6 @@ SELECT
     ,dttm_left_utc
     ,dttm_created_utc
     ,dttm_modified_utc
-    ,uid
 FROM rangley.tb_meet_participants;
 
 CREATE OR REPLACE VIEW rangley.vw_meet_icon AS
@@ -164,8 +163,8 @@ SELECT
     ,modified_by
 FROM rangley.td_meet_status;
 
--- preserving your original spelling "particpant"
-CREATE OR REPLACE VIEW rangley.vw_particpant_status AS
+
+CREATE OR REPLACE VIEW rangley.vw_participant_status AS
 SELECT 
      participant_status_id
     ,name
@@ -191,7 +190,7 @@ ORDER BY meet_id, change_stamp DESC;
 -- overkill
 CREATE OR REPLACE VIEW rangley.vw_meets_accessible AS
 SELECT
-  m.meet_id,
+  m.uuid as meet_uuid,
   m.change_stamp,
   COALESCE(m.meet_status_id, 0) AS meet_status_id,
   coord.latitude,
@@ -205,7 +204,7 @@ SELECT
   cat.name AS category_name,
   m.description,
   m.max_capacity,
-  mi.created_by_user_id,
+  u.uuid as created_by_user_uuid,
   u.display_name
 FROM rangley.vw_meet_changestamps_desc mcd
 JOIN rangley.tb_meets m

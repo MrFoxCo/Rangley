@@ -3,7 +3,7 @@
 CREATE OR REPLACE FUNCTION rangley.rangley_fn_v_user_by_user_id(p_user_id bigint)
 RETURNS table
 (
-   cognito_sub  text
+   uuid  text
   ,username     varchar(50)
   ,display_name varchar(50)
   ,cellphone    varchar(16)
@@ -29,13 +29,10 @@ BEGIN
 
   	-- return row
 	RETURN QUERY
-    	SELECT v.cognito_sub, v.username, v.display_name, v.cellphone, v.email
+    	SELECT v.uuid, v.username, v.display_name, v.cellphone, v.email
     	FROM rangley.vw_users v
     	WHERE v.user_id = p_user_id;
 
   	RAISE LOG '[INFO][rid=%] returned user_id:[%]', v_rid, p_user_id;
 END;
 $fn$;
-
-
-select * from rangley.rangley_fn_v_user_by_user_id(4);

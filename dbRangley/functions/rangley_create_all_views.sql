@@ -1,29 +1,32 @@
 -- snake_case Postgres views under schema rangley
 
-DROP VIEW IF EXISTS rangley.vw_meet_category_id_and_name;
-DROP VIEW IF EXISTS rangley.vw_meet_card_data;
-DROP VIEW IF EXISTS rangley.vw_latest_meet_versions;
-DROP VIEW IF EXISTS rangley.vw_version_features;
-DROP VIEW IF EXISTS rangley.vw_particpant_status;
-DROP VIEW IF EXISTS rangley.vw_meet_status;
-DROP VIEW IF EXISTS rangley.vw_features;
-DROP VIEW IF EXISTS rangley.vw_meet_category;
-DROP VIEW IF EXISTS rangley.vw_sub_category;
-DROP VIEW IF EXISTS rangley.vw_notification_type;
-DROP VIEW IF EXISTS rangley.vw_meet_icon;
-DROP VIEW IF EXISTS rangley.vw_meet_participants;
-DROP VIEW IF EXISTS rangley.vw_user_inboxes;
-DROP VIEW IF EXISTS rangley.vw_notifications;
-DROP VIEW IF EXISTS rangley.vw_users;
-DROP VIEW IF EXISTS rangley.vw_meet_ids;
-DROP VIEW IF EXISTS rangley.vw_meet_change_stamps;
-DROP VIEW IF EXISTS rangley.vw_meet_coordinates;
-DROP VIEW IF EXISTS rangley.vw_meets;
+DROP VIEW IF EXISTS rangley.vw_meet_category_id_and_name CASCADE;
+DROP VIEW IF EXISTS rangley.vw_meet_card_data CASCADE;
+DROP VIEW IF EXISTS rangley.vw_latest_meet_versions CASCADE;
+DROP VIEW IF EXISTS rangley.vw_version_features CASCADE;
+DROP VIEW IF EXISTS rangley.vw_participant_status CASCADE;
+DROP VIEW IF EXISTS rangley.vw_meet_status CASCADE;
+DROP VIEW IF EXISTS rangley.vw_features CASCADE;
+DROP VIEW IF EXISTS rangley.vw_meet_category CASCADE;
+DROP VIEW IF EXISTS rangley.vw_sub_category CASCADE;
+DROP VIEW IF EXISTS rangley.vw_notification_type CASCADE;
+DROP VIEW IF EXISTS rangley.vw_meet_icon CASCADE;
+DROP VIEW IF EXISTS rangley.vw_meet_participants CASCADE;
+DROP VIEW IF EXISTS rangley.vw_user_inboxes CASCADE;
+DROP VIEW IF EXISTS rangley.vw_notifications CASCADE;
+DROP VIEW IF EXISTS rangley.vw_users CASCADE;
+DROP VIEW IF EXISTS rangley.vw_meet_ids CASCADE;
+DROP VIEW IF EXISTS rangley.vw_change_stamps CASCADE;
+DROP VIEW IF EXISTS rangley.vw_meet_change_stamps_desc CASCADE;
+DROP VIEW IF EXISTS rangley.vw_meet_coordinates CASCADE;
+DROP VIEW IF EXISTS rangley.vw_meets CASCADE;
 
 CREATE OR REPLACE VIEW rangley.vw_meets AS 
 SELECT
      meet_id
     ,change_stamp
+    ,meet_coordinate_id
+    ,meet_status_id
     ,name
     ,description
     ,change_reason
@@ -31,7 +34,9 @@ SELECT
     ,max_capacity
     ,dttm_start_utc
     ,dttm_end_utc
+    ,uuid
 FROM rangley.tb_meets;
+
 
 CREATE OR REPLACE VIEW rangley.vw_meet_coordinates AS
 SELECT
@@ -43,56 +48,64 @@ SELECT
     ,region_radius
 FROM rangley.tb_meet_coordinates;
 
-CREATE OR REPLACE VIEW rangley.vw_meet_change_stamps AS
+
+CREATE OR REPLACE VIEW rangley.vw_change_stamps AS
 SELECT
      change_stamp
     ,meet_id
-    ,meet_status_id
     ,dttm_modified_utc
     ,modified_by_user_id
-FROM rangley.tb_meet_change_stamps;
+FROM rangley.tb_change_stamps;
+
 
 CREATE OR REPLACE VIEW rangley.vw_meet_ids AS
 SELECT
      meet_id
-    ,meet_coordinate_id
     ,created_by_user_id
     ,dttm_created_utc
+    ,uuid
 FROM rangley.tb_meet_ids;
+
 
 CREATE OR REPLACE VIEW rangley.vw_users AS
 SELECT
      user_id
+    ,cognito_sub
     ,username
+    ,display_name
     ,first_name
     ,last_name
     ,cellphone
     ,email
+    ,dob
     ,dttm_created_utc
     ,dttm_modified_utc
-    ,uid
+    ,uuid
 FROM rangley.tb_users;
+
 
 CREATE OR REPLACE VIEW rangley.vw_notifications AS
 SELECT
      notification_id
     ,notification_type_id
     ,meet_id
-    ,user_id
-    ,dttm_sent_utc
-    ,dttm_opened_utc
-    ,uid
+    ,created_by_user_id
+    ,payload_json
+    ,dttm_created_utc
 FROM rangley.tb_notifications;
+
 
 CREATE OR REPLACE VIEW rangley.vw_user_inboxes AS
 SELECT
-     meet_notification_id
+     user_id
+    ,notification_id
     ,dttm_received_utc
     ,dttm_opened_utc
-    ,uid
 FROM rangley.tb_user_inboxes;
 
-CREATE OR REPLACE VIEW rangley.vw_meet_participants AS
+-- TODO FIX THIS TABLE DON'T NEED THE PRIMARY KEY PROBABLY
+
+CREATE OR REPLACE VIEW rangley.vw_meet_participants as 
 SELECT
      participant_id
     ,meet_id
@@ -102,8 +115,8 @@ SELECT
     ,dttm_left_utc
     ,dttm_created_utc
     ,dttm_modified_utc
-    ,uid
 FROM rangley.tb_meet_participants;
+
 
 CREATE OR REPLACE VIEW rangley.vw_meet_icon AS
 SELECT 
@@ -116,6 +129,7 @@ SELECT
     ,modified_by
 FROM rangley.td_meet_icon;
 
+
 CREATE OR REPLACE VIEW rangley.vw_notification_type AS
 SELECT 
      notification_type_id
@@ -125,6 +139,7 @@ SELECT
     ,dttm_modified_utc
     ,modified_by
 FROM rangley.td_notification_type;
+
 
 CREATE OR REPLACE VIEW rangley.vw_sub_category AS
 SELECT 
@@ -136,6 +151,7 @@ SELECT
     ,modified_by
 FROM rangley.td_sub_category;
 
+
 CREATE OR REPLACE VIEW rangley.vw_meet_category AS
 SELECT 
      meet_category_id
@@ -146,9 +162,11 @@ SELECT
     ,modified_by
 FROM rangley.td_meet_category;
 
+
 CREATE OR REPLACE VIEW rangley.vw_features AS
 SELECT feature_id, name
 FROM rangley.td_features;
+
 
 CREATE OR REPLACE VIEW rangley.vw_meet_status AS
 SELECT 
@@ -161,7 +179,8 @@ SELECT
 FROM rangley.td_meet_status;
 
 -- preserving your original spelling "particpant"
-CREATE OR REPLACE VIEW rangley.vw_particpant_status AS
+
+CREATE OR REPLACE VIEW rangley.vw_participant_status AS
 SELECT 
      participant_status_id
     ,name
@@ -171,9 +190,11 @@ SELECT
     ,modified_by
 FROM rangley.td_participant_status;
 
+
 CREATE OR REPLACE VIEW rangley.vw_version_features AS
 SELECT version, feature_id
 FROM rangley.te_version_features;
+
 
 CREATE OR REPLACE VIEW rangley.vw_latest_meet_versions AS
 WITH latest AS (
@@ -185,10 +206,11 @@ SELECT meet_id, change_stamp
 FROM latest;
 
 CREATE OR REPLACE VIEW rangley.vw_meet_card_data AS
-SELECT
-     m.meet_id
+select
+     mi.uuid as meet_id_uuid
+    ,m.uuid as meet_uuid
     ,m.change_stamp
-    ,COALESCE(mcs.meet_status_id, 0) AS meet_status_id
+    ,COALESCE(m.meet_status_id, 0) AS meet_status_id
     ,ma.latitude
     ,ma.longitude
     ,ma.region_latitude
@@ -199,20 +221,20 @@ SELECT
     ,mc.name AS category_name
     ,m.description
     ,m.max_capacity
-    ,mi.created_by_user_id
+    ,u.uuid as created_by_user_uuid
     ,u.first_name
     ,u.last_name
 FROM rangley.vw_latest_meet_versions l
 JOIN rangley.vw_meets m
   ON m.meet_id = l.meet_id
  AND m.change_stamp = l.change_stamp
-LEFT JOIN rangley.tb_meet_change_stamps mcs
-  ON mcs.meet_id = l.meet_id
- AND mcs.change_stamp = l.change_stamp
+LEFT JOIN rangley.tb_change_stamps cs
+  ON cs.meet_id = l.meet_id
+ AND cs.change_stamp = l.change_stamp
 JOIN rangley.vw_meet_ids mi
   ON mi.meet_id = l.meet_id
 JOIN rangley.vw_meet_coordinates ma
-  ON ma.meet_coordinate_id = mi.meet_coordinate_id
+  ON ma.meet_coordinate_id = m.meet_coordinate_id
 JOIN rangley.vw_users u
   ON u.user_id = mi.created_by_user_id
 JOIN rangley.vw_meet_category mc

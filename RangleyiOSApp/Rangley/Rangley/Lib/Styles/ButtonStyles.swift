@@ -8,106 +8,89 @@
 import SwiftUI
 
 struct OutlineCapsuleButton: ButtonStyle {
-    var color: Color = AppPalette.Brand.neonPink
     var font: Font = FontStyles.buttonSecondary
-    
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(font)
-            .foregroundStyle(Color.white)
+            .foregroundStyle(Color.white.opacity(0.96))
             .frame(maxWidth: .infinity)
             .padding(.vertical, 15)
-            .overlay( Capsule().stroke(color, lineWidth: 4) )
-            .background( Capsule().fill( color.opacity(configuration.isPressed ? 0.8 : 0.5) ) )
-            .shadow(color: color.opacity(0.6), radius: configuration.isPressed ? 10 : 18, y: 4)
-            .shadow(color: .black.opacity(0.3), radius: configuration.isPressed ? 6 : 12, y: 4)
+            .background( Capsule().fill(Color.white.opacity(configuration.isPressed ? 0.10 : 0.07)) )
+            .overlay( Capsule().stroke(Color.white.opacity(0.22), lineWidth: 1) )
+            .shadow(color: .black.opacity(0.15),
+                    radius: configuration.isPressed ? 6 : 10, y: 4)
     }
 }
+
 
 struct CreateNewAccountCapsuleButton: ButtonStyle {
-    var isPressed: Bool = false
     var font: Font = FontStyles.buttonPrimary
-    
+
+    // warmer off-whites (less glare than pure white)
+    private let top    = Color(red: 0.98, green: 0.97, blue: 0.99) // ~#FBF8FD
+    private let bottom = Color(red: 0.94, green: 0.93, blue: 0.96) // ~#F0EEF5
+
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
+        let pressed = configuration.isPressed
+
+        return configuration.label
             .font(font)
             .kerning(0.2)
-            .foregroundStyle(AppPalette.Brand.russianViolet)
-            .padding(.vertical, 14)
+            .foregroundStyle(AppPalette.Brand.russianViolet.opacity(0.98))
+            .padding(.vertical, 16)
             .frame(maxWidth: .infinity)
             .background(
                 Capsule().fill(
                     LinearGradient(
                         colors: [
-                            Color.white.opacity(0.95),
-                            Color.white.opacity(0.85)
+                            top.opacity(pressed ? 0.96 : 1.0),
+                            bottom.opacity(pressed ? 0.94 : 0.98)
                         ],
                         startPoint: .top,
                         endPoint: .bottom
                     )
                 )
             )
+            // subtle hairline (no neon rim)
+            .overlay( Capsule().stroke(Color.white.opacity(0.18), lineWidth: 1) )
+            // faint top sheen only
             .overlay(
-                Capsule().stroke(
-                    Color.white.opacity(0.3),
-                    lineWidth: 1
+                Capsule().fill(
+                    LinearGradient(colors: [Color.white.opacity(0.08), .clear],
+                                   startPoint: .top, endPoint: .center)
                 )
             )
-            .shadow(
-                color: Color.white.opacity(configuration.isPressed ? 0.4 : 0.6),
-                radius: configuration.isPressed ? 8 : 12,
-                y: configuration.isPressed ? 3 : 6
-            )
-            .shadow(
-                color: .black.opacity(0.15),
-                radius: 2,
-                y: 1
-            )
-            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
-            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
+            // single soft drop shadow (removed bright white glow)
+            .shadow(color: .black.opacity(0.22),
+                    radius: pressed ? 6 : 10,
+                    y: pressed ? 2 : 5)
+            .scaleEffect(pressed ? 0.985 : 1.0)
+            .animation(.easeInOut(duration: 0.12), value: pressed)
     }
 }
 
+
 struct PrimaryCapsuleButton: ButtonStyle {
-    var isPressed: Bool = false
     var font: Font = FontStyles.buttonPrimary
-    
+    private let fill = AppPalette.Brand.pigNeonPink   // solid
+
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(font)
-            .kerning(0.2)
+        let pressed = configuration.isPressed
+
+        return configuration.label
+            .font(font).kerning(0.2)
             .foregroundStyle(.white.opacity(0.98))
-            .padding(.vertical, 14)
+            .padding(.vertical, 16)
             .frame(maxWidth: .infinity)
-            .background(
-                Capsule().fill(
-                    LinearGradient(
-                        colors: [
-                            AppPalette.Brand.neonPink.opacity(0.95),
-                            AppPalette.Brand.neonPink.opacity(0.75)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-            )
-            .overlay(
-                Capsule().stroke(
-                    AppPalette.Brand.neonPink.opacity(0.4),
-                    lineWidth: 1
-                )
-            )
-            .shadow(
-                color: AppPalette.Brand.neonPink.opacity(configuration.isPressed ? 0.4 : 0.6),
-                radius: configuration.isPressed ? 8 : 12,
-                y: configuration.isPressed ? 3 : 6
-            )
-            .shadow(
-                color: .black.opacity(0.15),
-                radius: 2,
-                y: 1
-            )
-            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
-            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
+            .background( Capsule().fill(fill.opacity(pressed ? 0.92 : 1.0)) )
+            // optional: keep or remove hairline; it’s neutral (not neon)
+            .overlay( Capsule().stroke(Color.white.opacity(0.18), lineWidth: 1) )
+            .shadow(color: .black.opacity(0.22),
+                    radius: pressed ? 6 : 10,
+                    y: pressed ? 2 : 5)
+            .scaleEffect(pressed ? 0.985 : 1.0)
+            .animation(.easeInOut(duration: 0.12), value: pressed)
     }
 }
+

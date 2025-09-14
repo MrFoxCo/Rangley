@@ -1,12 +1,12 @@
-CREATE OR REPLACE PROCEDURE rangley.rangley_s_insert_meet
+CREATE OR REPLACE PROCEDURE rangley.rangley_s_insert_updated_meet
 (
     -- OUTs
-      OUT new_meet_id             INT8
-    , OUT new_meet_coordinate_id  INT8
+      OUT new_meet_coordinate_id  INT8
     , OUT num_inserted            INT4
 
     -- INs
     , IN  p_cognito_sub           text
+    , in  p_meet_uuid		 	  UUID
 
     -- coordinates
     , IN  p_latitude              FLOAT8
@@ -35,7 +35,6 @@ DECLARE
     created_by_user_id   bigint;
 BEGIN
     -- OUT sentinels
-    new_meet_id            := -1;
     new_meet_coordinate_id := -1;
     num_inserted           := 0;
 
@@ -77,8 +76,6 @@ BEGIN
           HINT='Ensure the user exists in tb_users and the sub is correct.';
     END IF;
 
-    -- 1) create meet_id
-    CALL rangley.rangley_i_meet_id(new_meet_id, created_by_user_id);
 
     -- 2) create meet_coordinate_id (has its own range/NULL checks)
     CALL rangley.rangley_i_meet_coordinate(

@@ -45,9 +45,15 @@ struct MeetBubbleButton: View
 // MARK: - Overlay (expanded card)
 struct MeetCardOverlay: View
 {
+    @EnvironmentObject private var session: SessionModel
+    
     @Binding var selectedMeet: ViewMeetsModel?
     @Binding var isPresented: Bool
     let ns: Namespace.ID
+
+    // NEW: pass the signed-in user's ID and a delete callback you can wire later
+    let currentUserID: Int64
+    var onDelete: (ViewMeetsModel) -> Void = { _ in }
 
     var body: some View {
         ZStack {
@@ -56,23 +62,27 @@ struct MeetCardOverlay: View
                     .ignoresSafeArea()
                     .onTapGesture { close() }
 
-                MeetCardView(meet: meet, onClose: close)
-                    .frame(maxWidth: 420, maxHeight: 600)
-                    .background(
-                        // Morph from the circular bubble to this rounded rect
-                        RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .fill(AppPalette.bgGradient)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                    .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
-                            )
-                            .matchedGeometryEffect(id: "meet-bg-\(meet.meet_id)", in: ns)
-                    )
-                    .transition(.asymmetric(
-                        insertion: .opacity.combined(with: .scale),
-                        removal: .opacity.combined(with: .scale(scale: 0.95))
-                    ))
-                    .padding(.horizontal, 20)
+                MeetCardView(
+                    meet: meet,
+                    myUserID: session.me?.uuid,   // ← drives Delete visibility
+                    onClose: close,
+                    onDelete: onDelete
+                )
+                .frame(maxWidth: 420, maxHeight: 600)
+                .background(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .fill(AppPalette.bgGradient)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
+                        )
+                        .matchedGeometryEffect(id: "meet-bg-\(meet.meet_uuid)", in: ns)
+                )
+                .transition(.asymmetric(
+                    insertion: .opacity.combined(with: .scale),
+                    removal: .opacity.combined(with: .scale(scale: 0.95))
+                ))
+                .padding(.horizontal, 20)
             }
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.88), value: isPresented)
@@ -88,66 +98,64 @@ struct MeetCardOverlay: View
 private struct MeetCardView: View
 {
     let meet: ViewMeetsModel
+    let myUserID: Int64
     let onClose: () -> Void
-    
+    let onDelete: (ViewMeetsModel) -> Void
+
     @State private var addressText: String = "Loading address..."
     @State private var geocodingTask: Task<Void, Never>?
-    @State private var displayName          : String = ""
-    @State private var displayAddress       : String = ""
-    @State private var displayCityAndState  : String = ""
-    @State private var displaySubLocality   : String = ""
+    @State private var displayName         : String = ""
+    @State private var displayAddress      : String = ""
+    @State private var displayCityAndState : String = ""
+    @State private var displaySubLocality  : String = ""
+
+    @State private var showDeleteConfirm: Bool = false
+
     private var dateRangeText: String {
         let f = DateIntervalFormatter()
         f.dateStyle = .medium
         f.timeStyle = .short
         return f.string(from: meet.dttm_start_utc, to: meet.dttm_end_utc)
     }
-    
+
     // Geocoding function to get address from coordinates
     private func loadAddress() {
         geocodingTask?.cancel()
         geocodingTask = Task {
             let geocoder = CLGeocoder()
             let location = CLLocation(latitude: meet.latitude, longitude: meet.longitude)
-            
+
             do {
                 let placemarks = try await geocoder.reverseGeocodeLocation(location)
-                guard let placemark = placemarks.first else {
-                    await MainActor.run {
-                        addressText = "Address unavailable"
-                    }
+                guard let p = placemarks.first else {
+                    await MainActor.run { addressText = "Address unavailable" }
                     return
                 }
-                
-                // Create address string similar to your LocationInfo.address computed property
-                let addressComponents = [
-                    placemark.name,
-                    placemark.thoroughfare,
-                    placemark.subThoroughfare,
-                    placemark.subLocality,
-                    placemark.locality,
-                    placemark.administrativeArea,
-                    placemark.postalCode,
-                    placemark.country
-                ]
-                .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-                
-                let address = addressComponents.joined(separator: ", ")
-                
-                displayName    = addressComponents[0]
-                displayAddress = addressComponents[2] +  " " + addressComponents[1]
-                displaySubLocality = addressComponents[3]
-                displayCityAndState = addressComponents[4] + ", " + addressComponents[5]
-                
-                
+
+                // Safer extraction (no out-of-bounds)
+                let name      = p.name?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let street    = p.thoroughfare?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let number    = p.subThoroughfare?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let subLocal  = p.subLocality?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let city      = p.locality?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let state     = p.administrativeArea?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let postal    = p.postalCode?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let country   = p.country?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                let fullAddress = [name, street, number, subLocal, city, state, postal, country]
+                    .compactMap { $0 }
+                    .filter { !$0.isEmpty }
+                    .joined(separator: ", ")
+
                 await MainActor.run {
-                    addressText = address.isEmpty ? "Address unavailable" : address
+                    displayName         = name ?? street ?? "Dropped Pin"
+                    displayAddress      = [number, street].compactMap { $0 }.joined(separator: " ")
+                    displaySubLocality  = subLocal ?? ""
+                    displayCityAndState = [city, state].compactMap { $0 }.joined(separator: ", ")
+                    addressText         = fullAddress.isEmpty ? "Address unavailable" : fullAddress
                 }
             } catch {
-                await MainActor.run {
-                    addressText = "Address unavailable"
-                }
+                await MainActor.run { addressText = "Address unavailable" }
                 print("Geocoding error: \(error)")
             }
         }
@@ -155,12 +163,27 @@ private struct MeetCardView: View
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            // Creator
+            // Creator + actions
             HStack(alignment: .firstTextBaseline) {
                 Text(meet.display_name)
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(AppPalette.Text.primary)
+
                 Spacer()
+
+                if meet.created_by_user_uuid == myUserID {
+                    Button(role: .destructive) { showDeleteConfirm = true } label: {
+                        Image(systemName: "trash")
+                            .font(.system(size: 14, weight: .bold))
+                            .padding(8)
+                            .background(AppPalette.Surface.fieldFill, in: Circle())
+                            .overlay(Circle().stroke(AppPalette.Surface.fieldStroke, lineWidth: 1))
+                            .foregroundStyle(AppPalette.Brand.neonPink)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Delete meet")
+                }
+
                 Button(action: onClose) {
                     Image(systemName: "xmark")
                         .font(.system(size: 14, weight: .bold))
@@ -172,74 +195,36 @@ private struct MeetCardView: View
                 .buttonStyle(.plain)
             }
 
-            Text(meet.name)
-                .font(.title2.weight(.bold))
-                .foregroundStyle(AppPalette.Text.primary)
-                .lineLimit(2)
-
-            HStack(spacing: 8) {
-                Chip(text: meet.category_name, systemImage: "tag")
-                Chip(text: "Cap \(meet.max_capacity)", systemImage: "person.3")
-            }
-
-            Divider().overlay(AppPalette.Surface.fieldStroke)
-
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: "calendar")
-                    .foregroundStyle(AppPalette.Brand.neonPink)
+            // Optional: show a compact date/address line if you want to surface it
+            // Remove if you don't need it rendered here.
+            VStack(alignment: .leading, spacing: 6) {
                 Text(dateRangeText)
                     .foregroundStyle(AppPalette.Text.secondary)
                     .font(.subheadline)
-            }
-
-            HStack(alignment: .top, spacing: 12) {
-                // Glowing map pin
-                ZStack {
-                    Circle()
-                        .fill(AppPalette.Brand.neonPink.opacity(0.15))
-                        .frame(width: 32, height: 32)
-                    
-                    Image(systemName: "mappin.circle.fill")
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundStyle(AppPalette.Brand.neonPink)
-                        .shadow(color: AppPalette.Brand.neonPink.opacity(0.4), radius: 4, x: 0, y: 0)
+                if !displayName.isEmpty {
+                    Text(displayName)
+                        .font(.system(size: 16, weight: .semibold, design: .rounded))
+                        .foregroundStyle(AppPalette.Text.primary)
+                        .lineLimit(2)
                 }
-                
-                VStack(alignment: .leading, spacing: 3) {
-                    // Main place name - bold and prominent
-                    if !displayName.isEmpty {
-                        Text(displayName)
-                            .font(.system(size: 16, weight: .semibold, design: .rounded))
-                            .foregroundStyle(AppPalette.Text.primary)
-                            .lineLimit(2)
-                    }
-                    
-                    // Street address - clean and readable
-                    if !displayAddress.isEmpty {
-                        Text(displayAddress)
-                            .font(.system(size: 15, weight: .medium, design: .default))
-                            .foregroundStyle(AppPalette.Text.secondary)
-                            .lineLimit(1)
-                    }
-                    
-                    // Neighborhood/area - subtle
-                    if !displaySubLocality.isEmpty {
-                        Text(displaySubLocality)
-                            .font(.system(size: 14, weight: .regular, design: .default))
-                            .foregroundStyle(AppPalette.Text.tertiary)
-                            .lineLimit(1)
-                    }
-                    
-                    // City, State - final context
-                    if !displayCityAndState.isEmpty {
-                        Text(displayCityAndState)
-                            .font(.system(size: 14, weight: .medium, design: .default))
-                            .foregroundStyle(AppPalette.Text.secondary)
-                            .lineLimit(1)
-                    }
+                if !displayAddress.isEmpty {
+                    Text(displayAddress)
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(AppPalette.Text.secondary)
+                        .lineLimit(1)
                 }
-                
-                Spacer()
+                if !displaySubLocality.isEmpty {
+                    Text(displaySubLocality)
+                        .font(.system(size: 14))
+                        .foregroundStyle(AppPalette.Text.tertiary)
+                        .lineLimit(1)
+                }
+                if !displayCityAndState.isEmpty {
+                    Text(displayCityAndState)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(AppPalette.Text.secondary)
+                        .lineLimit(1)
+                }
             }
 
             if !meet.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -257,15 +242,21 @@ private struct MeetCardView: View
             Spacer(minLength: 0)
         }
         .padding(20)
-        .shadow(radius: 24, y: 8)
-        .task {
-            loadAddress()
-        }
-        .onDisappear {
-            geocodingTask?.cancel()
+        .shadow(radius: 24, y: 8) // keep if you have an extension; otherwise use .shadow(color: .black.opacity(0.2), radius: 24, x: 0, y: 8)
+        .task { loadAddress() }
+        .onDisappear { geocodingTask?.cancel() }
+        .alert("Delete this meet?", isPresented: $showDeleteConfirm) {
+            Button("Delete", role: .destructive) {
+                onDelete(meet)
+                onClose()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This action cannot be undone.")
         }
     }
 }
+
 
 private struct Chip: View
 {
@@ -284,3 +275,4 @@ private struct Chip: View
         .overlay(Capsule().stroke(AppPalette.Surface.fieldStroke, lineWidth: 1))
     }
 }
+

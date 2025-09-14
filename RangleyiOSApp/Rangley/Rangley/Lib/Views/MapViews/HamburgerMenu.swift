@@ -9,6 +9,8 @@
 import SwiftUI
 
 public struct HamburgerMenu: View {
+    @EnvironmentObject private var session: SessionModel
+    
     public var onSignOut: () -> Void
     @State private var showAccount = false
 

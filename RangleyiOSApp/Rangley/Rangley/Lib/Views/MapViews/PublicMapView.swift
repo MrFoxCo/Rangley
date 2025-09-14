@@ -16,6 +16,10 @@ import AWSPluginsCore
 @MainActor
 public struct PublicMapView: View
 {
+    @EnvironmentObject private var session: SessionModel
+    
+    
+    
     private struct RefreshShim: View {
         let onRefresh: () async -> Void
         var body: some View {
@@ -351,8 +355,14 @@ public struct PublicMapView: View
                 }
             )
             // Meet viewer overlay (bubble → card morph)
-            MeetCardOverlay(selectedMeet: $selectedMeet, isPresented: $showMeetOverlay, ns: meetNS)
-                .allowsHitTesting(showMeetOverlay) // keep map taps working when hidden
+            MeetCardOverlay(
+                selectedMeet: $selectedMeet,
+                isPresented: $showMeetOverlay,
+                ns: meetNS
+                // onDelete: { meet in /* call Vapor later */ }
+            )
+            .allowsHitTesting(showMeetOverlay)
+            
             // Add this after MeetCardOverlay in your ZStack
             if isLoadingMeets {
                 Color.black.opacity(0.3)

@@ -75,8 +75,15 @@ final class AppDelegate: NSObject, UIApplicationDelegate
 @main
 struct RangleyApp: App
 {
+    @StateObject private var session = SessionModel()
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    var body: some Scene {
-        WindowGroup { RootGate() }   // ← was UserRegisterFlow()
+    
+    var body: some Scene
+    {
+        WindowGroup
+        {
+            RootGate()
+                .environmentObject(session)
+        }   // ← was UserRegisterFlow()
     }
 }
