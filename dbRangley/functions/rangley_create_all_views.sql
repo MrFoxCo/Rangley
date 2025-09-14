@@ -1,8 +1,6 @@
 -- snake_case Postgres views under schema rangley
 
 DROP VIEW IF EXISTS rangley.vw_meet_category_id_and_name CASCADE;
-DROP VIEW IF EXISTS rangley.vw_meet_card_data CASCADE;
-DROP VIEW IF EXISTS rangley.vw_latest_meet_versions CASCADE;
 DROP VIEW IF EXISTS rangley.vw_version_features CASCADE;
 DROP VIEW IF EXISTS rangley.vw_participant_status CASCADE;
 DROP VIEW IF EXISTS rangley.vw_meet_status CASCADE;
@@ -18,8 +16,10 @@ DROP VIEW IF EXISTS rangley.vw_users CASCADE;
 DROP VIEW IF EXISTS rangley.vw_meet_ids CASCADE;
 DROP VIEW IF EXISTS rangley.vw_change_stamps CASCADE;
 DROP VIEW IF EXISTS rangley.vw_meet_change_stamps_desc CASCADE;
+DROP VIEW IF EXISTS rangley.vw_up_to_date_meets CASCADE;
 DROP VIEW IF EXISTS rangley.vw_meet_coordinates CASCADE;
 DROP VIEW IF EXISTS rangley.vw_meets CASCADE;
+
 
 CREATE OR REPLACE VIEW rangley.vw_meets AS 
 SELECT
@@ -196,7 +196,7 @@ SELECT version, feature_id
 FROM rangley.te_version_features;
 
 
-CREATE OR REPLACE VIEW rangley.vw_latest_meet_versions AS
+CREATE OR REPLACE VIEW rangley.vw_meet_change_stamps_desc AS
 WITH latest AS (
   SELECT meet_id, MAX(change_stamp) AS change_stamp
   FROM rangley.vw_meets
@@ -205,16 +205,20 @@ WITH latest AS (
 SELECT meet_id, change_stamp
 FROM latest;
 
-CREATE OR REPLACE VIEW rangley.vw_meet_card_data AS
+
+CREATE OR REPLACE VIEW rangley.vw_up_to_date_meets AS
 select
-     mi.uuid as meet_id_uuid
-    ,m.uuid as meet_uuid
+     mcsd.meet_id                    -- add this for procedure use
+    ,mi.uuid as meet_id_uuid
+    ,m.meet_coordinate_id            -- add this for procedure use
     ,m.change_stamp
+    ,m.uuid as meet_uuid   
     ,COALESCE(m.meet_status_id, 0) AS meet_status_id
     ,ma.latitude
     ,ma.longitude
     ,ma.region_latitude
     ,ma.region_longitude
+    ,ma.region_radius
     ,m.dttm_start_utc
     ,m.dttm_end_utc
     ,m.name
@@ -222,17 +226,16 @@ select
     ,m.description
     ,m.max_capacity
     ,u.uuid as created_by_user_uuid
-    ,u.first_name
-    ,u.last_name
-FROM rangley.vw_latest_meet_versions l
+    ,u.display_name
+FROM rangley.vw_meet_change_stamps_desc mcsd
 JOIN rangley.vw_meets m
-  ON m.meet_id = l.meet_id
- AND m.change_stamp = l.change_stamp
-LEFT JOIN rangley.tb_change_stamps cs
-  ON cs.meet_id = l.meet_id
- AND cs.change_stamp = l.change_stamp
+  ON m.meet_id = mcsd.meet_id
+ AND m.change_stamp = mcsd.change_stamp
+LEFT JOIN rangley.vw_change_stamps cs
+  ON cs.meet_id = mcsd.meet_id
+ AND cs.change_stamp = mcsd.change_stamp
 JOIN rangley.vw_meet_ids mi
-  ON mi.meet_id = l.meet_id
+  ON mi.meet_id = mcsd.meet_id
 JOIN rangley.vw_meet_coordinates ma
   ON ma.meet_coordinate_id = m.meet_coordinate_id
 JOIN rangley.vw_users u

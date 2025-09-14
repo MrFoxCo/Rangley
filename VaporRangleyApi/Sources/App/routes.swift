@@ -349,15 +349,14 @@ public func routes(_ app: Application) throws
             let dbResult = try await Proc.SystemInsertMeet.call(
                 on: sql,
                 params,
-                .init(new_meet_id: -1, new_meet_coordinate_id: -1, num_inserted: 0)  // Sentinel values to match your procedure
+                .init(num_inserted: 0)  // Sentinel values to match your procedure
             )
             
             // Validate the result
-            guard dbResult.new_meet_id > 0, dbResult.new_meet_coordinate_id > 0, dbResult.num_inserted == 1
+            guard dbResult.num_inserted == 1
             else { throw Abort(.internalServerError, reason: "Failed to create meet") }
 
-            return .init(meet_id: dbResult.new_meet_id,
-                        meet_coordinate_id: dbResult.new_meet_coordinate_id)
+            return .init(num_inserted : dbResult.num_inserted)
                         
         } catch let error as PSQLError {
             // Handle specific PostgreSQL errors from your procedure

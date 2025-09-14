@@ -21,6 +21,7 @@ enum RangleyProcName: String
     case i_meet_coordinate       = "rangley.rangley_i_meet_coordinate"
     case i_meet                  = "rangley.rangley_i_meet"
     case s_insert_meet           = "rangley.rangley_s_insert_meet"
+    case s_insert_updated_meet   = "rangley.rangley_s_insert_updated_meet"
     case i_change_stamp          = "rangley.rangley_i_change_stamp"
     case i_updated_meet          = "rangley.rangley_i_updated_meet"
     case m_user                  = "rangley.rangley_m_user"
@@ -297,7 +298,8 @@ enum Proc
         }
     }
     
-    enum SystemInsertMeet: PgCallableRow {
+    enum SystemInsertMeet: PgCallableRow
+    {
         static let procName: RangleyProcName = .s_insert_meet  // ensure this resolves to schema-qualified "rangley.rangley_s_insert_meet" or your search_path includes 'rangley'
         
         struct Params: Content, Sendable {
@@ -320,8 +322,6 @@ enum Proc
         }
 
         struct Result: Content, Sendable {
-            let new_meet_id: Int64
-            let new_meet_coordinate_id: Int64
             let num_inserted: Int32
         }
 
@@ -329,9 +329,7 @@ enum Proc
             """
             CALL \(unsafeRaw: procName.rawValue)
             (
-                 \(bind: o.new_meet_id)::int8
-                ,\(bind: o.new_meet_coordinate_id)::int8
-                ,\(bind: o.num_inserted)::int4
+                 \(bind: o.num_inserted)::int4
             
                 ,\(bind: i.cognito_sub              )::text
                 ,\(bind: i.latitude                 )::float8
@@ -350,16 +348,69 @@ enum Proc
             """
         }
 
-        static func decode(_ row: any SQLRow) throws -> Result {
-            try .init(
-                new_meet_id: row.decode(column: "new_meet_id", as: Int64.self),
-                new_meet_coordinate_id: row.decode(column: "new_meet_coordinate_id", as: Int64.self),
-                num_inserted: row.decode(column: "num_inserted", as: Int32.self)
-            )
+        static func decode(_ row: any SQLRow) throws -> Result
+        {
+            try .init(num_inserted: row.decode(column: "num_inserted", as: Int32.self))
         }
     }
 
+    enum SystemInsertUpdatedMeet: PgCallableRow
+    {
+        static let procName: RangleyProcName = .s_insert_updated_meet  // ensure this resolves to schema-qualified "rangley.rangley_s_insert_meet" or your search_path includes 'rangley'
+        
+        struct Params: Content, Sendable {
+            // Required
+            let cognito_sub     : String
+            let meet_id_uuid    : String
+            let latitude        : Double
+            let longitude       : Double
+            let region_latitude : Double
+            let region_longitude: Double
+            let region_radius   : Double
+            let name            : String          // p_name
+            let dttm_start_utc  : Date
+            let dttm_end_utc    : Date
 
+            // Optional
+            let description     : String?         // p_description
+            let change_reason   : String?         // p_change_reason
+            let meet_category_id: Int16?          // p_meet_category_id
+            let max_capacity    : Int32?          // p_max_capacity
+        }
+
+        struct Result: Content, Sendable {
+            let num_inserted: Int32
+        }
+
+        static func query(_ i: Params, _ o: Result) -> SQLQueryString {
+            """
+            CALL \(unsafeRaw: procName.rawValue)
+            (
+                 \(bind: o.num_inserted)::int4
+            
+                ,\(bind: i.cognito_sub              )::text
+                ,\(bind: i.cognito_sub              )::uuid
+                ,\(bind: i.latitude                 )::float8
+                ,\(bind: i.longitude                )::float8
+                ,\(bind: i.region_latitude          )::float8
+                ,\(bind: i.region_longitude         )::float8
+                ,\(bind: i.region_radius            )::float8
+                ,\(bind: i.name                     )::varchar(50)
+                ,\(bind: i.dttm_start_utc           )::timestamptz
+                ,\(bind: i.dttm_end_utc             )::timestamptz
+                ,COALESCE(\(bind: i.description     )::varchar(50))
+                ,COALESCE(\(bind: i.change_reason   )::varchar(50))
+                ,COALESCE(\(bind: i.meet_category_id)::int2)
+                ,COALESCE(\(bind: i.max_capacity    )::int4)
+            );
+            """
+        }
+
+        static func decode(_ row: any SQLRow) throws -> Result
+        {
+            try .init(num_inserted: row.decode(column: "num_inserted", as: Int32.self))
+        }
+    }
     
     // MARK: - END INSERT MEET WORKING
     
@@ -607,6 +658,7 @@ enum Func
 {
     // MARK: - VIEWS
 
+    // TODO: - ADD THE MEET_
     enum ViewMeets: PgFunctionRows
     {
         static let funcName: RangleyFunc = .v_meets_by_cognito_sub
@@ -621,8 +673,7 @@ enum Func
         struct Results: Content, Sendable
         {
             
-            let meet_uuid                : String
-            let change_stamp            : Int64
+            let meet_id_uuid            : String
             let meet_status_id          : Int16
             let latitude                : Double
             let longitude               : Double
@@ -651,8 +702,7 @@ enum Func
         static func decode(_ r: any SQLRow) throws -> Results
         {
             try .init(
-                 meet_uuid            : r.decode(column: "meet_uuid",          as: String.self)
-                ,change_stamp         : r.decode(column: "change_stamp",       as: Int64.self)
+                 meet_id_uuid         : r.decode(column: "meet_uuid",          as: String.self)
                 ,meet_status_id       : r.decode(column: "meet_status_id",     as: Int16.self)
                 ,latitude             : r.decode(column: "latitude",           as: Double.self)
                 ,longitude            : r.decode(column: "longitude",          as: Double.self)

@@ -1,12 +1,10 @@
-CREATE OR REPLACE PROCEDURE rangley.rangley_s_insert_updated_meet
+CREATE OR REPLACE PROCEDURE rangley.rangley_s_insert_meet
 (
     -- OUTs
-      OUT new_meet_coordinate_id  INT8
-    , OUT num_inserted            INT4
+      OUT num_inserted            INT4
 
     -- INs
     , IN  p_cognito_sub           text
-    , in  p_meet_uuid		 	  UUID
 
     -- coordinates
     , IN  p_latitude              FLOAT8
@@ -20,7 +18,6 @@ CREATE OR REPLACE PROCEDURE rangley.rangley_s_insert_updated_meet
     , IN  p_dttm_start_utc        timestamptz
     , IN  p_dttm_end_utc          timestamptz
     , IN  p_description           varchar(50) DEFAULT ''::varchar
-    , IN  p_change_reason         varchar(50) DEFAULT ''::varchar
     , IN  p_meet_category_id      int2        DEFAULT 1::int2
     , IN  p_max_capacity          int4        DEFAULT 2::int4
 )
@@ -34,8 +31,7 @@ DECLARE
     v_sub                text;
     created_by_user_id   bigint;
 BEGIN
-    -- OUT sentinels
-    new_meet_coordinate_id := -1;
+    -- OUT sentinel
     num_inserted           := 0;
 
     -- ===== Basic guards
@@ -76,6 +72,8 @@ BEGIN
           HINT='Ensure the user exists in tb_users and the sub is correct.';
     END IF;
 
+    -- 1) create meet_id
+    CALL rangley.rangley_i_meet_id(new_meet_id, created_by_user_id);
 
     -- 2) create meet_coordinate_id (has its own range/NULL checks)
     CALL rangley.rangley_i_meet_coordinate(
@@ -104,7 +102,7 @@ BEGIN
         new_meet_coordinate_id,
         p_name,
         p_description,
-        p_change_reason,
+        '',
         p_meet_category_id,
         p_max_capacity,
         p_dttm_start_utc,
