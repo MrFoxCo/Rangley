@@ -289,12 +289,12 @@ public struct PublicMapView: View
                 { proxy in
                     Map(position: $cameraPosition)
                     {
-                        ForEach(meets.filter { isInVisibleRegion($0) }, id: \.meet_id)
+                        ForEach(meets.filter { isInVisibleRegion($0) })
                         { meet in
                             Annotation(
                                 meet.name,
                                 coordinate: CLLocationCoordinate2D(latitude: meet.latitude, longitude: meet.longitude),
-                                anchor: .bottom // or .top, experiment with different anchors
+                                anchor: .bottom
                             ) {
                                 MeetBubbleButton(meet: meet, ns: meetNS) {
                                     selectedMeet = meet
@@ -302,6 +302,7 @@ public struct PublicMapView: View
                                 }
                             }
                         }
+
                     }
                     .onMapCameraChange(frequency: .onEnd) { ctx in
                         lastSpan = ctx.region.span

@@ -10,7 +10,8 @@ import SwiftUI
 import CoreLocation
 import QuartzCore
 
-struct MeetFormView: View {
+struct MeetFormView: View
+{
     // MARK: Inputs
     let mode: MeetFormMode
     let onCreate: (MeetInsertBody) async throws -> Void

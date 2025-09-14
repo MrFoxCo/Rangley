@@ -83,7 +83,7 @@ struct RangleyApp: App
         WindowGroup
         {
             RootGate()
-                .environmentObject(session)
+//                .environmentObject(session)
         }   // ← was UserRegisterFlow()
     }
 }

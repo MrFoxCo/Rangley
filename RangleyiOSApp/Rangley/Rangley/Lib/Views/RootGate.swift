@@ -4,33 +4,23 @@
 //
 //  Created by Anthony Guzzardo on 9/10/25.
 //
+
 import SwiftUI
 import Amplify
 
-enum RootRoute { case checking, start, map }
-
 struct RootGate: View {
-    @EnvironmentObject private var session: SessionModel
-    @State private var route: RootRoute = .checking
+    @State private var isAuthed = false
+    @State private var checking = true
 
     var body: some View {
         Group {
-            switch route {
-            case .checking:
-                ProgressView()
-                    .task { await checkSession() }
-
-            case .start:
-                StartScreenView(onAuthenticated: {
-                    Task {
-                        await session.reloadMe()       // fetch /v/me once after login/register
-                        route = .map
-                    }
-                })
-
-            case .map:
-                PublicMapView()                       // reads session via @EnvironmentObject
+            if checking {
+                ProgressView().task { await checkSession() }
+            } else if isAuthed {
+                PublicMapView()
                     .preferredColorScheme(.dark)
+            } else {
+                StartScreenView(onAuthenticated: { isAuthed = true })
             }
         }
     }
@@ -39,14 +29,10 @@ struct RootGate: View {
     private func checkSession() async {
         do {
             let s = try await Amplify.Auth.fetchAuthSession()
-            if s.isSignedIn {
-                await session.ensureMe()              // loads /v/me if not already loaded
-                route = .map
-            } else {
-                route = .start
-            }
+            isAuthed = s.isSignedIn
         } catch {
-            route = .start
+            isAuthed = false
         }
+        checking = false
     }
 }
