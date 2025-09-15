@@ -7,7 +7,8 @@
 
 
 import Foundation
-
+/// they are snake case only because it's what they look like in PGSQL ... we should
+/// probably fix that
 public struct ViewMeetsModel: Codable, Identifiable, Sendable
 {
     public let meet_id_uuid         : String

@@ -5,7 +5,7 @@ CREATE OR REPLACE PROCEDURE rangley.rangley_s_insert_updated_meet
 
     -- INs (required)
     , IN  p_cognito_sub           text
-    , IN  p_meet_id_uuid		  UUID
+    , IN  p_meet_id_uuid          UUID
 
     -- coordinates (optional - only pass if changed)
     , IN  p_latitude              FLOAT8        DEFAULT NULL
@@ -15,241 +15,220 @@ CREATE OR REPLACE PROCEDURE rangley.rangley_s_insert_updated_meet
     , IN  p_region_radius         FLOAT8        DEFAULT NULL
 
     -- meet fields (optional - only pass if changed)
-    , in  p_meet_status_id        int2          DEFAULT NULL
+    , IN  p_meet_status_id        int2          DEFAULT NULL
     , IN  p_name                  varchar(50)   DEFAULT NULL
     , IN  p_dttm_start_utc        timestamptz   DEFAULT NULL
     , IN  p_dttm_end_utc          timestamptz   DEFAULT NULL
-    , IN  p_description           varchar(50)   DEFAULT null
-    , IN  p_change_reason         varchar(50)   default NULL
+    , IN  p_description           varchar(50)   DEFAULT NULL
+    , IN  p_change_reason         varchar(50)   DEFAULT NULL
     , IN  p_meet_category_id      int2          DEFAULT NULL
     , IN  p_max_capacity          int4          DEFAULT NULL
 )
 LANGUAGE plpgsql
-/*
-	THIS IS UPDATING AN EXISTING MEET WITH A NEW CHANGE_STAMP
-	Only pass parameters for fields that are actually changing.
-	NULL parameters mean "keep the existing value"
-*/
 AS $procedure$
+#variable_conflict use_variable
 DECLARE
     _state  text; _msg text; _detail text; _hint text; _ctx text;
-    v_sub                text;
-    created_by_user_id   INT8;
-	meet_id				 INT8;
-	new_change_stamp	 INT8;
-	new_meet_coordinate_id INT8;
-	
-	-- Current values from latest version
-	current_coordinate_id    INT8;
-	current_meet_status_id    INT2;
-	current_name            varchar(50);
-	current_description     varchar(50);
-	current_category_id     int2;
-	current_max_capacity    int4;
-	current_dttm_start_utc  timestamptz;
-	current_dttm_end_utc    timestamptz;
-	
-	-- Final values to insert
-	final_coordinate_id     INT8;
-	final_meet_status_id    INT2;
-	final_name             varchar(50);
-	final_description      varchar(50);
-	final_change_reason    varchar(50);
-	final_category_id      int2;
-	final_max_capacity     int4;
-	final_dttm_start_utc   timestamptz;
-	final_dttm_end_utc     timestamptz;
-	
-	-- for coordinates
-  	_provided INT;
-	_eps FLOAT8 := 1e-7; -- optional: no-op guard tolerance
-	_eps_radius FLOAT8 := 1e-3;  -- meters (or your unit)
+
+    v_sub                 text;
+    v_user_id             int8;
+    v_meet_id             int8;
+    v_new_change_stamp    int8;
+    v_new_meet_coord_id   int8;
+
+    -- Current values
+    current_coordinate_id   int8;
+    current_meet_status_id  int2;
+    current_name            varchar(50);
+    current_description     varchar(50);
+    current_category_id     int2;
+    current_max_capacity    int4;
+    current_dttm_start_utc  timestamptz;
+    current_dttm_end_utc    timestamptz;
+
+    -- Final values
+    final_coordinate_id     int8;
+    final_meet_status_id    int2;
+    final_name              varchar(50);
+    final_description       varchar(50);
+    final_change_reason     varchar(50);
+    final_category_id       int2;
+    final_max_capacity      int4;
+    final_dttm_start_utc    timestamptz;
+    final_dttm_end_utc      timestamptz;
+
+    _provided               int;
+    _eps        float8 := 1e-7;
+    _eps_radius float8 := 1e-3;
 BEGIN
-    -- OUT sentinels
     num_inserted := 0;
 
-    -- ===== Basic guards
+    -- Basic guards
     v_sub := nullif(btrim(p_cognito_sub), '');
     IF v_sub IS NULL THEN
-        RAISE EXCEPTION USING
-          ERRCODE='22023', MESSAGE='[ERRO] p_cognito_sub is required (non-empty)';
+        RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='[ERRO] p_cognito_sub is required (non-empty)';
     END IF;
 
-	-- AUTHENTICATING USER
-	SELECT rangley.rangley_fn_v_user_id_by_cognito_sub(v_sub)
-	INTO created_by_user_id;
-	
-	IF created_by_user_id IS NULL OR created_by_user_id <= 0 THEN
-	  RAISE EXCEPTION USING ERRCODE='22023',
-	    MESSAGE='[ERRO] Could not resolve user_id from cognito_sub',
-	    DETAIL=format('cognito_sub=%s', v_sub);
-	END IF;
+    -- Resolve user id (was previously missing before ownership check)
+    SELECT rangley.rangley_fn_v_user_id_by_cognito_sub(v_sub)
+      INTO v_user_id;
+    IF v_user_id IS NULL OR v_user_id <= 0 THEN
+        RAISE EXCEPTION USING ERRCODE='22023',
+          MESSAGE='[ERRO] Could not resolve user_id from cognito_sub',
+          DETAIL=format('cognito_sub=%s', v_sub);
+    END IF;
 
-	IF NOT EXISTS (
-	  SELECT 1
-	  FROM rangley.tb_meet_ids mid
-	  JOIN rangley.vw_up_to_date_meets v ON v.meet_id = mid.meet_id
-	  WHERE v.meet_id_uuid = p_meet_id_uuid
-	    AND mid.created_by_user_id = created_by_user_id
-	) THEN
-	  RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='[ERRO] Not authorized to update this meet';
-	END IF;
+    -- Existence, then ownership
+    IF NOT EXISTS (
+        SELECT 1
+        FROM rangley.tb_meet_ids mid
+        JOIN rangley.vw_up_to_date_meets v ON v.meet_id = mid.meet_id
+        WHERE v.meet_id_uuid = p_meet_id_uuid
+    ) THEN
+        RAISE EXCEPTION USING ERRCODE='P0002', MESSAGE='[ERRO] Meet not found';
+    END IF;
 
+    IF NOT EXISTS (
+        SELECT 1
+        FROM rangley.tb_meet_ids mid
+        JOIN rangley.vw_up_to_date_meets v ON v.meet_id = mid.meet_id
+        WHERE v.meet_id_uuid = p_meet_id_uuid
+          AND mid.created_by_user_id = v_user_id
+    ) THEN
+        RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='[ERRO] Not authorized to update this meet';
+    END IF;
 
+    -- Load current values
+    SELECT 
+        utdm.meet_id,
+        utdm.meet_coordinate_id,
+        utdm.meet_status_id,
+        utdm.name,
+        utdm.description,
+        utdm.meet_category_id,
+        utdm.max_capacity,
+        utdm.dttm_start_utc,
+        utdm.dttm_end_utc
+    INTO 
+        v_meet_id,
+        current_coordinate_id,
+        current_meet_status_id,
+        current_name,
+        current_description,
+        current_category_id,
+        current_max_capacity,
+        current_dttm_start_utc,
+        current_dttm_end_utc
+    FROM rangley.vw_up_to_date_meets utdm
+    WHERE utdm.meet_id_uuid = p_meet_id_uuid;
 
-    -- ===== Get current values from latest version
+    IF v_meet_id IS NULL THEN
+        RAISE EXCEPTION USING ERRCODE='P0002',
+          MESSAGE='[ERRO] Meet not found',
+          DETAIL=format('meet_id_uuid=%s', p_meet_id_uuid);
+    END IF;
 
-	SELECT 
-	    utdm.meet_id,
-	    utdm.meet_coordinate_id,
-		utdm.meet_status_id,
-	    utdm.name,
-	    utdm.description,
-	    utdm.meet_category_id,
-	    utdm.max_capacity,
-	    utdm.dttm_start_utc,
-	    utdm.dttm_end_utc
-	INTO 
-	    meet_id,                    -- you need this variable too
-	    current_coordinate_id,
-		current_meet_status_id,
-	    current_name,
-	    current_description,
-	    current_category_id,
-	    current_max_capacity,
-	    current_dttm_start_utc,
-	    current_dttm_end_utc
-	FROM rangley.vw_up_to_date_meets utdm
-	WHERE utdm.meet_id_uuid = p_meet_id_uuid;
-	
-   	IF meet_id IS NULL THEN
-		RAISE EXCEPTION USING
-         	ERRCODE='P0002',
-         	MESSAGE='[ERRO] Meet not found',
-         	DETAIL=format('meet_id_uuid=%s', p_meet_id_uuid);
-   	END IF;
+    -- Prepare finals
+    final_meet_status_id := COALESCE(p_meet_status_id, current_meet_status_id);
+    final_name           := COALESCE(p_name, current_name);
+    final_description    := COALESCE(p_description, current_description);
+    final_change_reason  := COALESCE(p_change_reason, '');
+    final_category_id    := COALESCE(p_meet_category_id, current_category_id);
+    final_max_capacity   := COALESCE(p_max_capacity, current_max_capacity);
+    final_dttm_start_utc := COALESCE(p_dttm_start_utc, current_dttm_start_utc);
+    final_dttm_end_utc   := COALESCE(p_dttm_end_utc,   current_dttm_end_utc);
 
-    -- ===== Prepare final values (new values override current values, treat empty strings as valid)
-	final_meet_status_id 	:= COALESCE(p_meet_status_id, current_meet_status_id);
-    final_name 				:= COALESCE(p_name, current_name);
-    final_description 		:= COALESCE(p_description, current_description);
-    final_change_reason 	:= COALESCE(p_change_reason, '');
-    final_category_id 		:= COALESCE(p_meet_category_id, current_category_id);
-    final_max_capacity 		:= COALESCE(p_max_capacity, current_max_capacity);
-    final_dttm_start_utc 	:= COALESCE(p_dttm_start_utc, current_dttm_start_utc);
-    final_dttm_end_utc 		:= COALESCE(p_dttm_end_utc, current_dttm_end_utc);
-
-    -- ===== Validate final values (same validations as insert)
+    -- Validate finals
     IF final_name IS NULL OR btrim(final_name) = '' THEN
-        RAISE EXCEPTION USING
-          ERRCODE='22023', MESSAGE='[ERRO] name is required';
+        RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='[ERRO] name is required';
     END IF;
 
     IF final_dttm_start_utc IS NULL OR final_dttm_end_utc IS NULL OR final_dttm_start_utc >= final_dttm_end_utc THEN
-        RAISE EXCEPTION USING
-          ERRCODE='22023',
+        RAISE EXCEPTION USING ERRCODE='22023',
           MESSAGE='[ERRO] Invalid time window (start must be before end)',
           DETAIL=format('start=%s end=%s', final_dttm_start_utc, final_dttm_end_utc);
     END IF;
 
     IF final_max_capacity IS NULL OR final_max_capacity < 2 THEN
-        RAISE EXCEPTION USING
-          ERRCODE='22023',
+        RAISE EXCEPTION USING ERRCODE='22023',
           MESSAGE='[ERRO] max_capacity must be >= 2',
           DETAIL=format('max_capacity=%s', final_max_capacity);
     END IF;
 
-	_provided := (CASE WHEN p_latitude         IS NULL THEN 0 ELSE 1 END)
-	             + (CASE WHEN p_longitude        IS NULL THEN 0 ELSE 1 END)
-	             + (CASE WHEN p_region_latitude  IS NULL THEN 0 ELSE 1 END)
-	             + (CASE WHEN p_region_longitude IS NULL THEN 0 ELSE 1 END)
-	             + (CASE WHEN p_region_radius    IS NULL THEN 0 ELSE 1 END);
+    -- Coordinate handling
+    _provided := (CASE WHEN p_latitude         IS NULL THEN 0 ELSE 1 END)
+               + (CASE WHEN p_longitude        IS NULL THEN 0 ELSE 1 END)
+               + (CASE WHEN p_region_latitude  IS NULL THEN 0 ELSE 1 END)
+               + (CASE WHEN p_region_longitude IS NULL THEN 0 ELSE 1 END)
+               + (CASE WHEN p_region_radius    IS NULL THEN 0 ELSE 1 END);
 
+    IF _provided = 0 THEN
+        final_coordinate_id := current_coordinate_id;
 
+    ELSIF _provided = 5 THEN
+        IF p_latitude < -90 OR p_latitude > 90
+           OR p_longitude < -180 OR p_longitude > 180
+           OR p_region_latitude < -90 OR p_region_latitude > 90
+           OR p_region_longitude < -180 OR p_region_longitude > 180
+           OR p_region_radius <= 0
+        THEN
+            RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='[ERRO] Invalid coordinate bounds';
+        END IF;
 
-	
- 	IF _provided = 0 THEN
-	    -- reuse current
-	    final_coordinate_id := current_coordinate_id;
-	
-	ELSIF _provided = 5 THEN
-	-- bounds (point + region center)
-	  IF p_latitude          < -90  OR p_latitude          >  90
-	     OR p_longitude      < -180 OR p_longitude         > 180
-	     OR p_region_latitude  < -90  OR p_region_latitude  >  90
-	     OR p_region_longitude < -180 OR p_region_longitude > 180
-	     OR p_region_radius <= 0
-	  THEN
-	     RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='[ERRO] Invalid coordinate bounds';
-	  END IF;
-	
-	  -- epsilon no-op
-	  PERFORM 1
-	  FROM rangley.tb_meet_coordinates c
-	  WHERE c.meet_coordinate_id = current_coordinate_id
-	    AND abs(c.latitude         - p_latitude        ) < _eps
-	    AND abs(c.longitude        - p_longitude       ) < _eps
-	    AND abs(c.region_latitude  - p_region_latitude ) < _eps
-	    AND abs(c.region_longitude - p_region_longitude) < _eps
-	    AND abs(c.region_radius    - p_region_radius   ) < _eps_radius;
-	
-	IF FOUND THEN
-	      final_coordinate_id := current_coordinate_id; -- no-op
-	ELSE
-	      -- create new full coordinate (your inserter can still do range checks)
-  		CALL rangley.rangley_i_meet_coordinate(
-	        new_meet_coordinate_id,
-	        p_latitude, p_longitude, p_region_latitude,
-			p_region_longitude, p_region_radius
-      	);
-	      final_coordinate_id := new_meet_coordinate_id;
-	    END IF;
-	
-  	ELSE
-	    RAISE EXCEPTION USING
-			ERRCODE='22023',
-	      	MESSAGE='[ERRO] Provide all 5 coordinate fields or none',
-	      	HINT='Required set: latitude, longitude, region_latitude, region_longitude, region_radius.';
-	END IF;
+        PERFORM 1
+        FROM rangley.tb_meet_coordinates c
+        WHERE c.meet_coordinate_id = current_coordinate_id
+          AND abs(c.latitude         - p_latitude        ) < _eps
+          AND abs(c.longitude        - p_longitude       ) < _eps
+          AND abs(c.region_latitude  - p_region_latitude ) < _eps
+          AND abs(c.region_longitude - p_region_longitude) < _eps
+          AND abs(c.region_radius    - p_region_radius   ) < _eps_radius;
 
+        IF FOUND THEN
+            final_coordinate_id := current_coordinate_id;
+        ELSE
+            CALL rangley.rangley_i_meet_coordinate(
+                v_new_meet_coord_id,
+                p_latitude, p_longitude, p_region_latitude,
+                p_region_longitude, p_region_radius
+            );
+            final_coordinate_id := v_new_meet_coord_id;
+        END IF;
 
-
-	-- NO IDENTICAL INSERT "no-op"
-
-	IF final_coordinate_id = current_coordinate_id
-	   AND final_meet_status_id = current_meet_status_id
-	   AND final_name = current_name
-	   AND final_description IS NOT DISTINCT FROM current_description
-	   AND final_category_id = current_category_id
-	   AND final_max_capacity = current_max_capacity
-	   AND final_dttm_start_utc = current_dttm_start_utc
-	   AND final_dttm_end_utc   = current_dttm_end_utc
-	THEN
-	   RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='[ERRO] No changes provided';
-	END IF;
-
-
-
-    -- ===== Create new change_stamp for this update
-	-- new_change_stamp is an OUT 
-    CALL rangley.rangley_i_change_stamp(new_change_stamp, meet_id);
-
-    IF new_change_stamp IS NULL OR new_change_stamp <= 0 THEN
-        RAISE EXCEPTION USING
-          ERRCODE='23514',
-          MESSAGE='[ERRO] Failed to create new change_stamp',
-          DETAIL=format('meet_id=%s', meet_id);
+    ELSE
+        RAISE EXCEPTION USING ERRCODE='22023',
+          MESSAGE='[ERRO] Provide all 5 coordinate fields or none',
+          HINT='Required set: latitude, longitude, region_latitude, region_longitude, region_radius.';
     END IF;
 
+    -- No-op guard
+    IF final_coordinate_id       = current_coordinate_id
+       AND final_meet_status_id  = current_meet_status_id
+       AND final_name            = current_name
+       AND final_description     IS NOT DISTINCT FROM current_description
+       AND final_category_id     = current_category_id
+       AND final_max_capacity    = current_max_capacity
+       AND final_dttm_start_utc  = current_dttm_start_utc
+       AND final_dttm_end_utc    = current_dttm_end_utc
+    THEN
+        RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='[ERRO] No changes provided';
+    END IF;
 
+    -- New change_stamp
+    CALL rangley.rangley_i_change_stamp(v_new_change_stamp, v_meet_id);
+    IF v_new_change_stamp IS NULL OR v_new_change_stamp <= 0 THEN
+        RAISE EXCEPTION USING ERRCODE='23514',
+          MESSAGE='[ERRO] Failed to create new change_stamp',
+          DETAIL=format('meet_id=%s', v_meet_id);
+    END IF;
 
-    -- ===== Insert new version (same structure as insert)
+    -- Insert new version
     INSERT INTO rangley.tb_meets
     (
         meet_id,
         change_stamp,
         meet_coordinate_id,
-		meet_status_id,
+        meet_status_id,
         name,
         description,
         change_reason,
@@ -260,10 +239,10 @@ BEGIN
     )
     VALUES
     (
-        meet_id,
-        new_change_stamp,
+        v_meet_id,
+        v_new_change_stamp,
         final_coordinate_id,
-		final_meet_status_id,
+        final_meet_status_id,
         final_name,
         final_description,
         final_change_reason,
@@ -276,14 +255,13 @@ BEGIN
     GET DIAGNOSTICS num_inserted = ROW_COUNT;
 
     IF num_inserted <> 1 THEN
-        RAISE EXCEPTION USING
-          ERRCODE='23514',
+        RAISE EXCEPTION USING ERRCODE='23514',
           MESSAGE='[ERRO] Unexpected insert count for tb_meets',
-          DETAIL=format('rows=%s meet_id=%s change_stamp=%s', num_inserted, meet_id, new_change_stamp);
+          DETAIL=format('rows=%s meet_id=%s change_stamp=%s', num_inserted, v_meet_id, v_new_change_stamp);
     END IF;
 
     RAISE LOG '[INFO] Updated meet_id=% with change_stamp=% and meet_coordinate_id=% by user_id=%',
-        meet_id, new_change_stamp, final_coordinate_id, created_by_user_id;
+        v_meet_id, v_new_change_stamp, final_coordinate_id, v_user_id;
 
 EXCEPTION
     WHEN unique_violation THEN

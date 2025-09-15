@@ -9,7 +9,8 @@ import SwiftUI
 import CoreLocation
 import MapKit
 
-struct NearbyMeetsBadgeView: View {
+struct NearbyMeetsBadgeView: View
+{
     let meets: [ViewMeetsModel]
     let userLocation: CLLocationCoordinate2D
     @Binding var selectedRadius: Double // in miles
@@ -19,7 +20,8 @@ struct NearbyMeetsBadgeView: View {
     private let radiusOptions: [Double] = [1, 2, 5, 10, 15] // miles
     
     // Calculate meets within selected radius
-    private var nearbyMeets: [ViewMeetsModel] {
+    private var nearbyMeets: [ViewMeetsModel]
+    {
         let userCLLocation = CLLocation(latitude: userLocation.latitude, longitude: userLocation.longitude)
         let radiusInMeters = selectedRadius * 1609.34 // Convert miles to meters
         
@@ -30,7 +32,8 @@ struct NearbyMeetsBadgeView: View {
     }
     
     // Break down by time periods
-    private var todayMeets: [ViewMeetsModel] {
+    private var todayMeets: [ViewMeetsModel]
+    {
         let today = Calendar.current.startOfDay(for: Date())
         let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: today)!
         
@@ -39,7 +42,8 @@ struct NearbyMeetsBadgeView: View {
         }
     }
     
-    private var thisWeekMeets: [ViewMeetsModel] {
+    private var thisWeekMeets: [ViewMeetsModel]
+    {
         let weekFromNow = Calendar.current.date(byAdding: .day, value: 7, to: Date())!
         return nearbyMeets.filter { meet in
             meet.dttm_start_utc <= weekFromNow
@@ -47,12 +51,14 @@ struct NearbyMeetsBadgeView: View {
     }
     
     // Category breakdown
-    private var categoryBreakdown: [String: Int] {
+    private var categoryBreakdown: [String: Int]
+    {
         Dictionary(grouping: nearbyMeets, by: \.category_name)
             .mapValues { $0.count }
     }
     
-    private var badgeColor: Color {
+    private var badgeColor: Color
+    {
         let count = nearbyMeets.count
         if count >= 10 { return AppPalette.Brand.neonPink }
         if count >= 5 { return .orange }
@@ -62,7 +68,7 @@ struct NearbyMeetsBadgeView: View {
     
     var body: some View {
         VStack(alignment: .trailing, spacing: 8) {
-            // Radius selector (appears when badge is tapped)
+            // RADIUS SELECTOR DROPDOWN MENU - The big white menu that appears when you tap the badge
             if showRadiusSelector {
                 radiusSelectorView
                     .transition(.asymmetric(
@@ -71,13 +77,19 @@ struct NearbyMeetsBadgeView: View {
                     ))
             }
             
-            // Main badge
+            // MAIN BADGE BUTTON - The floating capsule that shows "X nearby" or expanded info
             Button {
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                    if isExpanded {
-                        showRadiusSelector.toggle()
+                    if showRadiusSelector {
+                        // If radius selector is showing, close everything
+                        showRadiusSelector = false
+                        isExpanded = false
+                    } else if isExpanded {
+                        // If expanded, show radius selector
+                        showRadiusSelector = true
                     } else {
+                        // If compact, expand
                         isExpanded = true
                     }
                 }
@@ -90,19 +102,29 @@ struct NearbyMeetsBadgeView: View {
                         .shadow(color: badgeColor.opacity(0.6), radius: 4)
                     
                     if isExpanded {
-                        expandedContent
+                        expandedContent // EXPANDED BADGE CONTENT - Shows detailed info when badge is tapped once
                     } else {
-                        compactContent
+                        compactContent // COMPACT BADGE CONTENT - Initial "X nearby" view
+                    }
+                    
+                    // Add close/chevron indicator when expanded
+                    if isExpanded || showRadiusSelector {
+                        Image(systemName: showRadiusSelector ? "xmark.circle.fill" : "chevron.down.circle.fill")
+                            .font(.system(size: 16))
+                            .foregroundStyle(AppPalette.Brand.neonPink)
+                            .opacity(0.8)
+                            .rotationEffect(.degrees(showRadiusSelector ? 0 : 0))
                     }
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(
+                    // MAIN BADGE BACKGROUND - Controls the translucency of the floating badge
                     Capsule()
-                        .fill(AppPalette.Surface.fieldFill.opacity(0.95))
+                        .fill(AppPalette.Surface.nearByBadgeFill.opacity(0.95))
                         .overlay(
                             Capsule()
-                                .stroke(AppPalette.Surface.fieldStroke.opacity(0.5), lineWidth: 1)
+                                .stroke(showRadiusSelector ? AppPalette.Brand.neonPink.opacity(0.5) : AppPalette.Surface.fieldStroke.opacity(0.5), lineWidth: 1)
                         )
                 )
                 .shadow(color: .black.opacity(0.1), radius: 8, y: 4)
@@ -111,33 +133,42 @@ struct NearbyMeetsBadgeView: View {
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: isExpanded)
         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: showRadiusSelector)
+        // Add tap gesture to dismiss when tapping outside
+        .onTapGesture {
+            // This won't interfere with button tap since button consumes the gesture first
+        }
     }
     
+    // COMPACT BADGE CONTENT - The initial small view showing just "X nearby"
     @ViewBuilder
     private var compactContent: some View {
         HStack(spacing: 4) {
             Text("\(nearbyMeets.count)")
                 .font(.system(size: 16, weight: .bold, design: .rounded))
-                .foregroundStyle(AppPalette.Text.primary)
+                .foregroundStyle(AppPalette.Brand.neonPink)
             
             Text("nearby")
                 .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(AppPalette.Text.secondary)
+                .foregroundStyle(AppPalette.Text.nearByBadgeFillSecondary)
         }
     }
     
+    // EXPANDED BADGE CONTENT - The larger view with detailed breakdown when badge is tapped once
     @ViewBuilder
-    private var expandedContent: some View {
-        VStack(alignment: .leading, spacing: 4) {
+    private var expandedContent: some View
+    {
+        VStack(alignment: .leading, spacing: 4)
+        {
             // Main count with radius
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 4)
+            {
                 Text("\(nearbyMeets.count)")
                     .font(.system(size: 18, weight: .bold, design: .rounded))
-                    .foregroundStyle(AppPalette.Text.primary)
+                    .foregroundStyle(AppPalette.Brand.neonPink)
                 
                 Text("meets within")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(AppPalette.Text.secondary)
+                    .foregroundStyle(AppPalette.Text.nearByBadgeFillSecondary)
                 
                 Text("\(selectedRadius.truncatingRemainder(dividingBy: 1) == 0 ? String(format: "%.0f", selectedRadius) : String(format: "%.1f", selectedRadius))mi")
                     .font(.system(size: 14, weight: .semibold))
@@ -148,53 +179,75 @@ struct NearbyMeetsBadgeView: View {
             if nearbyMeets.count > 0 {
                 HStack(spacing: 8) {
                     if todayMeets.count > 0 {
-                        timeChip(count: todayMeets.count, label: "today")
+                        timeChip(count: todayMeets.count, label: "today") // TIME CHIPS - Small pills showing "today" and "this week"
                     }
                     if thisWeekMeets.count > todayMeets.count {
-                        timeChip(count: thisWeekMeets.count - todayMeets.count, label: "this week")
+                        timeChip(count: thisWeekMeets.count - todayMeets.count, label: "this week") // TIME CHIPS
                     }
                 }
             }
             
-            // Tap to configure hint
-            Text("Tap to change radius")
+            // Tap to configure hint - now shows different message based on state
+            Text(showRadiusSelector ? "Tap × to close" : "Tap ↓ to change radius")
                 .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(AppPalette.Text.tertiary)
-                .opacity(0.8)
+                .foregroundStyle(AppPalette.Brand.neonPink)
+                .opacity(0.7)
         }
     }
     
+    // TIME CHIPS - Small capsule-shaped elements showing time-based counts (today/this week)
     @ViewBuilder
     private func timeChip(count: Int, label: String) -> some View {
         HStack(spacing: 3) {
             Text("\(count)")
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(AppPalette.Text.primary)
+                .foregroundStyle(AppPalette.Brand.neonPink)
             Text(label)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(AppPalette.Text.secondary)
+                .foregroundStyle(AppPalette.Text.nearByBadgeFillSecondary)
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 2)
         .background(
+            // TIME CHIP BACKGROUND - Controls the translucency of the small time pills
             Capsule()
-                .fill(AppPalette.Surface.fieldFill.opacity(0.6))
+                .fill(AppPalette.Surface.nearByBadgeFill.opacity(0.6))
                 .overlay(
                     Capsule()
-                        .stroke(AppPalette.Surface.fieldStroke.opacity(0.3), lineWidth: 0.5)
+                        .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 0.5)
                 )
         )
     }
     
+    // RADIUS SELECTOR DROPDOWN MENU - The big white popup menu for choosing search radius
     @ViewBuilder
     private var radiusSelectorView: some View {
         VStack(alignment: .trailing, spacing: 6) {
-            Text("Search Radius")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(AppPalette.Text.secondary)
+            HStack {
+                Text("Search Radius")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(AppPalette.Brand.neonPink)
+                
+                Spacer()
+                
+                // Close button for the radius selector
+                Button {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        showRadiusSelector = false
+                        isExpanded = false
+                    }
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 18))
+                        .foregroundStyle(AppPalette.Brand.neonPink.opacity(0.7))
+                }
+                .buttonStyle(.plain)
+            }
             
             VStack(spacing: 4) {
                 ForEach(radiusOptions, id: \.self) { radius in
+                    // RADIUS OPTION BUTTON - Individual selectable radius option in the dropdown
                     Button {
                         UIImpactFeedbackGenerator(style: .light).impactOccurred()
                         selectedRadius = radius
@@ -209,12 +262,12 @@ struct NearbyMeetsBadgeView: View {
                                 .frame(width: 8, height: 8)
                                 .overlay(
                                     Circle()
-                                        .stroke(selectedRadius == radius ? AppPalette.Brand.neonPink : AppPalette.Text.tertiary, lineWidth: 1.5)
+                                        .stroke(selectedRadius == radius ? AppPalette.Brand.neonPink : .gray, lineWidth: 1.5)
                                 )
                             
                             Text("\(radius.truncatingRemainder(dividingBy: 1) == 0 ? String(format: "%.0f", radius) : String(format: "%.1f", radius)) miles")
                                 .font(.system(size: 14, weight: .medium))
-                                .foregroundStyle(selectedRadius == radius ? AppPalette.Text.primary : AppPalette.Text.secondary)
+                                .foregroundStyle(selectedRadius == radius ? AppPalette.Brand.neonPink : AppPalette.Text.nearByBadgeFillSecondary)
                             
                             Spacer()
                             
@@ -228,33 +281,41 @@ struct NearbyMeetsBadgeView: View {
                             
                             Text("(\(countForRadius))")
                                 .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(AppPalette.Text.tertiary)
+                                .foregroundStyle(AppPalette.Brand.neonPink.opacity(0.7))
                         }
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
                         .background(
+                            // RADIUS OPTION BACKGROUND - Individual button backgrounds in the dropdown
                             RoundedRectangle(cornerRadius: 8)
-                                .fill(selectedRadius == radius ? AppPalette.Brand.neonPink.opacity(0.1) : AppPalette.Surface.fieldFill.opacity(0.8))
+                                .fill(selectedRadius == radius ? AppPalette.Brand.neonPink.opacity(0.15) : AppPalette.Surface.nearByBadgeFill.opacity(0.9))
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 8)
-                                        .stroke(selectedRadius == radius ? AppPalette.Brand.neonPink.opacity(0.3) : AppPalette.Surface.fieldStroke.opacity(0.3), lineWidth: 1)
+                                        .stroke(selectedRadius == radius ? AppPalette.Brand.neonPink.opacity(0.4) : AppPalette.Surface.fieldStroke.opacity(0.6), lineWidth: 1)
                                 )
                         )
                     }
                     .buttonStyle(.plain)
                 }
             }
+            
+            // Add a subtle hint at the bottom
+            Text("Tap any option or × to close")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(AppPalette.Brand.neonPink.opacity(0.6))
+                .padding(.top, 4)
         }
-        .padding(12)
+        .padding(16)
         .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(AppPalette.Surface.fieldFill.opacity(0.98))
+            // DROPDOWN MENU BACKGROUND - The main white background of the entire dropdown menu
+            RoundedRectangle(cornerRadius: 14)
+                .fill(AppPalette.Surface.nearByBadgeFill)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(AppPalette.Surface.fieldStroke.opacity(0.8), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1)
                 )
         )
-        .shadow(color: .black.opacity(0.2), radius: 16, y: 8)
+        .shadow(color: .black.opacity(0.25), radius: 20, y: 10)
     }
 }
 

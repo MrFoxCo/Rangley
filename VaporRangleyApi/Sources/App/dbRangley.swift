@@ -328,8 +328,7 @@ enum Proc
             """
             CALL \(unsafeRaw: procName.rawValue)
             (
-                 \(bind: o.num_inserted)::int4
-            
+                 NULL::int4  -- OUT parameter placeholder
                 ,\(bind: i.cognito_sub              )::text
                 ,\(bind: i.latitude                 )::float8
                 ,\(bind: i.longitude                )::float8
@@ -386,17 +385,16 @@ enum Proc
             """
             CALL \(unsafeRaw: procName.rawValue)
             (
-                \(bind: o.num_inserted      )::int4
-                
+                 NULL::int4  -- OUT parameter placeholder
+                -- REQUIRED
                 ,\(bind: i.cognito_sub      )::text
                 ,\(bind: i.meet_id_uuid     )::uuid  -- FIX: was cognito_sub
-                
+                --OPTIONAL
                 ,\(bind: i.latitude         )::float8
                 ,\(bind: i.longitude        )::float8
                 ,\(bind: i.region_latitude  )::float8
                 ,\(bind: i.region_longitude )::float8
                 ,\(bind: i.region_radius    )::float8
-                
                 ,\(bind: i.meet_status_id   )::int2  -- ADD: was missing
                 ,\(bind: i.name             )::varchar(50)
                 ,\(bind: i.dttm_start_utc   )::timestamptz

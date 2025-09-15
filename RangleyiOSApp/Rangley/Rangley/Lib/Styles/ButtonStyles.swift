@@ -7,7 +7,8 @@
 
 import SwiftUI
 
-struct OutlineCapsuleButton: ButtonStyle {
+struct OutlineCapsuleButton: ButtonStyle
+{
     var font: Font = FontStyles.buttonSecondary
 
     func makeBody(configuration: Configuration) -> some View {
@@ -24,7 +25,8 @@ struct OutlineCapsuleButton: ButtonStyle {
 }
 
 
-struct CreateNewAccountCapsuleButton: ButtonStyle {
+struct CreateNewAccountCapsuleButton: ButtonStyle
+{
     var font: Font = FontStyles.buttonPrimary
 
     // warmer off-whites (less glare than pure white)
@@ -71,7 +73,8 @@ struct CreateNewAccountCapsuleButton: ButtonStyle {
 }
 
 
-struct PrimaryCapsuleButton: ButtonStyle {
+struct PrimaryCapsuleButton: ButtonStyle
+{
     var font: Font = FontStyles.buttonPrimary
     private let fill = AppPalette.Brand.pigNeonPink   // solid
 
@@ -94,3 +97,49 @@ struct PrimaryCapsuleButton: ButtonStyle {
     }
 }
 
+// Put this near your view (file-private is fine)
+struct NeonReloadButton: View
+{
+    let isLoading: Bool
+    let action: () -> Void
+    @State private var spin = false
+
+    var body: some View {
+        Button {
+            guard !isLoading else { return }
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            action()
+        } label: {
+            ZStack {
+                // Russian violet puck
+                Circle()
+                    .fill(AppPalette.Brand.russianViolet.opacity(0.95))
+                    // neon pink ring
+                    .overlay(Circle().stroke(AppPalette.Brand.neonPink, lineWidth: 1.6))
+                    // soft neon glow
+                    .shadow(color: AppPalette.Brand.neonPink.opacity(0.55), radius: 10, x: 0, y: 0)
+                    // subtle hairline to separate on dark bg
+                    .overlay(Circle().stroke(Color.white.opacity(0.10), lineWidth: 0.5))
+
+                // icon (spins when loading)
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(AppPalette.Text.primary)
+                    .rotationEffect(.degrees(spin ? 360 : 0))
+                    .animation(
+                        isLoading
+                        ? .linear(duration: 1.0).repeatForever(autoreverses: false)
+                        : .default,
+                        value: spin
+                    )
+            }
+            .frame(width: 42, height: 42)
+        }
+        .buttonStyle(.plain)
+        .opacity(isLoading ? 0.5 : 1)
+        .scaleEffect(isLoading ? 0.98 : 1)
+        .accessibilityLabel("Reload meets")
+        .onAppear { if isLoading { spin = true } }
+        .onChange(of: isLoading) { _, new in spin = new }
+    }
+}

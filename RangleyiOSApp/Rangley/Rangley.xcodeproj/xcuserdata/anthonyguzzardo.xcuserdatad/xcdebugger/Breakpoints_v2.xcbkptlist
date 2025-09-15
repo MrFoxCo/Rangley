@@ -34,36 +34,6 @@
             endingLineNumber = "19"
             landmarkName = "init(Coordinate:RegionCoordinate:RegionRadius:Name:ThoroughFare:SubThoroughFare:Locality:SubLocality:AdministrativeArea:SubAdministrativeArea:PostalCode:Country:IsoCountryCode:TimeZone:InlandWater:Ocean:)"
             landmarkType = "7">
-            <Locations>
-               <Location
-                  uuid = "4B39B230-296E-492E-9D16-1B3E0F1A9847 - fcebe8c2b0a32f6c"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "Chibuya.LocationInfo.__allocating_init(Coordinate: Chibuya.Coordinate, RegionCoordinate: Chibuya.Coordinate, RegionRadius: Swift.Double, Name: Swift.String, ThoroughFare: Swift.String, SubThoroughFare: Swift.String, Locality: Swift.String, SubLocality: Swift.String, AdministrativeArea: Swift.String, SubAdministrativeArea: Swift.String, PostalCode: Swift.String, Country: Swift.String, IsoCountryCode: Swift.String, TimeZone: Swift.String, InlandWater: Swift.String, Ocean: Swift.String) -&gt; Chibuya.LocationInfo"
-                  moduleName = "Chibuya.debug.dylib"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/anthonyguzzardo/Developer/Personal/GitHub/Chibuya/Chibuya/Lib/Models/LocationInfo.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "0"
-                  endingLineNumber = "0">
-               </Location>
-               <Location
-                  uuid = "4B39B230-296E-492E-9D16-1B3E0F1A9847 - 4953141f88b47c27"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "Chibuya.LocationInfo.init(Coordinate: Chibuya.Coordinate, RegionCoordinate: Chibuya.Coordinate, RegionRadius: Swift.Double, Name: Swift.String, ThoroughFare: Swift.String, SubThoroughFare: Swift.String, Locality: Swift.String, SubLocality: Swift.String, AdministrativeArea: Swift.String, SubAdministrativeArea: Swift.String, PostalCode: Swift.String, Country: Swift.String, IsoCountryCode: Swift.String, TimeZone: Swift.String, InlandWater: Swift.String, Ocean: Swift.String) -&gt; Chibuya.LocationInfo"
-                  moduleName = "Chibuya.debug.dylib"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/anthonyguzzardo/Developer/Personal/GitHub/Chibuya/Chibuya/Lib/Models/LocationInfo.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "22"
-                  endingLineNumber = "22">
-               </Location>
-            </Locations>
          </BreakpointContent>
       </BreakpointProxy>
       <BreakpointProxy

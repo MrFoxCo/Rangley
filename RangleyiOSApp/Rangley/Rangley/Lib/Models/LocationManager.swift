@@ -8,7 +8,8 @@
 import CoreLocation
 import Combine
 
-public final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
+public final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate
+{
     private let manager = CLLocationManager()
 
     @Published public private(set) var userLocation: CLLocation?
@@ -29,7 +30,8 @@ public final class LocationManager: NSObject, ObservableObject, CLLocationManage
         handle(status)
     }
 
-    public func requestWhenInUse() {
+    public func requestWhenInUse()
+    {
         guard CLLocationManager.locationServicesEnabled() else {
             print("⚠️ Location Services OFF at system level.")
             return
@@ -52,7 +54,8 @@ public final class LocationManager: NSObject, ObservableObject, CLLocationManage
     }
 
 
-    private func handle(_ s: CLAuthorizationStatus) {
+    private func handle(_ s: CLAuthorizationStatus)
+    {
         Task { @MainActor in
             self.status = s
             switch s {
@@ -71,16 +74,20 @@ public final class LocationManager: NSObject, ObservableObject, CLLocationManage
     }
 
     // MARK: - CLLocationManagerDelegate (non-isolated; hop to MainActor when mutating)
-    public func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+    public func locationManagerDidChangeAuthorization(_ manager: CLLocationManager)
+    {
         handle(manager.authorizationStatus)
     }
 
-    public func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+    public func locationManager(_ manager: CLLocationManager,
+                                didUpdateLocations locations: [CLLocation])
+    {
         guard let loc = locations.last else { return }
         Task { @MainActor in self.userLocation = loc }
     }
 
-    public func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+    public func locationManager(_ manager: CLLocationManager, didFailWithError error: Error)
+    {
         print("Location error:", error.localizedDescription)
     }
 }

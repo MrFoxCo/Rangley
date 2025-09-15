@@ -426,12 +426,13 @@ public func routes(_ app: Application) throws
             return .init(num_inserted: dbResult.num_inserted)
                         
         } catch let error as PSQLError {
-            if error.serverInfo?[.sqlState] == "22023" {
-                throw Abort(.badRequest, reason: "Invalid input parameters")
-            } else if error.serverInfo?[.sqlState] == "P0002" {
-                throw Abort(.notFound, reason: "Meet not found")
-            } else {
-                req.logger.error("Database error updating meet: \(error)")
+            let state = error.serverInfo?[.sqlState]
+            switch state {
+            case "22023": throw Abort(.badRequest, reason: "Invalid input parameters")
+            case "P0002": throw Abort(.notFound,    reason: "Meet not found")
+            case "42501": throw Abort(.forbidden,   reason: "Not authorized to update this meet")
+            default:
+                req.logger.error("sqlstate=\(state ?? "nil") error=\(String(reflecting: error))")
                 throw Abort(.internalServerError, reason: "Failed to update meet")
             }
         }

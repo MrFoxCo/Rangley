@@ -105,7 +105,8 @@ final class MeetFormViewModel: ObservableObject {
     }
 
     // Build update body (send only diffs; return nil if no changes)
-    func makeUpdateBody() -> UpdatedMeetInsertBody? {
+    func makeUpdateBody() -> UpdatedMeetInsertBody?
+    {
         guard case .update = mode, let id = meetIDUUID else { return nil }
 
         // Simple diffs

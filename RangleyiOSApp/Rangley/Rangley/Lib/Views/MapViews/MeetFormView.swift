@@ -9,13 +9,15 @@ import SwiftUI
 import CoreLocation
 import QuartzCore
 
-private enum LocationPickerRoute: Identifiable {
+private enum LocationPickerRoute: Identifiable
+{
     case map
     case address
     var id: Int { hashValue }
 }
 
-struct MeetFormView: View {
+struct MeetFormView: View
+{
     @State private var activePicker: LocationPickerRoute?
     private func pickLocation() async -> LocationInfo? {
         // Your location picking logic here
@@ -89,13 +91,15 @@ struct MeetFormView: View {
     private var totalSteps: Int { FieldStep.allCases.count }
 
     // MARK: Location display
-    private var locationDisplayName: String {
+    private var locationDisplayName: String
+    {
         // Update-only: show generic label (visual style unchanged)
         return "Current location"
     }
 
     // MARK: Progress enablement
-    private var canProceed: Bool {
+    private var canProceed: Bool
+    {
         switch currentFieldStep {
         case .name:
             return !vm.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -111,8 +115,10 @@ struct MeetFormView: View {
     }
 
     // MARK: View Body
-    var body: some View {
-        VStack(spacing: 0) {
+    var body: some View
+    {
+        VStack(spacing: 0)
+        {
             header
             progressBar
 
@@ -125,7 +131,8 @@ struct MeetFormView: View {
             Spacer(minLength: 0)
 
             // Action button
-            Button(action: nextStep) {
+            Button(action: nextStep)
+            {
                 Text(currentFieldStep == .review ? "Save Changes" : "Next")
                     .font(.system(size: 16, weight: .bold))
                     .foregroundColor(.white)
@@ -205,10 +212,12 @@ struct MeetFormView: View {
     }
 
     // MARK: Header & Progress
-    private var header: some View {
+    private var header: some View
+    {
         VStack(spacing: 16) {
             HStack {
-                Button(action: previousStep) {
+                Button(action: previousStep)
+                {
                     HStack(spacing: 4) {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 16, weight: .medium))
@@ -230,7 +239,8 @@ struct MeetFormView: View {
         }
     }
 
-    private func stepNumber(for step: FieldStep) -> Int {
+    private func stepNumber(for step: FieldStep) -> Int
+    {
         switch step {
         case .name: return 1
         case .startTime: return 2
@@ -239,7 +249,8 @@ struct MeetFormView: View {
         }
     }
 
-    private var progressBar: some View {
+    private var progressBar: some View
+    {
         GeometryReader { geometry in
             ZStack(alignment: .leading) {
                 RoundedRectangle(cornerRadius: 2)
@@ -261,10 +272,13 @@ struct MeetFormView: View {
     }
 
     // MARK: Location Card
-    private var locationCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
+    private var locationCard: some View
+    {
+        VStack(alignment: .leading, spacing: 8)
+        {
             Label {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 4)
+                {
                     Text(locationDisplayName)
                         .font(.system(size: 14, weight: .medium))
                         .foregroundColor(AppPalette.Text.primary)
@@ -296,11 +310,14 @@ struct MeetFormView: View {
                     )
             )
 
-            HStack {
-                Button {
+            HStack
+            {
+                Button
+                {
                     activePicker = .map   // default
                 } label: {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 6)
+                    {
                         Image(systemName: "mappin.and.ellipse")
                         Text("Change Location")
                     }
@@ -330,13 +347,15 @@ struct MeetFormView: View {
         .padding(.bottom, 24)
     }
 
-    private var coordProvidedCount: Int {
+    private var coordProvidedCount: Int
+    {
         [vm.latitude, vm.longitude, vm.regionLatitude, vm.regionLongitude, vm.regionRadius]
             .compactMap { $0 }.count
     }
 
     // MARK: Step Content
-    private var contentForCurrentStep: some View {
+    private var contentForCurrentStep: some View
+    {
         VStack(spacing: 24) {
             Text(currentFieldStep.title())
                 .font(.system(size: 24, weight: .bold))
@@ -344,10 +363,13 @@ struct MeetFormView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 24)
 
-            Group {
-                switch currentFieldStep {
+            Group
+            {
+                switch currentFieldStep
+                {
                 case .name:
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 8)
+                    {
                         TextField("", text: $vm.name, prompt: Text("Enter meet name").foregroundColor(AppPalette.Text.tertiary))
                             .font(.system(size: 18))
                             .foregroundColor(AppPalette.Text.primary)
@@ -378,7 +400,8 @@ struct MeetFormView: View {
                     .padding(.horizontal, 24)
 
                 case .startTime:
-                    VStack(spacing: 16) {
+                    VStack(spacing: 16)
+                    {
                         DatePicker("", selection: $vm.start, displayedComponents: [.date, .hourAndMinute])
                             .datePickerStyle(.wheel)
                             .labelsHidden()
@@ -397,7 +420,8 @@ struct MeetFormView: View {
                     .padding(.horizontal, 24)
 
                 case .endTime:
-                    VStack(spacing: 16) {
+                    VStack(spacing: 16)
+                    {
                         DatePicker("", selection: $vm.end, in: vm.start..., displayedComponents: [.date, .hourAndMinute])
                             .datePickerStyle(.wheel)
                             .labelsHidden()
@@ -422,8 +446,10 @@ struct MeetFormView: View {
                     .padding(.horizontal, 24)
 
                 case .review:
-                    VStack(spacing: 20) {
-                        VStack(alignment: .leading, spacing: 16) {
+                    VStack(spacing: 20)
+                    {
+                        VStack(alignment: .leading, spacing: 16)
+                        {
                             DetailRow(label: "Meet Name", value: vm.name)
                             DetailRow(label: "Start", value: formatDate(vm.start))
                             DetailRow(label: "End", value: formatDate(vm.end))
@@ -459,7 +485,8 @@ struct MeetFormView: View {
 
     // MARK: Actions
     private func nextStep() {
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8))
+        {
             switch currentFieldStep {
             case .name:
                 isNameFieldFocused = false
@@ -474,7 +501,8 @@ struct MeetFormView: View {
         }
     }
 
-    private func previousStep() {
+    private func previousStep()
+    {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
             switch currentFieldStep {
             case .name:
@@ -489,7 +517,8 @@ struct MeetFormView: View {
         }
     }
 
-    private func submit() {
+    private func submit()
+    {
         if isSubmitting { return }
         submitError = vm.validate()
         guard submitError == nil else { return }
@@ -511,7 +540,8 @@ struct MeetFormView: View {
     }
 
     // MARK: Helpers
-    private struct DetailRow: View {
+    private struct DetailRow: View
+    {
         let label: String
         let value: String
         var body: some View {
@@ -539,7 +569,8 @@ struct MeetFormView: View {
         Self.reviewFormatter.string(from: date)
     }
     
-    private func formatDuration(from start: Date, to end: Date) -> String {
+    private func formatDuration(from start: Date, to end: Date) -> String
+    {
         let interval = max(0, end.timeIntervalSince(start))
         let hours = Int(interval) / 3600
         let minutes = (Int(interval) % 3600) / 60

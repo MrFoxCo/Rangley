@@ -8,7 +8,8 @@
 import SwiftUI
 import CoreLocation
 
-struct LocationConfirmationPopupView: View {
+struct LocationConfirmationPopupView: View
+{
     let locationInfo: LocationInfo
     let onConfirm: () -> Void
     let onCancel: () -> Void

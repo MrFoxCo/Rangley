@@ -11,20 +11,15 @@ import Foundation
 import Amplify
 import UIKit
 import AWSPluginsCore
-// =========================================================
-// ========================================================= ========================================================
-// ========================================================= ========================================================
-// ========================================================= ========================================================
-// ========================================================= ========================================================
+
 // =========================================================
 // =========================================================
+// =========================================================
+// MARK: - IGNORE THE BLOW TODO FOR NOW
 // TODO: - FIGURE OUT A WAY TO TRIGER UPDATES ON OTHER PHONES WHEN MEETS ARE CREATED OR UPDATED
-// TODO: - FIGURE OUT A WAY TO TRIGER UPDATES ON OTHER PHONES WHEN MEETS ARE CREATED OR UPDATED
+// MARK: - IGNORE THE ABOVE TODO FOR NOW
 // =========================================================
 // =========================================================
-// ========================================================= ========================================================
-// ========================================================= ========================================================
-// ========================================================= ========================================================
 // =========================================================
 @MainActor
 public struct PublicMapView: View
@@ -33,7 +28,8 @@ public struct PublicMapView: View
     
     
     
-    private struct RefreshShim: View {
+    private struct RefreshShim: View
+    {
         let onRefresh: () async -> Void
         var body: some View {
             ScrollView { Color.clear.frame(height: 1) }
@@ -47,7 +43,8 @@ public struct PublicMapView: View
     // MARK: - Managing Taps
     // =========================================================
     @State private var tapTask: Task<Void, Never>?
-    private func handleMapTap(_ proxy: MapProxy, _ value: SpatialTapGesture.Value) {
+    private func handleMapTap(_ proxy: MapProxy, _ value: SpatialTapGesture.Value)
+    {
         guard !showLocationPopup && !showMeetOverlay else { return }
         
         // cancel previous debounce
@@ -95,8 +92,6 @@ public struct PublicMapView: View
     ))
     
     @State private var selectedAnchor: CGPoint?
-    
-    // MARK: - END Map Location
     
     // Keep this in PublicMapView so helpers can see it
     @State private var lastSpan = MKCoordinateSpan(latitudeDelta: 0.15, longitudeDelta: 0.15)
@@ -221,8 +216,10 @@ public struct PublicMapView: View
         return LocationInfo(
             Coordinate: c, RegionCoordinate: c, RegionRadius: 2000,
             Name: nil, ThoroughFare: nil, SubThoroughFare: nil,
-            Locality: nil, SubLocality: nil, AdministrativeArea: nil, SubAdministrativeArea: nil,
-            PostalCode: nil, Country: nil, IsoCountryCode: nil, TimeZone: nil, InlandWater: nil, Ocean: nil
+            Locality: nil, SubLocality: nil, AdministrativeArea: nil,
+            SubAdministrativeArea: nil,
+            PostalCode: nil, Country: nil, IsoCountryCode: nil,
+            TimeZone: nil, InlandWater: nil, Ocean: nil
         )
     }()
 
@@ -239,7 +236,8 @@ public struct PublicMapView: View
     }
 
     //^^^ GOES TOGETHer
-    private func resumePicker(with value: LocationInfo?) {
+    private func resumePicker(with value: LocationInfo?)
+    {
         _pickerContinuation?.resume(returning: value)
         _pickerContinuation = nil
         _pickerRoute = nil
@@ -261,7 +259,8 @@ public struct PublicMapView: View
     @Namespace private var meetNS
     
     // Loader
-    private func fetchIdToken() async throws -> String {
+    private func fetchIdToken() async throws -> String
+    {
         let session = try await Amplify.Auth.fetchAuthSession()
         guard let provider = session as? AuthCognitoTokensProvider else {
             throw AuthAPIError.http(-1, "No Cognito token provider")
@@ -347,7 +346,7 @@ public struct PublicMapView: View
                                 }
                             }
                         }
-
+                        UserAnnotation() // THIS IS HOW WE DISPLAY THE USER'S LOCATION
                     }
                     .onMapCameraChange(frequency: .onEnd) { ctx in
                         lastSpan = ctx.region.span
@@ -426,7 +425,8 @@ public struct PublicMapView: View
             )
 
             .allowsHitTesting(showMeetOverlay)
-            .sheet(item: $_pickerRoute) { route in
+            .sheet(item: $_pickerRoute)
+            { route in
                 switch route {
                 case .map:
                     MapLocationPicker(
@@ -448,7 +448,8 @@ public struct PublicMapView: View
                     .onDisappear { if _pickerRoute == nil { } else { resumePicker(with: nil) } }
                 }
             }
-            .sheet(isPresented: $showEditSheet) {
+            .sheet(isPresented: $showEditSheet)
+            {
                 if let editing = selectedMeet {
                     MeetFormView(
                         mode: .update(existing: editing),
@@ -467,7 +468,8 @@ public struct PublicMapView: View
                 }
             }
             // Add this after MeetCardOverlay in your ZStack
-            if isLoadingMeets {
+            if isLoadingMeets
+            {
                 Color.black.opacity(0.3)
                     .ignoresSafeArea()
                 
@@ -481,9 +483,24 @@ public struct PublicMapView: View
                 }
             }
         }
+        // RELOAD BUTTON
+        .overlay(alignment: .topLeading) {
+            // Only show reload button when no overlays are active
+            if !showMeetOverlay && !showLocationPopup && !showEditSheet {
+                NeonReloadButton(isLoading: isLoadingMeets) {
+                    Task { await loadMeets() }
+                }
+                .padding(.top, 16)
+                .padding(.leading, 16)
+                .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showMeetOverlay)
+                .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showLocationPopup)
+                .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showEditSheet)
+            }
+        }
         .onAppear { lm.requestWhenInUse() }
-
-        .task(id: lm.userLocation) {
+        .task(id: lm.userLocation)
+        {
             if let c = lm.userLocation?.coordinate {
                 userLocation = c
                 cameraPosition = .region(.init(center: c, span: .init(latitudeDelta: 0.04, longitudeDelta: 0.04)))
@@ -501,7 +518,7 @@ public struct PublicMapView: View
             }
             .padding(.bottom, 8)
         }
-        .confirmationDialog("Sign out?", isPresented: $confirmSignOut) // TODO: fix not working
+        .confirmationDialog("Sign out?", isPresented: $confirmSignOut)
         {
             Button("Sign Out", role: .destructive) { signOutAndGoStart() }
             Button("Cancel", role: .cancel) { }
@@ -517,7 +534,7 @@ public struct PublicMapView: View
         .preferredColorScheme(.dark)
         // Load on appear
         .task { await loadMeets() }
-        .overlay(RefreshShim(onRefresh: { await loadMeets() }))
+        //.overlay(RefreshShim(onRefresh: { await loadMeets() }))
     }
     
     // =========================================================
