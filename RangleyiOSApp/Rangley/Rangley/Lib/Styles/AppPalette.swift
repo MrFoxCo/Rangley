@@ -35,10 +35,14 @@ struct AppPalette {
 
     }
     struct Text {
+
         static let primary   = Color.white
         static let secondary = Color.white.opacity(0.72)
-        static let nearByBadgeFillSecondary   = Color.black.opacity(0.9)
         static let tertiary  = Color.white.opacity(0.56)
+        
+        static let nearByBadgeFillPrimary   = Color.black
+        static let nearByBadgeFillSecondary   = Color.black.opacity(0.9)
+        static let nearByBadgeFillTertiary  = Color.black.opacity(0.56)
     }
     struct Surface {
         static let fieldFill        = Color.white.opacity(0.08)

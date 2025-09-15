@@ -275,7 +275,7 @@ struct NearbyMeetsBadgeView: View
                             
                             Text("\(radius.truncatingRemainder(dividingBy: 1) == 0 ? String(format: "%.0f", radius) : String(format: "%.1f", radius)) miles")
                                 .font(.system(size: 14, weight: .medium))
-                                .foregroundStyle(selectedRadius == radius ? AppPalette.Brand.neonPink : AppPalette.Text.primary)
+                                .foregroundStyle(selectedRadius == radius ? AppPalette.Brand.neonPink : AppPalette.Text.nearByBadgeFillPrimary)
                             
                             Spacer()
                             
