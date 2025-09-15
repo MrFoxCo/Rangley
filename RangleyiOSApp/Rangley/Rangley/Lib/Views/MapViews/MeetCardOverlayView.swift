@@ -45,7 +45,8 @@ struct MeetBubbleButton: View
 }
 
 // MARK: - Overlay (expanded card)
-struct MeetCardOverlay: View {
+struct MeetCardOverlay: View
+{
     @Binding var selectedMeet: ViewMeetsModel?
     @Binding var isPresented: Bool
     let ns: Namespace.ID
@@ -102,12 +103,14 @@ private struct MeetCardView: View
 
     @State private var addressText: String = "Loading address..."
     @State private var geocodingTask: Task<Void, Never>?
+    @State private var meetName            : String = ""
     @State private var displayName         : String = ""
     @State private var displayAddress      : String = ""
     @State private var displayCityAndState : String = ""
     @State private var displaySubLocality  : String = ""
 
-    private var dateRangeText: String {
+    private var dateRangeText: String
+    {
         let f = DateIntervalFormatter()
         f.dateStyle = .medium
         f.timeStyle = .short
@@ -144,7 +147,9 @@ private struct MeetCardView: View
                     .filter { !$0.isEmpty }
                     .joined(separator: ", ")
 
-                await MainActor.run {
+                await MainActor.run
+                {
+                    meetName            = 
                     displayName         = name ?? street ?? "Dropped Pin"
                     displayAddress      = [number, street].compactMap { $0 }.joined(separator: " ")
                     displaySubLocality  = subLocal ?? ""
