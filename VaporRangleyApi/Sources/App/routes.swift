@@ -85,15 +85,19 @@ public func routes(_ app: Application) throws
     }
     
     // GET /v/meets  -> all meet card data
+    // GET /v/meets  -> all meet card data
     v.get("meets")
     {
         req async throws -> [Func.ViewMeets.Results] in
+       
+        let sub = req.cognito.sub.value
         
-        guard let sql = req.db as? (any SQLDatabase)
+        guard let sql = req.db as? any SQLDatabase
         else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
-        
-        return try await Func.ViewMeets.fetchAll(on: sql)
+
+        return try await Func.ViewMeets.fetchAll(on: sql, sub: sub)
     }
+
     
     // GET /v/meet-categories -> all categories
     v.get("meet-categories")

@@ -16,7 +16,7 @@ import AWSPluginsCore
 @MainActor
 public struct PublicMapView: View
 {
-    @EnvironmentObject private var session: SessionModel
+    //@EnvironmentObject private var session: SessionModel
     
     
     
@@ -107,11 +107,10 @@ public struct PublicMapView: View
         let lon  = locationInfo.Coordinate.longitude
         let rLat = locationInfo.RegionCoordinate.latitude
         let rLon = locationInfo.RegionCoordinate.longitude
-        let rRad = (locationInfo.RegionRadius ?? 500.0).rounded()
+        let rRad = (locationInfo.RegionRadius).rounded()
         
         // Optional placeholders
         let description   = ""
-        let changeReason  = "initial create"
         let meetCategoryId: Int16 = 1
         let maxCapacity  : Int32 = 8
         
@@ -126,7 +125,6 @@ public struct PublicMapView: View
           region lat/lon  : \(rLat), \(rLon)
           region radius   : \(Int(rRad)) m
           description     : \(description.isEmpty ? "(empty)" : description)
-          change_reason   : \(changeReason)
           category_id     : \(meetCategoryId)
           max_capacity    : \(maxCapacity)
         """)
@@ -142,7 +140,6 @@ public struct PublicMapView: View
             dttm_start_utc: startTime,
             dttm_end_utc: endTime,
             description: description,
-            change_reason: changeReason,
             meet_category_id: meetCategoryId,
             max_capacity: maxCapacity
         )
@@ -155,8 +152,10 @@ public struct PublicMapView: View
         let tokens = try provider.getCognitoTokens().get()
         let idToken = tokens.idToken
         
+        _ = try await AuthAPI.createMeet(baseURL: Env.apiBaseURL, token: idToken, body: body)
+        // or
         let res = try await AuthAPI.createMeet(baseURL: Env.apiBaseURL, token: idToken, body: body)
-        print("✅ /s/meet OK → meet_id:\(res.meet_id) coord_id:\(res.meet_coordinate_id)")
+        print("inserted: \(res.num_inserted)")
     }
     
     // Add this after your @State variables and before submitMeet
@@ -288,7 +287,7 @@ public struct PublicMapView: View
                 MapReader
                 { proxy in
                     Map(position: $cameraPosition)
-                    {
+                    { // MARK: WARNING THIS TAKES FOREVER TO COMPILE -- COMMENT OUT IF BUILD IS STALLING
                         ForEach(meets.filter { isInVisibleRegion($0) })
                         { meet in
                             Annotation(
@@ -386,13 +385,9 @@ public struct PublicMapView: View
                     MeetFormView(
                         mode: .update(existing: editing),
                         onCreate: { _ in /* not used here */ },
-                        onUpdate: { vm in
+                        onUpdate: { body in
                             Task {
                                 do {
-                                    guard let body = vm.makeUpdateBody() else {
-                                        showEditSheet = false
-                                        return
-                                    }
                                     let token = try await fetchIdToken()
                                     _ = try await AuthAPI.updateMeet(baseURL: Env.apiBaseURL, token: token, body: body)
                                     await loadMeets()
@@ -500,16 +495,15 @@ public struct PublicMapView: View
             print("Region              : \(placemark.region?.identifier ?? "nil")")
             print("Location (lat,long) : \(placemark.location?.coordinate.latitude ?? 0), \(placemark.location?.coordinate.longitude ?? 0)")
             
+            let regionRadius: Double = (placemark.region as? CLCircularRegion)?.radius ?? 500.0
+
             let locationInfo = LocationInfo(
-                Coordinate: Coordinate(
-                    location.coordinate.latitude,
-                    location.coordinate.longitude
-                ),
+                Coordinate: Coordinate(location.coordinate.latitude, location.coordinate.longitude),
                 RegionCoordinate: Coordinate(
-                    placemark.location?.coordinate.latitude ?? 0.0, // Fixed typo: was "latutde"
-                    placemark.location?.coordinate.longitude ?? 0.0 // Fixed: was using latitude instead of longitude
+                    placemark.location?.coordinate.latitude ?? 0.0,
+                    placemark.location?.coordinate.longitude ?? 0.0
                 ),
-                RegionRadius: (placemark.region as? CLCircularRegion)?.radius,
+                RegionRadius: regionRadius,
                 Name: placemark.name,
                 ThoroughFare: placemark.thoroughfare,
                 SubThoroughFare: placemark.subThoroughfare,
@@ -524,6 +518,7 @@ public struct PublicMapView: View
                 InlandWater: placemark.inlandWater,
                 Ocean: placemark.ocean
             )
+
             await MainActor.run {
                 geocodeCache[cacheKey] = locationInfo
             }

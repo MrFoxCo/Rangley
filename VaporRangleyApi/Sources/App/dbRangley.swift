@@ -660,77 +660,67 @@ enum Func
 {
     // MARK: - VIEWS
 
-    // TODO: - ADD THE MEET_
     enum ViewMeets: PgFunctionRows
     {
         static let funcName: RangleyFunc = .v_meets_by_cognito_sub
-        
-        
-        struct Param: Content, Sendable
-        {
-            let cognito_sub: String
+
+        struct In: Sendable { let cognitoSub: String }
+
+        struct Results: Content, Sendable {
+            let meet_id_uuid         : String
+            let meet_status_id       : Int16
+            let latitude             : Double
+            let longitude            : Double
+            let region_latitude      : Double
+            let region_longitude     : Double
+            let region_radius        : Double
+            let dttm_start_utc       : Date
+            let dttm_end_utc         : Date
+            let name                 : String
+            let category_name        : String
+            let meet_category_id     : Int16
+            let description          : String
+            let max_capacity         : Int32
+            let created_by_user_uuid : String
+            let display_name         : String
+            let is_owner             : Bool
+            // add change_stamp if you want it
+            // let change_stamp       : Int64
         }
 
-        // vw_meet_card_data-style payload (assumes rangley_fn_v_meets() returns these columns)
-        struct Results: Content, Sendable
-        {
-            
-            let meet_id_uuid            : String
-            let meet_status_id          : Int16
-            let latitude                : Double
-            let longitude               : Double
-            let region_latitude         : Double
-            let region_longitude        : Double
-            let region_radius           : Double
-            let dttm_start_utc          : Date
-            let dttm_end_utc            : Date
-            let name                    : String
-            let category_name           : String
-            let meet_category_id        : Int16
-            let description             : String
-            let max_capacity            : Int32
-            let created_by_user_uuid    : String
-            let display_name            : String
-            let is_owner                : Bool
-
-        }
-        
-        struct In: Sendable { }  // no params
-
-        static func query(_ input: In) -> SQLQueryString
-        {
-            "SELECT * FROM \(unsafeRaw: funcName.rawValue)();"
+        static func query(_ input: In) -> SQLQueryString {
+            // if funcName.rawValue already includes schema, this is fine
+            "SELECT * FROM \(unsafeRaw: funcName.rawValue)(\(bind: input.cognitoSub)::text);"
         }
 
-        static func decode(_ r: any SQLRow) throws -> Results
-        {
+        static func decode(_ r: any SQLRow) throws -> Results {
             try .init(
-                 meet_id_uuid         : r.decode(column: "meet_uuid",          as: String.self)
-                ,meet_status_id       : r.decode(column: "meet_status_id",     as: Int16.self)
-                ,latitude             : r.decode(column: "latitude",           as: Double.self)
-                ,longitude            : r.decode(column: "longitude",          as: Double.self)
-                ,region_latitude      : r.decode(column: "region_latitude",    as: Double.self)
-                ,region_longitude     : r.decode(column: "region_longitude",   as: Double.self)
-                ,region_radius        : r.decode(column: "region_radius",      as: Double.self)
-                ,dttm_start_utc       : r.decode(column: "dttm_start_utc",     as: Date.self)
-                ,dttm_end_utc         : r.decode(column: "dttm_end_utc",       as: Date.self)
-                ,name                 : r.decode(column: "name",               as: String.self)
-                ,category_name        : r.decode(column: "category_name",      as: String.self)
-                ,meet_category_id     : r.decode(column: "meet_category_id",   as: Int16.self)
-                ,description          : r.decode(column: "description",        as: String.self)
-                ,max_capacity         : r.decode(column: "max_capacity",       as: Int32.self)
-                ,created_by_user_uuid : r.decode(column: "created_by_user_id", as: String.self)
-                ,display_name         : r.decode(column: "display_name",       as: String.self)
-                ,is_owner             : r.decode(column: "is_owner",           as: Bool.self)
+                 meet_id_uuid         : r.decode(column: "meet_id_uuid",         as: String.self)
+                ,meet_status_id       : r.decode(column: "meet_status_id",       as: Int16.self)
+                ,latitude             : r.decode(column: "latitude",             as: Double.self)
+                ,longitude            : r.decode(column: "longitude",            as: Double.self)
+                ,region_latitude      : r.decode(column: "region_latitude",      as: Double.self)
+                ,region_longitude     : r.decode(column: "region_longitude",     as: Double.self)
+                ,region_radius        : r.decode(column: "region_radius",        as: Double.self)
+                ,dttm_start_utc       : r.decode(column: "dttm_start_utc",       as: Date.self)
+                ,dttm_end_utc         : r.decode(column: "dttm_end_utc",         as: Date.self)
+                ,name                 : r.decode(column: "name",                 as: String.self)
+                ,category_name        : r.decode(column: "category_name",        as: String.self)
+                ,meet_category_id     : r.decode(column: "meet_category_id",     as: Int16.self)
+                ,description          : r.decode(column: "description",          as: String.self)
+                ,max_capacity         : r.decode(column: "max_capacity",         as: Int32.self)
+                ,created_by_user_uuid : r.decode(column: "created_by_user_uuid", as: String.self)
+                ,display_name         : r.decode(column: "display_name",         as: String.self)
+                ,is_owner             : r.decode(column: "is_owner",             as: Bool.self)
+                // ,change_stamp       : r.decode(column: "change_stamp",         as: Int64.self)
             )
         }
 
-        // convenience
-        static func fetchAll(on db: any SQLDatabase) async throws -> [Results]
-        {
-            try await fetchAll(on: db, In())
+        static func fetchAll(on db: any SQLDatabase, sub: String) async throws -> [Results] {
+            try await fetchAll(on: db, .init(cognitoSub: sub))
         }
     }
+
 
     enum ViewUser: PgFunctionRows
     {
