@@ -5,13 +5,17 @@
 //  Created by Anthony Guzzardo on 9/14/25.
 //
 
+//  MeetFormViewModel.swift
+//  Rangley
+//
+//  Update-only VM (no create path)
+
 import SwiftUI
 import Foundation
 import CoreLocation
 
 enum MeetFormMode {
-    case create(location: LocationInfo)
-    case update(existing: ViewMeetsModel) // whatever you already use for the list/detail
+    case update(existing: ViewMeetsModel)
 }
 
 final class MeetFormViewModel: ObservableObject {
@@ -50,21 +54,6 @@ final class MeetFormViewModel: ObservableObject {
     init(mode: MeetFormMode) {
         self.mode = mode
         switch mode {
-        case .create(let loc):
-            self.meetIDUUID = nil
-            self.name = ""
-            let now = Date()
-            self.start = now
-            self.end = now.addingTimeInterval(3600)
-            self.descriptionText = nil
-            self.meetCategoryID = nil
-            self.maxCapacity = nil
-            // Prefill coords from creation location (user may keep as is)
-            self.latitude = loc.Coordinate.latitude
-            self.longitude = loc.Coordinate.longitude
-            self.regionLatitude = loc.RegionCoordinate.latitude
-            self.regionLongitude = loc.RegionCoordinate.longitude
-            self.regionRadius = loc.RegionRadius
         case .update(let existing):
             self.meetIDUUID = existing.meet_id_uuid
             // Prefill editable fields
@@ -99,7 +88,7 @@ final class MeetFormViewModel: ObservableObject {
         guard trimmed.count <= 50 else { return "Name must be 50 characters or fewer." }
         guard start < end else { return "Start time must be before end time." }
 
-        // Option B: if any coord changed, all must be present
+        // If any coord changed, all must be present
         let coords = [latitude, longitude, regionLatitude, regionLongitude, regionRadius]
         let provided = coords.compactMap{$0}.count
         guard provided == 0 || provided == 5 else {
@@ -109,41 +98,11 @@ final class MeetFormViewModel: ObservableObject {
         return nil
     }
 
-    // Build create body
-    func makeCreateBody(locationFallback: LocationInfo) -> MeetInsertBody? {
-        guard case .create = mode else { return nil }
-        let trimmed = String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(50))
-
-        // If user didn’t alter the prefilled coords, ensure they’re present from the location
-        let lat = latitude ?? locationFallback.Coordinate.latitude
-        let lon = longitude ?? locationFallback.Coordinate.longitude
-        let rlat = regionLatitude ?? locationFallback.RegionCoordinate.latitude
-        let rlon = regionLongitude ?? locationFallback.RegionCoordinate.longitude
-        let rrad = regionRadius ?? locationFallback.RegionRadius
-
-        return .init(
-            latitude: lat,
-            longitude: lon,
-            region_latitude: rlat,
-            region_longitude: rlon,
-            region_radius: rrad,
-            name: trimmed,
-            dttm_start_utc: start,
-            dttm_end_utc: end,
-            description: descriptionText,
-            meet_category_id: meetCategoryID,
-            max_capacity: maxCapacity
-        )
-    }
-    
     @inline(__always)
     private func diff<T: Equatable>(_ new: T?, _ old: T?) -> T? {
         guard let new = new else { return nil }     // only send if client set a value
         return (old == nil || new != old) ? new : nil
     }
-
-    // Example usage:
-
 
     // Build update body (send only diffs; return nil if no changes)
     func makeUpdateBody() -> UpdatedMeetInsertBody? {
@@ -176,7 +135,7 @@ final class MeetFormViewModel: ObservableObject {
                 let rLon = regionLongitude,
                 let rRad = regionRadius
             else {
-                return nil // inconsistent; fail-fast is fine
+                return nil // inconsistent; fail-fast
             }
 
             let eps  = 1e-7
@@ -206,7 +165,6 @@ final class MeetFormViewModel: ObservableObject {
 
         if nothingChanged { return nil }
 
-
         return UpdatedMeetInsertBody(
             meet_id_uuid: id,
             latitude:        latOpt,
@@ -214,15 +172,14 @@ final class MeetFormViewModel: ObservableObject {
             region_latitude: rLatOpt,
             region_longitude:rLonOpt,
             region_radius:   rRadOpt,
-            meet_status_id:  nil,             // add if you expose in UI
+            meet_status_id:  nil,
             name:            nameOpt,
             dttm_start_utc:  startOpt,
             dttm_end_utc:    endOpt,
             description:     descOpt,
-            change_reason:   nil,             // wire up if you add a field
+            change_reason:   nil,
             meet_category_id:catOpt,
             max_capacity:    capOpt
         )
     }
-
 }

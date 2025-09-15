@@ -5,16 +5,45 @@
 //  Created by Anthony Guzzardo on 9/14/25.
 //
 
-
 import SwiftUI
 import CoreLocation
 import QuartzCore
 
-struct MeetFormView: View
-{
+private enum LocationPickerRoute: Identifiable {
+    case map
+    case address
+    var id: Int { hashValue }
+}
+
+struct MeetFormView: View {
+    @State private var activePicker: LocationPickerRoute?
+    private func pickLocation() async -> LocationInfo? {
+        // Your location picking logic here
+        // This could open a location picker, use current location, etc.
+        // For now, just return nil
+        return nil
+    }
+    // Seed from the existing meet (so the picker opens where the meet is now)
+    private var seedLocation: LocationInfo {
+        switch mode {
+        case .update(let e):
+            return LocationInfo(
+                Coordinate:        .init(e.latitude, e.longitude),
+                RegionCoordinate:  .init(e.region_latitude, e.region_longitude),
+                RegionRadius:      e.region_radius, // meters
+                Name: e.display_name,               // or e.name; whatever you prefer
+                ThoroughFare: nil, SubThoroughFare: nil,
+                Locality: nil, SubLocality: nil,
+                AdministrativeArea: nil, SubAdministrativeArea: nil,
+                PostalCode: nil,
+                Country: nil, IsoCountryCode: nil,
+                TimeZone: nil, InlandWater: nil, Ocean: nil
+            )
+        }
+    }
+
     // MARK: Inputs
-    let mode: MeetFormMode
-    let onCreate: (MeetInsertBody) async throws -> Void
+    let mode: MeetFormMode                     // .update(existing: ...)
     let onUpdate: (UpdatedMeetInsertBody) async throws -> Void
     let onClose: () -> Void
     /// Optional async location picker; return a full LocationInfo (all 5 fields).
@@ -32,13 +61,11 @@ struct MeetFormView: View
 
     init(
         mode: MeetFormMode,
-        onCreate: @escaping (MeetInsertBody) async throws -> Void,
         onUpdate: @escaping (UpdatedMeetInsertBody) async throws -> Void,
         onClose: @escaping () -> Void,
         onPickLocation: (() async -> LocationInfo?)? = nil
     ) {
         self.mode = mode
-        self.onCreate = onCreate
         self.onUpdate = onUpdate
         self.onClose = onClose
         self.onPickLocation = onPickLocation
@@ -49,31 +76,22 @@ struct MeetFormView: View
     enum FieldStep: CaseIterable {
         case name, startTime, endTime, review
 
-        func title(isUpdate: Bool) -> String {
+        func title() -> String {
             switch self {
             case .name:      return "Name your meet"
             case .startTime: return "When does it start?"
             case .endTime:   return "When does it end?"
-            case .review:    return isUpdate ? "Review & Save" : "Review & Create"
+            case .review:    return "Review & Save"
             }
         }
     }
 
-
     private var totalSteps: Int { FieldStep.allCases.count }
-    private var isUpdateMode: Bool { if case .update = mode { return true } else { return false } }
-    private var createLocation: LocationInfo? { if case .create(let loc) = mode { return loc } else { return nil } }
 
     // MARK: Location display
     private var locationDisplayName: String {
-        if let loc = createLocation {
-            if let n = loc.Name, !n.isEmpty { return n }
-            if let t = loc.ThoroughFare { return t }
-            if let l = loc.Locality { return l }
-            return "Selected location"
-        } else {
-            return "Current location"
-        }
+        // Update-only: show generic label (visual style unchanged)
+        return "Current location"
     }
 
     // MARK: Progress enablement
@@ -87,12 +105,8 @@ struct MeetFormView: View
             return vm.end > vm.start
         case .review:
             if let err = vm.validate() { submitError = err; return false }
-            // In update mode, also require that something actually changed
-            if isUpdateMode {
-                return vm.makeUpdateBody() != nil
-            }
-            // Create mode is valid if validate() passed
-            return true
+            // Require an actual change on review
+            return vm.makeUpdateBody() != nil
         }
     }
 
@@ -112,7 +126,7 @@ struct MeetFormView: View
 
             // Action button
             Button(action: nextStep) {
-                Text(currentFieldStep == .review ? (isUpdateMode ? "Save Changes" : "Create Meet") : "Next")
+                Text(currentFieldStep == .review ? "Save Changes" : "Next")
                     .font(.system(size: 16, weight: .bold))
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
@@ -155,8 +169,39 @@ struct MeetFormView: View
         .onChange(of: vm.start, initial: false) { _, newStart in
             if vm.end <= newStart { vm.end = newStart.addingTimeInterval(3600) }
         }
-
         .onTapGesture { isNameFieldFocused = false }
+        .sheet(item: $activePicker) { route in
+            switch route {
+            case .map:
+                MapLocationPicker(
+                    initial: seedLocation,
+                    onPick: { picked in
+                        // set all 5 or none (you already enforce this)
+                        vm.latitude        = picked.Coordinate.latitude
+                        vm.longitude       = picked.Coordinate.longitude
+                        vm.regionLatitude  = picked.RegionCoordinate.latitude
+                        vm.regionLongitude = picked.RegionCoordinate.longitude
+                        vm.regionRadius    = picked.RegionRadius
+                        activePicker = nil
+                    },
+                    onCancel: { activePicker = nil }
+                )
+
+            case .address:
+                AddressSearchPicker(
+                    initialRadiusMeters: seedLocation.RegionRadius,
+                    onPick: { picked in
+                        vm.latitude        = picked.Coordinate.latitude
+                        vm.longitude       = picked.Coordinate.longitude
+                        vm.regionLatitude  = picked.RegionCoordinate.latitude
+                        vm.regionLongitude = picked.RegionCoordinate.longitude
+                        vm.regionRadius    = picked.RegionRadius
+                        activePicker = nil
+                    },
+                    onCancel: { activePicker = nil }
+                )
+            }
+        }
     }
 
     // MARK: Header & Progress
@@ -224,22 +269,15 @@ struct MeetFormView: View
                         .font(.system(size: 14, weight: .medium))
                         .foregroundColor(AppPalette.Text.primary)
 
-                    if let loc = createLocation,
-                       let city = loc.Locality, let state = loc.AdministrativeArea {
-                        Text("\(city), \(state)")
+                    // Update-only: hinting
+                    if coordProvidedCount > 0 {
+                        Text("New location selected")
                             .font(.system(size: 12))
                             .foregroundColor(AppPalette.Text.secondary)
-                    } else if isUpdateMode {
-                        // Show a hint if a new location has been selected during update
-                        if coordProvidedCount > 0 {
-                            Text("New location selected")
-                                .font(.system(size: 12))
-                                .foregroundColor(AppPalette.Text.secondary)
-                        } else {
-                            Text("Tap to change location")
-                                .font(.system(size: 12))
-                                .foregroundColor(AppPalette.Text.tertiary)
-                        }
+                    } else {
+                        Text("Tap to change location")
+                            .font(.system(size: 12))
+                            .foregroundColor(AppPalette.Text.tertiary)
                     }
                 }
             } icon: {
@@ -260,17 +298,7 @@ struct MeetFormView: View
 
             HStack {
                 Button {
-                    Task {
-                        guard let onPick = onPickLocation else { return }
-                        if let newLoc = await onPick() {
-                            // Set all five to respect all-or-none policy
-                            vm.latitude        = newLoc.Coordinate.latitude
-                            vm.longitude       = newLoc.Coordinate.longitude
-                            vm.regionLatitude  = newLoc.RegionCoordinate.latitude
-                            vm.regionLongitude = newLoc.RegionCoordinate.longitude
-                            vm.regionRadius    = newLoc.RegionRadius
-                        }
-                    }
+                    activePicker = .map   // default
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "mappin.and.ellipse")
@@ -284,6 +312,10 @@ struct MeetFormView: View
                         RoundedRectangle(cornerRadius: 10)
                             .stroke(AppPalette.Brand.neonPink.opacity(0.6), lineWidth: 1)
                     )
+                }
+                .contextMenu {
+                    Button("Pick on Map")    { activePicker = .map }
+                    Button("Enter Address")  { activePicker = .address }
                 }
 
                 if coordProvidedCount > 0 && coordProvidedCount != 5 {
@@ -306,7 +338,7 @@ struct MeetFormView: View
     // MARK: Step Content
     private var contentForCurrentStep: some View {
         VStack(spacing: 24) {
-            Text(currentFieldStep.title(isUpdate: isUpdateMode)) //Text(currentFieldStep.title(isUpdate: isUpdateMode))
+            Text(currentFieldStep.title())
                 .font(.system(size: 24, weight: .bold))
                 .foregroundColor(AppPalette.Text.primary)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -337,10 +369,6 @@ struct MeetFormView: View
                                     isNameFieldFocused = true
                                 }
                             }
-                            .onChange(of: vm.start, initial: false) { _, newStart in
-                                if vm.end <= newStart { vm.end = newStart.addingTimeInterval(3600) }
-                            }
-
 
                         Text("\(vm.name.count)/50")
                             .font(.footnote)
@@ -407,9 +435,7 @@ struct MeetFormView: View
                             if let cap = vm.maxCapacity {
                                 DetailRow(label: "Capacity", value: "\(cap)")
                             }
-                            if isUpdateMode {
-                                DetailRow(label: "Changes", value: vm.makeUpdateBody() != nil ? "Yes" : "No")
-                            }
+                            DetailRow(label: "Changes", value: vm.makeUpdateBody() != nil ? "Yes" : "No")
                         }
                         .padding(20)
                         .background(
@@ -464,30 +490,23 @@ struct MeetFormView: View
     }
 
     private func submit() {
+        if isSubmitting { return }
         submitError = vm.validate()
         guard submitError == nil else { return }
 
         isSubmitting = true
         Task {
+            defer { Task { @MainActor in isSubmitting = false } } // no await here
             do {
-                if isUpdateMode {
-                    if let body = vm.makeUpdateBody() {
-                        try await onUpdate(body)
-                    } else {
-                        submitError = "No changes to save."
-                    }
+                if let body = vm.makeUpdateBody() {
+                    try await onUpdate(body)
+                    await MainActor.run { onClose() }
                 } else {
-                    guard let loc = createLocation, let body = vm.makeCreateBody(locationFallback: loc) else {
-                        submitError = "Missing location."
-                        return
-                    }
-                    try await onCreate(body)
+                    await MainActor.run { submitError = "No changes to save." }
                 }
-                await MainActor.run { onClose() }
             } catch {
                 await MainActor.run { submitError = error.localizedDescription }
             }
-            await MainActor.run { isSubmitting = false }
         }
     }
 
@@ -515,9 +534,11 @@ struct MeetFormView: View
         f.timeStyle = .short
         return f
     }()
+    
     private func formatDate(_ date: Date) -> String {
         Self.reviewFormatter.string(from: date)
     }
+    
     private func formatDuration(from start: Date, to end: Date) -> String {
         let interval = max(0, end.timeIntervalSince(start))
         let hours = Int(interval) / 3600

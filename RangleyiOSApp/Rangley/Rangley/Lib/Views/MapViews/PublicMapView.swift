@@ -151,8 +151,7 @@ public struct PublicMapView: View
         }
         let tokens = try provider.getCognitoTokens().get()
         let idToken = tokens.idToken
-        
-        _ = try await AuthAPI.createMeet(baseURL: Env.apiBaseURL, token: idToken, body: body)
+
         // or
         let res = try await AuthAPI.createMeet(baseURL: Env.apiBaseURL, token: idToken, body: body)
         print("inserted: \(res.num_inserted)")
@@ -199,6 +198,39 @@ public struct PublicMapView: View
     
     @State private var showEditSheet = false
     
+    // MARK: - Location Picker bridge
+    private enum _PickerRoute: Identifiable { case map, address; var id: Int { hashValue } }
+
+    @State private var _pickerRoute: _PickerRoute?
+    @State private var _pickerSeed: LocationInfo = {
+        // Fallback seed (downtown Chicago). Replace with your current map center if you have it.
+        let c = Coordinate(41.8781, -87.6298)
+        return LocationInfo(
+            Coordinate: c, RegionCoordinate: c, RegionRadius: 2000,
+            Name: nil, ThoroughFare: nil, SubThoroughFare: nil,
+            Locality: nil, SubLocality: nil, AdministrativeArea: nil, SubAdministrativeArea: nil,
+            PostalCode: nil, Country: nil, IsoCountryCode: nil, TimeZone: nil, InlandWater: nil, Ocean: nil
+        )
+    }()
+
+    @State private var _pickerContinuation: CheckedContinuation<LocationInfo?, Never>?
+    
+    // Call this anywhere in PublicMapView:  let picked = await pickLocation()
+    private func pickLocation() async -> LocationInfo?
+    {
+        // If you have a current map center/region, set `_pickerSeed` here before showing the sheet.
+        await withCheckedContinuation { (cont: CheckedContinuation<LocationInfo?, Never>) in
+            _pickerContinuation = cont
+            _pickerRoute = .map // default; user can switch via context menu below if you add one
+        }
+    }
+
+    //^^^ GOES TOGETHer
+    private func resumePicker(with value: LocationInfo?) {
+        _pickerContinuation?.resume(returning: value)
+        _pickerContinuation = nil
+        _pickerRoute = nil
+    }
     // =========================================================
     // MARK: - END Edit Meet FLow
     // =========================================================
@@ -224,7 +256,8 @@ public struct PublicMapView: View
         return try provider.getCognitoTokens().get().idToken
     }
     
-    private func loadMeets() async {
+    private func loadMeets() async
+    {
         guard !isLoadingMeets else { return }
         isLoadingMeets = true; defer { isLoadingMeets = false }
         do {
@@ -380,32 +413,46 @@ public struct PublicMapView: View
             )
 
             .allowsHitTesting(showMeetOverlay)
+            .sheet(item: $_pickerRoute) { route in
+                switch route {
+                case .map:
+                    MapLocationPicker(
+                        initial: _pickerSeed,
+                        onPick: { picked in resumePicker(with: picked) },
+                        onCancel: { resumePicker(with: nil) }
+                    )
+                    .interactiveDismissDisabled(false)
+                    .onDisappear { if _pickerRoute == nil { /* already handled */ } else { resumePicker(with: nil) } }
+
+
+                case .address:
+                    AddressSearchPicker(
+                        initialRadiusMeters: _pickerSeed.RegionRadius,
+                        onPick: { picked in resumePicker(with: picked) },
+                        onCancel: { resumePicker(with: nil) }
+                    )
+                    .interactiveDismissDisabled(false)
+                    .onDisappear { if _pickerRoute == nil { } else { resumePicker(with: nil) } }
+                }
+            }
             .sheet(isPresented: $showEditSheet) {
                 if let editing = selectedMeet {
                     MeetFormView(
                         mode: .update(existing: editing),
-                        onCreate: { _ in /* not used here */ },
                         onUpdate: { body in
-                            Task {
-                                do {
-                                    let token = try await fetchIdToken()
-                                    _ = try await AuthAPI.updateMeet(baseURL: Env.apiBaseURL, token: token, body: body)
-                                    await loadMeets()
-                                    await MainActor.run {
-                                        showEditSheet = false
-                                        showMeetOverlay = false
-                                    }
-                                } catch {
-                                    print("Update failed:", error)
-                                }
+                            let token = try await fetchIdToken()
+                            _ = try await AuthAPI.updateMeet(baseURL: Env.apiBaseURL, token: token, body: body)
+                            await loadMeets()
+                            await MainActor.run {
+                                showEditSheet = false
+                                showMeetOverlay = false
                             }
                         },
-                        onClose: { showEditSheet = false }
+                        onClose: { showEditSheet = false },
+                        onPickLocation: { await pickLocation() } // if you have one
                     )
                 }
             }
-
-            
             // Add this after MeetCardOverlay in your ZStack
             if isLoadingMeets {
                 Color.black.opacity(0.3)
@@ -495,14 +542,12 @@ public struct PublicMapView: View
             print("Region              : \(placemark.region?.identifier ?? "nil")")
             print("Location (lat,long) : \(placemark.location?.coordinate.latitude ?? 0), \(placemark.location?.coordinate.longitude ?? 0)")
             
+            let pinCoord = location.coordinate
             let regionRadius: Double = (placemark.region as? CLCircularRegion)?.radius ?? 500.0
 
             let locationInfo = LocationInfo(
-                Coordinate: Coordinate(location.coordinate.latitude, location.coordinate.longitude),
-                RegionCoordinate: Coordinate(
-                    placemark.location?.coordinate.latitude ?? 0.0,
-                    placemark.location?.coordinate.longitude ?? 0.0
-                ),
+                Coordinate: Coordinate(pinCoord.latitude, pinCoord.longitude),
+                RegionCoordinate: Coordinate(pinCoord.latitude, pinCoord.longitude), // ← center at the pin
                 RegionRadius: regionRadius,
                 Name: placemark.name,
                 ThoroughFare: placemark.thoroughfare,
