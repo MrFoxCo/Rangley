@@ -14,6 +14,8 @@ struct NearbyMeetsBadgeView: View
     let meets: [ViewMeetsModel]
     let userLocation: CLLocationCoordinate2D
     @Binding var selectedRadius: Double // in miles
+    var onExpandedChange: ((Bool) -> Void)? = nil
+    var onRadiusSelectorChange: ((Bool) -> Void)? = nil
     @State private var isExpanded = false
     @State private var showRadiusSelector = false
     
@@ -133,6 +135,12 @@ struct NearbyMeetsBadgeView: View
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: isExpanded)
         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: showRadiusSelector)
+        .onChange(of: isExpanded) { _, newValue in
+            onExpandedChange?(newValue)
+        }
+        .onChange(of: showRadiusSelector) {_, newValue in
+            onRadiusSelectorChange?(newValue)
+        }
         // Add tap gesture to dismiss when tapping outside
         .onTapGesture {
             // This won't interfere with button tap since button consumes the gesture first
@@ -267,7 +275,7 @@ struct NearbyMeetsBadgeView: View
                             
                             Text("\(radius.truncatingRemainder(dividingBy: 1) == 0 ? String(format: "%.0f", radius) : String(format: "%.1f", radius)) miles")
                                 .font(.system(size: 14, weight: .medium))
-                                .foregroundStyle(selectedRadius == radius ? AppPalette.Brand.neonPink : AppPalette.Text.nearByBadgeFillSecondary)
+                                .foregroundStyle(selectedRadius == radius ? AppPalette.Brand.neonPink : AppPalette.Text.primary)
                             
                             Spacer()
                             

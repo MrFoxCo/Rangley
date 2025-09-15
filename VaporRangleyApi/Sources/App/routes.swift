@@ -119,49 +119,6 @@ public func routes(_ app: Application) throws
     
     
     // MARK: - INSERTS (i_*) or POST ROUTES
-
-
-//    v.put("user","me")
-//    { req async throws -> HTTPStatus in
-//        struct Body: Content, Sendable {
-//            let username: String?
-//            let display_name: String?
-//            let cellphone: String?
-//            let email: String?
-//            let dob: Date? // ensure ISO8601 decoding or customize decoder
-//            let first_name: String?
-//            let last_name: String?
-//        }
-//
-//        let sub = try req.jwt.verify(as: CognitoPayload.self).sub.value
-//        let body = try req.content.decode(Body.self)
-//        guard let sql = req.db as? any SQLDatabase else { throw Abort(.failedDependency) }
-//
-//        let id: Int64? = try await sql.raw("""
-//            SELECT user_id::bigint FROM rangley.tb_users WHERE cognito_sub = \(bind: sub)
-//        """).first(decoding: Int64?.self)
-//        guard let userId = id else { throw Abort(.notFound) }
-//
-//        // Call your stored proc to modify (preferred):
-//        // CALL rangley.rangley_m_user(OUT num_affected, IN p_user_id, IN p_cognito_sub, IN p_username, ...);
-//        try await sql.raw("""
-//            CALL rangley.rangley_m_user(
-//                NULL,
-//                \(bind: userId),
-//                DEFAULT,                          -- keep cognito_sub
-//                \(bind: body.username ?? .none),
-//                \(bind: body.display_name ?? .none),
-//                \(bind: body.first_name ?? .none),
-//                \(bind: body.last_name  ?? .none),
-//                \(bind: body.cellphone  ?? .none),
-//                \(bind: body.email      ?? .none),
-//                \(bind: body.dob        ?? .none)
-//            );
-//        """).run()
-//
-//        return .noContent
-//    }
-
     
     
     auth.post("register")
@@ -188,21 +145,6 @@ public func routes(_ app: Application) throws
 
             return try await Proc.InsertUserByAuthRegister.call(on: sql, p, .init(is_success: nil))
     }
-    /**
-     
-     curl -X POST https://api.mrfoxco.com/register \
-       -H "Content-Type: application/json" \
-       -d '{
-         "cognito_sub": "123e4567-e89b-12d3-a456-426614174000",
-         "username": "rangleytest",
-         "display_name": "Rangley Test User",
-         "cellphone": "+13125551234",
-         "email": "rangleytest@example.com",
-         "dob": "2000-05-21",
-         "first_name": "Rangley",
-         "last_name": "Tester"
-       }'
-     */
     
 //    auth.post("forgot-password")
 //    {

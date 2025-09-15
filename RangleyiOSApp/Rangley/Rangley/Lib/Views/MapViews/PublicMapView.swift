@@ -28,17 +28,6 @@ public struct PublicMapView: View
     
     
     
-    private struct RefreshShim: View
-    {
-        let onRefresh: () async -> Void
-        var body: some View {
-            ScrollView { Color.clear.frame(height: 1) }
-                .refreshable { await onRefresh() }
-                .allowsHitTesting(false)
-        }
-    }
-
-    
     // =========================================================
     // MARK: - Managing Taps
     // =========================================================
@@ -68,23 +57,11 @@ public struct PublicMapView: View
     // =========================================================
     // MARK: - END Managing Taps
     // =========================================================
-    @State private var geocodeCache: [String: LocationInfo] = [:]
-    //    @State private var geocodeCache: [String: LocationInfo] = [:] {
-    //        didSet {
-    //            // Limit cache to 100 entries
-    //            if geocodeCache.count > 100 {
-    //                let keysToRemove = Array(geocodeCache.keys.prefix(20))
-    //                keysToRemove.forEach { geocodeCache.removeValue(forKey: $0) }
-    //            }
-    //        }
-    //    }
     
     // =========================================================
     // MARK: - USER LOCATION
     // =========================================================
     @StateObject private var lm = LocationManager()
-    
-    
     
     @State private var cameraPosition: MapCameraPosition = .region(MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 41.9211, longitude: -87.6338),
@@ -95,6 +72,17 @@ public struct PublicMapView: View
     
     // Keep this in PublicMapView so helpers can see it
     @State private var lastSpan = MKCoordinateSpan(latitudeDelta: 0.15, longitudeDelta: 0.15)
+    
+    @State private var geocodeCache: [String: LocationInfo] = [:]
+    //    @State private var geocodeCache: [String: LocationInfo] = [:] {
+    //        didSet {
+    //            // Limit cache to 100 entries
+    //            if geocodeCache.count > 100 {
+    //                let keysToRemove = Array(geocodeCache.keys.prefix(20))
+    //                keysToRemove.forEach { geocodeCache.removeValue(forKey: $0) }
+    //            }
+    //        }
+    //    }
     // =========================================================
     // MARK: - END USER LOCATION
     // =========================================================
@@ -282,18 +270,23 @@ public struct PublicMapView: View
         }
     }
     
-    
     // =========================================================
     // MARK: - END Display MeetMarkers + MeetCard
     // =========================================================
     
     // =========================================================
-    // MARK: - Meets in Radius
+    // MARK: - Meets in Radius / NearbyMeetsBadge
     // =========================================================
     @State private var selectedRadius: Double = 2.0 // Default 2 mile radius
+    
+    // TODO: what is this used for??
     @State private var userLocation: CLLocationCoordinate2D = CLLocationCoordinate2D(latitude: 41.9211, longitude: -87.6338) // Default to Lincoln Park
+    
+    // Add these with your other @State variables
+    @State private var isBadgeExpanded = false
+    @State private var showBadgeRadiusSelector = false
     // =========================================================
-    // MARK: - END Meets in Radius
+    // MARK: - END Meets in Radius / NearbyMeetsBadge
     // =========================================================
     
     // =========================================================
@@ -386,7 +379,13 @@ public struct PublicMapView: View
                     NearbyMeetsBadgeView(
                         meets: meets,
                         userLocation: userLocation,
-                        selectedRadius: $selectedRadius
+                        selectedRadius: $selectedRadius,
+                        onExpandedChange: { isExpanded in
+                            isBadgeExpanded = isExpanded
+                        },
+                        onRadiusSelectorChange: { showSelector in
+                            showBadgeRadiusSelector = showSelector
+                        }
                     )
                 }
                 .padding(.horizontal, 16)
@@ -485,8 +484,8 @@ public struct PublicMapView: View
         }
         // RELOAD BUTTON
         .overlay(alignment: .topLeading) {
-            // Only show reload button when no overlays are active
-            if !showMeetOverlay && !showLocationPopup && !showEditSheet {
+            // Hide reload button when any overlay is active OR badge is expanded
+            if !showMeetOverlay && !showLocationPopup && !showEditSheet && !isBadgeExpanded && !showBadgeRadiusSelector {
                 NeonReloadButton(isLoading: isLoadingMeets) {
                     Task { await loadMeets() }
                 }
@@ -496,6 +495,8 @@ public struct PublicMapView: View
                 .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showMeetOverlay)
                 .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showLocationPopup)
                 .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showEditSheet)
+                .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isBadgeExpanded)
+                .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showBadgeRadiusSelector)
             }
         }
         .onAppear { lm.requestWhenInUse() }

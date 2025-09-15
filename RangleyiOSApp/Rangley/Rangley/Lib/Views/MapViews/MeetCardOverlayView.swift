@@ -345,3 +345,4 @@ private struct Chip: View {
         .overlay(Capsule().stroke(AppPalette.Surface.fieldStroke, lineWidth: 1))
     }
 }
+
