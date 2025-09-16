@@ -20,6 +20,8 @@ struct MapLocationPicker: View {
     @State private var cameraPosition: MapCameraPosition
     @State private var lastPlacemark: CLPlacemark?
     @State private var addressLine: String = ""
+    @State private var geocodingTask: Task<Void, Never>?
+    @State private var isDisappearing = false
 
     init(initial: LocationInfo,
          onPick: @escaping (LocationInfo) -> Void,
@@ -41,73 +43,101 @@ struct MapLocationPicker: View {
     var body: some View {
         VStack {
             HStack {
-                Button("Cancel", action: onCancel)
+                Button("Cancel") {
+                    isDisappearing = true
+                    geocodingTask?.cancel()
+                    onCancel()
+                }
                 Spacer()
                 Text("Pick Location").font(.headline)
                 Spacer()
                 Button("Use") {
+                    isDisappearing = true
+                    geocodingTask?.cancel()
                     onPick(makeLocationInfo(coord: center, placemark: lastPlacemark, radius: radiusMeters))
-                }.bold()
+                }
+                .bold()
+                .disabled(isDisappearing)
             }
             .padding()
 
-            MapReader { proxy in
-                Map(position: $cameraPosition) {
-                    Annotation("Pin", coordinate: center) {
-                        Image(systemName: "mappin.circle.fill")
-                    }
-                    MapCircle(center: center, radius: radiusMeters)
-                        .foregroundStyle(.secondary.opacity(0.2))  // Opaque fill
-                        .stroke(.secondary.opacity(0.3), lineWidth: 2)
-                }
-                .gesture(
-                    SpatialTapGesture().onEnded { value in
-                        let point = value.location
-                        if let coord = proxy.convert(point, from: .local) {
-                            center = coord
-                            // keep the same zoom/span while moving the camera
-                            region.center = coord
-                            cameraPosition = .region(region)
-                            Task { await reverseGeocode(coord) }
+            if !isDisappearing {
+                MapReader { proxy in
+                    Map(position: $cameraPosition) {
+                        Annotation("Pin", coordinate: center) {
+                            Image(systemName: "mappin.circle.fill")
                         }
+                        MapCircle(center: center, radius: radiusMeters)
+                            .foregroundStyle(.secondary.opacity(0.2))  // Opaque fill
+                            .stroke(.secondary.opacity(0.3), lineWidth: 2)
                     }
-                )
-                .onAppear { Task { await reverseGeocode(center) } }
-            }
-            .frame(height: 360)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .padding(.horizontal, 16)
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text(addressLine.isEmpty ? "Tap the map to place the pin" : addressLine)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-
-                HStack {
-                    Text("Radius:")
-                    Slider(value: $radiusMeters, in: 50...20000, step: 50)
-                    Text("\(Int(radiusMeters)) m").monospacedDigit()
+                    .gesture(
+                        SpatialTapGesture().onEnded { value in
+                            guard !isDisappearing else { return }
+                            let point = value.location
+                            if let coord = proxy.convert(point, from: .local) {
+                                center = coord
+                                // keep the same zoom/span while moving the camera
+                                region.center = coord
+                                cameraPosition = .region(region)
+                                Task { await reverseGeocode(coord) }
+                            }
+                        }
+                    )
+                    .onAppear {
+                        Task { await reverseGeocode(center) }
+                    }
+                    .allowsHitTesting(!isDisappearing)
                 }
+                .frame(height: 360)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .padding(.horizontal, 16)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(addressLine.isEmpty ? "Tap the map to place the pin" : addressLine)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+
+                    HStack {
+                        Text("Radius:")
+                        Slider(value: $radiusMeters, in: 50...20000, step: 50)
+                            .disabled(isDisappearing)
+                        Text("\(Int(radiusMeters)) m").monospacedDigit()
+                    }
+                }
+                .padding()
             }
-            .padding()
 
             Spacer(minLength: 0)
         }
         .presentationDetents([.medium, .large])
+        .onDisappear {
+            isDisappearing = true
+            geocodingTask?.cancel()
+        }
     }
 
     // MARK: - Helpers
     @MainActor
     private func reverseGeocode(_ coord: CLLocationCoordinate2D) async {
-        do {
-            let placemarks = try await CLGeocoder().reverseGeocodeLocation(
-                CLLocation(latitude: coord.latitude, longitude: coord.longitude)
-            )
-            lastPlacemark = placemarks.first
-            addressLine = formattedAddress(from: lastPlacemark)
-        } catch {
-            lastPlacemark = nil
-            addressLine = ""
+        guard !isDisappearing else { return }
+        
+        geocodingTask?.cancel()
+        geocodingTask = Task {
+            do {
+                let placemarks = try await CLGeocoder().reverseGeocodeLocation(
+                    CLLocation(latitude: coord.latitude, longitude: coord.longitude)
+                )
+                
+                guard !Task.isCancelled, !isDisappearing else { return }
+                
+                lastPlacemark = placemarks.first
+                addressLine = formattedAddress(from: lastPlacemark)
+            } catch {
+                guard !Task.isCancelled, !isDisappearing else { return }
+                lastPlacemark = nil
+                addressLine = ""
+            }
         }
     }
 

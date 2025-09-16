@@ -13,15 +13,35 @@ final class AddressSearchVM: NSObject, ObservableObject, MKLocalSearchCompleterD
     @Published var query = "" { didSet { completer.queryFragment = query } }
     @Published var suggestions: [MKLocalSearchCompletion] = []
     let completer = MKLocalSearchCompleter()
+    private var searchTask: Task<MKMapItem?, Never>?
 
     override init() {
         super.init()
         completer.delegate = self
         completer.resultTypes = [.address, .pointOfInterest]
     }
+    
+    deinit {
+        searchTask?.cancel()
+        completer.cancel()
+    }
 
     func completerDidUpdateResults(_ completer: MKLocalSearchCompleter) {
         suggestions = completer.results
+    }
+    
+    func selectCompletion(_ completion: MKLocalSearchCompletion) async -> MKMapItem? {
+        searchTask?.cancel()
+        
+        searchTask = Task {
+            let request = MKLocalSearch.Request(completion: completion)
+            let search = MKLocalSearch(request: request)
+            if let response = try? await search.start(), let first = response.mapItems.first {
+                return first
+            }
+            return nil
+        }
+        return await searchTask?.value
     }
 }
 
@@ -34,6 +54,7 @@ struct AddressSearchPicker: View
     @StateObject private var vm = AddressSearchVM()
     @State private var selectedItem: MKMapItem?
     @State private var radiusMeters: Double
+    @State private var isDisappearing = false
 
     init(initialRadiusMeters: Double = 2000,
          onPick: @escaping (LocationInfo) -> Void,
@@ -47,22 +68,27 @@ struct AddressSearchPicker: View
     var body: some View {
         VStack {
             HStack {
-                Button("Cancel", action: onCancel)
+                Button("Cancel") {
+                    isDisappearing = true
+                    onCancel()
+                }
                 Spacer()
                 Text("Enter Address").font(.headline)
                 Spacer()
                 Button("Use") {
                     guard let item = selectedItem else { return }
+                    isDisappearing = true
                     onPick(makeLocationInfo(from: item, radius: radiusMeters))
                 }
                 .bold()
-                .disabled(selectedItem == nil)
+                .disabled(selectedItem == nil || isDisappearing)
             }
             .padding()
 
             TextField("Search address or place", text: $vm.query)
                 .textFieldStyle(.roundedBorder)
                 .padding(.horizontal)
+                .disabled(isDisappearing)
 
             List(vm.suggestions, id: \.self) { s in
                 VStack(alignment: .leading) {
@@ -72,11 +98,16 @@ struct AddressSearchPicker: View
                     }
                 }
                 .contentShape(Rectangle())
-                .onTapGesture { Task { await select(s) } }
+                .onTapGesture {
+                    if !isDisappearing {
+                        Task { await select(s) }
+                    }
+                }
             }
             .listStyle(.plain)
+            .disabled(isDisappearing)
 
-            if let item = selectedItem {
+            if let item = selectedItem, !isDisappearing {
                 Map {
                     Annotation("Selected", coordinate: item.placemark.coordinate) {
                         Image(systemName: "mappin.circle.fill")
@@ -87,10 +118,12 @@ struct AddressSearchPicker: View
                 .frame(height: 220)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .padding(.horizontal)
+                .allowsHitTesting(!isDisappearing)
 
                 HStack {
                     Text("Radius:")
                     Slider(value: $radiusMeters, in: 50...20000, step: 50)
+                        .disabled(isDisappearing)
                     Text("\(Int(radiusMeters)) m").monospacedDigit()
                 }
                 .padding()
@@ -99,13 +132,15 @@ struct AddressSearchPicker: View
             Spacer(minLength: 0)
         }
         .presentationDetents([.large])
+        .onDisappear {
+            isDisappearing = true
+        }
     }
 
     private func select(_ s: MKLocalSearchCompletion) async {
-        let request = MKLocalSearch.Request(completion: s)
-        let search = MKLocalSearch(request: request)
-        if let response = try? await search.start(), let first = response.mapItems.first {
-            selectedItem = first
+        guard !isDisappearing else { return }
+        if let item = await vm.selectCompletion(s) {
+            selectedItem = item
         }
     }
 

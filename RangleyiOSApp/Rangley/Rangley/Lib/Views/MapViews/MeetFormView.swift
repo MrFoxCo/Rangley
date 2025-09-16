@@ -13,6 +13,11 @@ struct MeetFormView: View
 {
     @State private var showLocationPicker = false
     
+    // Location display states
+    @State private var displayLocationName: String = "Loading location..."
+    @State private var displayLocationSubtitle: String = ""
+    @State private var geocodingTask: Task<Void, Never>?
+    
     private func pickLocation() async -> LocationInfo? {
         // Your location picking logic here
         // This could open a location picker, use current location, etc.
@@ -86,13 +91,6 @@ struct MeetFormView: View
     }
 
     private var totalSteps: Int { FieldStep.allCases.count }
-
-    // MARK: Location display
-    private var locationDisplayName: String
-    {
-        // Update-only: show generic label (visual style unchanged)
-        return "Current location"
-    }
 
     // MARK: Progress enablement
     private var canProceed: Bool
@@ -169,11 +167,14 @@ struct MeetFormView: View
             }
             // Ensure end > start on entry
             if vm.end <= vm.start { vm.end = vm.start.addingTimeInterval(3600) }
+            // Load the current location address
+            loadCurrentLocationAddress()
         }
         .onChange(of: vm.start, initial: false) { _, newStart in
             if vm.end <= newStart { vm.end = newStart.addingTimeInterval(3600) }
         }
         .onTapGesture { isNameFieldFocused = false }
+        .onDisappear { geocodingTask?.cancel() }
         .sheet(isPresented: $showLocationPicker) {
             LocationPickerSheet(
                 initial: seedLocation,
@@ -183,10 +184,107 @@ struct MeetFormView: View
                     vm.regionLatitude  = picked.RegionCoordinate.latitude
                     vm.regionLongitude = picked.RegionCoordinate.longitude
                     vm.regionRadius    = picked.RegionRadius
-                    showLocationPicker = false
+                    
+                    // Show temporary state while loading new address
+                    displayLocationName = "Loading new location..."
+                    displayLocationSubtitle = ""
+                    
+                    // Update display with new location info
+                    loadNewLocationAddress(picked)
+                    
+                    // Add small delay before dismissing to avoid Metal texture error
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        showLocationPicker = false
+                    }
                 },
-                onCancel: { showLocationPicker = false }
+                onCancel: {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        showLocationPicker = false
+                    }
+                }
             )
+        }
+    }
+
+    // MARK: Location Address Loading
+    private func loadCurrentLocationAddress() {
+        geocodingTask?.cancel()
+        
+        switch mode {
+        case .update(let e):
+            geocodingTask = Task {
+                let geocoder = CLGeocoder()
+                let location = CLLocation(latitude: e.latitude, longitude: e.longitude)
+                
+                do {
+                    let placemarks = try await geocoder.reverseGeocodeLocation(location)
+                    guard let p = placemarks.first else {
+                        await MainActor.run {
+                            displayLocationName = "Unknown location"
+                            displayLocationSubtitle = "Lat: \(String(format: "%.4f", e.latitude)), Lng: \(String(format: "%.4f", e.longitude))"
+                        }
+                        return
+                    }
+                    
+                    let name = p.name?.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let street = p.thoroughfare?.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let number = p.subThoroughfare?.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let city = p.locality?.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let state = p.administrativeArea?.trimmingCharacters(in: .whitespacesAndNewlines)
+                    
+                    await MainActor.run {
+                        displayLocationName = name ?? street ?? "Dropped Pin"
+                        displayLocationSubtitle = [
+                            [number, street].compactMap { $0 }.joined(separator: " "),
+                            [city, state].compactMap { $0 }.joined(separator: ", ")
+                        ].filter { !$0.isEmpty }.joined(separator: " • ")
+                    }
+                } catch {
+                    await MainActor.run {
+                        displayLocationName = "Unknown location"
+                        displayLocationSubtitle = "Lat: \(String(format: "%.4f", e.latitude)), Lng: \(String(format: "%.4f", e.longitude))"
+                    }
+                }
+            }
+        }
+    }
+    
+    private func loadNewLocationAddress(_ locationInfo: LocationInfo) {
+        geocodingTask?.cancel()
+        
+        geocodingTask = Task {
+            let geocoder = CLGeocoder()
+            let location = CLLocation(latitude: locationInfo.Coordinate.latitude, longitude: locationInfo.Coordinate.longitude)
+            
+            do {
+                let placemarks = try await geocoder.reverseGeocodeLocation(location)
+                guard let p = placemarks.first else {
+                    await MainActor.run {
+                        displayLocationName = "New location selected"
+                        displayLocationSubtitle = "Lat: \(String(format: "%.4f", locationInfo.Coordinate.latitude)), Lng: \(String(format: "%.4f", locationInfo.Coordinate.longitude))"
+                    }
+                    return
+                }
+                
+                let name = p.name?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let street = p.thoroughfare?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let number = p.subThoroughfare?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let city = p.locality?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let state = p.administrativeArea?.trimmingCharacters(in: .whitespacesAndNewlines)
+                
+                await MainActor.run {
+                    displayLocationName = name ?? street ?? "New Location"
+                    displayLocationSubtitle = [
+                        [number, street].compactMap { $0 }.joined(separator: " "),
+                        [city, state].compactMap { $0 }.joined(separator: ", ")
+                    ].filter { !$0.isEmpty }.joined(separator: " • ")
+                }
+            } catch {
+                await MainActor.run {
+                    displayLocationName = "New location selected"
+                    displayLocationSubtitle = "Lat: \(String(format: "%.4f", locationInfo.Coordinate.latitude)), Lng: \(String(format: "%.4f", locationInfo.Coordinate.longitude))"
+                }
+            }
         }
     }
 
@@ -258,20 +356,13 @@ struct MeetFormView: View
             Label {
                 VStack(alignment: .leading, spacing: 4)
                 {
-                    Text(locationDisplayName)
+                    Text(displayLocationName)
                         .font(.system(size: 14, weight: .medium))
                         .foregroundColor(AppPalette.Text.primary)
 
-                    // Update-only: hinting
-                    if coordProvidedCount > 0 {
-                        Text("New location selected")
-                            .font(.system(size: 12))
-                            .foregroundColor(AppPalette.Text.secondary)
-                    } else {
-                        Text("Tap to change location")
-                            .font(.system(size: 12))
-                            .foregroundColor(AppPalette.Text.tertiary)
-                    }
+                    Text(displayLocationSubtitle)
+                        .font(.system(size: 12))
+                        .foregroundColor(AppPalette.Text.secondary)
                 }
             } icon: {
                 Image(systemName: "location.fill")
@@ -561,6 +652,7 @@ struct LocationPickerSheet: View {
     let onCancel: () -> Void
     
     @State private var selectedMethod: LocationMethod = .map
+    @State private var isAnimating = false
     
     enum LocationMethod: String, CaseIterable {
         case map = "Pick on Map"
@@ -575,45 +667,96 @@ struct LocationPickerSheet: View {
     }
     
     var body: some View {
-        NavigationView {
-            VStack(spacing: 0) {
-                // Method selector
+        VStack(spacing: 0) {
+            // Header matching MeetFormView style
+            HStack {
+                Button(action: onCancel) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 16, weight: .medium))
+                        Text("Cancel")
+                            .font(.system(size: 16, weight: .medium))
+                    }
+                    .foregroundColor(AppPalette.Brand.neonPink)
+                }
+                
+                Spacer()
+                
+                Text("Choose Location")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(AppPalette.Text.primary)
+                
+                Spacer()
+                
+                // Invisible button for symmetry
+                Button("") {}
+                    .opacity(0)
+                    .disabled(true)
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 20)
+            .padding(.bottom, 16)
+            
+            // Method selector with matching style
+            VStack(spacing: 16) {
+                Text("How would you like to pick your location?")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(AppPalette.Text.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                
                 Picker("Location Method", selection: $selectedMethod) {
                     ForEach(LocationMethod.allCases, id: \.self) { method in
-                        Label(method.rawValue, systemImage: method.icon)
+                        Text(method.rawValue)
                             .tag(method)
                     }
                 }
                 .pickerStyle(.segmented)
-                .padding()
-                
-                // Content based on selected method
-                Group {
-                    switch selectedMethod {
-                    case .map:
-                        MapLocationPicker(
-                            initial: initial,
-                            onPick: onPick,
-                            onCancel: onCancel
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(AppPalette.Surface.fieldFill)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
                         )
-                    case .address:
-                        AddressSearchPicker(
-                            initialRadiusMeters: initial.RegionRadius,
-                            onPick: onPick,
-                            onCancel: onCancel
-                        )
-                    }
-                }
-                .transition(.opacity.combined(with: .slide))
-                .animation(.easeInOut(duration: 0.3), value: selectedMethod)
+                )
             }
-            .navigationTitle("Choose Location")
-            .navigationBarTitleDisplayMode(.inline)
-            .navigationBarBackButtonHidden()
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Cancel", action: onCancel)
+            .padding(.horizontal, 24)
+            .padding(.bottom, 24)
+            
+            // Content based on selected method
+            Group {
+                switch selectedMethod {
+                case .map:
+                    MapLocationPicker(
+                        initial: initial,
+                        onPick: onPick,
+                        onCancel: onCancel
+                    )
+                case .address:
+                    AddressSearchPicker(
+                        initialRadiusMeters: initial.RegionRadius,
+                        onPick: onPick,
+                        onCancel: onCancel
+                    )
                 }
+            }
+            .transition(.opacity.combined(with: .slide))
+            .animation(.easeInOut(duration: 0.3), value: selectedMethod)
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 24)
+                .fill(AppPalette.Brand.russianViolet)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24)
+                        .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1)
+                )
+        )
+        .shadow(color: AppPalette.Brand.neonPink.opacity(0.3), radius: 20, x: 0, y: 10)
+        .scaleEffect(isAnimating ? 1 : 0.95)
+        .opacity(isAnimating ? 1 : 0)
+        .onAppear {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                isAnimating = true
             }
         }
         .presentationDetents([.large])
