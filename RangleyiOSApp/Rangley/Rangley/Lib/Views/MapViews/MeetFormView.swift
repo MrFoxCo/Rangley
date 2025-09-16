@@ -75,7 +75,8 @@ struct MeetFormView: View
     }
 
     // MARK: Steps
-    enum FieldStep: CaseIterable {
+    enum FieldStep: CaseIterable
+    {
         case name, startTime, endTime, review
 
         func title() -> String {
@@ -484,7 +485,8 @@ struct MeetFormView: View
     }
 
     // MARK: Actions
-    private func nextStep() {
+    private func nextStep()
+    {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8))
         {
             switch currentFieldStep {

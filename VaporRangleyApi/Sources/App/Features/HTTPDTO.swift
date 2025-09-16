@@ -68,6 +68,11 @@ enum HTTPDTO {
             let max_capacity    : Int32?
         }
         
+        struct InsertDeletedBody: Content, Sendable {
+            // Required - must know which meet to update
+            let meet_id_uuid    : String
+        }
+        
         struct InsertResponse: Content, Sendable {
             let num_inserted: Int32
         }

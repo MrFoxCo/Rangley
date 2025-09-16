@@ -195,6 +195,41 @@ public struct PublicMapView: View
     // =========================================================
     
     @State private var showEditSheet = false
+    // Add these state variables to PublicMapView
+    @State private var isDeletingMeet = false
+    @State private var deleteError: String?
+    
+    @MainActor
+    private func deleteMeet(_ meet: ViewMeetsModel) async
+    {
+        guard !isDeletingMeet else { return }
+        
+        isDeletingMeet = true
+        deleteError = nil
+        
+        do {
+            let deleteBody = DeletedMeetInsertBody(meet_id_uuid: meet.id)
+            let token = try await fetchIdToken()
+            
+            _ = try await AuthAPI.deleteMeet(
+                baseURL: Env.apiBaseURL,
+                token: token,
+                body: deleteBody
+            )
+            
+            await loadMeets()
+            
+            // Clean up UI state
+            showMeetOverlay = false
+            selectedMeet = nil
+            deleteError = nil
+            
+        } catch {
+            deleteError = error.localizedDescription
+        }
+        
+        isDeletingMeet = false
+    }
     
     // MARK: - Location Picker bridge
     private enum _PickerRoute: Identifiable { case map, address; var id: Int { hashValue } }
@@ -421,7 +456,9 @@ public struct PublicMapView: View
                     showEditSheet = true
                 },
                 onDelete: { meet in
-                    // TODO: call your delete API; backend will also enforce ownership
+                    Task {
+                        await deleteMeet(meet)
+                    }
                 }
             )
 

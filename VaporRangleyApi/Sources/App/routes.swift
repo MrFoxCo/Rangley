@@ -387,25 +387,15 @@ public func routes(_ app: Application) throws
         let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
 
-        let body = try req.content.decode(HTTPDTO.Meets.InsertUpdatedBody.self)  // Use InsertUpdatedBody
+        let body = try req.content.decode(HTTPDTO.Meets.InsertDeletedBody.self)  // Use InsertDeletedBody
 
-        // Only validate fields that are provided
-        if let name = body.name {
-            guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            else { throw Abort(.badRequest, reason: "name cannot be empty if provided") }
-        }
-        
-        if let startTime = body.dttm_start_utc, let endTime = body.dttm_end_utc {
-            guard startTime < endTime
-            else { throw Abort(.badRequest, reason: "dttm_start_utc must be before dttm_end_utc") }
-        }
 
         guard let sql = req.db as? any SQLDatabase
         else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
 
         let params = Proc.SystemInsertDeletedMeet.Params(
             cognito_sub: sub,
-            meet_id_uuid: body.meet_id_uuid,  // Now available from body
+            meet_id_uuid: body.meet_id_uuid  // Now available from body
         )
 
         do {
@@ -416,7 +406,7 @@ public func routes(_ app: Application) throws
             )
             
             guard dbResult.num_inserted == 1
-            else { throw Abort(.internalServerError, reason: "Failed to update meet") }
+            else { throw Abort(.internalServerError, reason: "Failed to delete meet") }
 
             return .init(num_inserted: dbResult.num_inserted)
                         
@@ -425,7 +415,7 @@ public func routes(_ app: Application) throws
             switch state {
             case "22023": throw Abort(.badRequest, reason: "Invalid input parameters")
             case "P0002": throw Abort(.notFound,    reason: "Meet not found")
-            case "42501": throw Abort(.forbidden,   reason: "Not authorized to update this meet")
+            case "42501": throw Abort(.forbidden,   reason: "Not authorized to delete this meet")
             default:
                 req.logger.error("sqlstate=\(state ?? "nil") error=\(String(reflecting: error))")
                 throw Abort(.internalServerError, reason: "Failed to update meet")

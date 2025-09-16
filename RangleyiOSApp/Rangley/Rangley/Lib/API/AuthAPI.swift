@@ -126,7 +126,7 @@ struct AuthAPI {
         catch { throw AuthAPIError.decode }
     }
     
-    // THE VERY FIRST MEET corresponds to SystemInsertMeet
+    // Corresponds to SystemInsertUpdatedMeet in VAPOR
     static func updateMeet(baseURL: URL,
                            token: String, body: UpdatedMeetInsertBody) async throws -> UpdatedMeetInsertResponse
     {
@@ -147,6 +147,27 @@ struct AuthAPI {
             throw AuthAPIError.http(http.statusCode, extractReason(from: data))
         }
         do { return try JSONDecoder().decode(UpdatedMeetInsertResponse.self, from: data) }
+        catch { throw AuthAPIError.decode }
+    }
+    
+    // Corresponds to SystemInsertUpdatedMeet in VAPOR
+    static func deleteMeet(baseURL: URL,
+                           token: String, body: DeletedMeetInsertBody) async throws -> DeletedMeetInsertResponse
+    {
+
+        var req = URLRequest(url: makeURL(baseURL, ["s", "deleted-meet"]))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.httpBody = try isoEncoder.encode(body)
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
+        guard (200..<300).contains(http.statusCode) else {
+            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        }
+        do { return try JSONDecoder().decode(DeletedMeetInsertResponse.self, from: data) }
         catch { throw AuthAPIError.decode }
     }
 
