@@ -99,6 +99,60 @@ public func routes(_ app: Application) throws
     }
 
     
+    v.get("users")
+    {
+        req async throws -> HTTPDTO.Users.SearchResponse in
+        // Auth
+        let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
+
+        // Decode from query (?usernames=a&usernames=b&emails=x@…)
+        let q = (try? req.query.decode(HTTPDTO.Users.SearchBody.self))
+            ?? .init(usernames: nil, emails: nil, phones: nil)
+
+        // Sanitize; treat empty arrays as nil
+        func clean(_ xs: [String]?) -> [String]? {
+            let r = xs?.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                       .filter { !$0.isEmpty }
+            return (r?.isEmpty == false) ? r : nil
+        }
+        let usernames = clean(q.usernames)
+        let emails    = clean(q.emails)
+        let phones    = clean(q.phones)
+
+        guard usernames != nil || emails != nil || phones != nil
+        else { throw Abort(.badRequest, reason: "Provide at least one of usernames, emails, or phones.") }
+
+        // DB
+        guard let sql = req.db as? any SQLDatabase
+        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+
+        // Call the set-returning function
+        let rows: [Func.ViewUsers.Results] = try await sql
+            .raw(Func.ViewUsers.query(.init(
+                cognito_sub: sub,
+                usernames: usernames,
+                emails: emails,
+                phones: phones
+            )))
+            .all(decoding: Func.ViewUsers.Results.self)
+
+        // Map to HTTP payload
+        return .init(results: rows.map {
+            HTTPDTO.Users.SearchItem(
+                user_uuid:   $0.user_uuid,
+                username:    $0.username,
+                display_name:$0.display_name,
+                matched_by:  $0.matched_by,
+                can_invite:  $0.can_invite
+            )
+        })
+    }
+
+
+    
+    
+    
     // GET /v/meet-categories -> all categories
     v.get("meet-categories")
     {
@@ -422,6 +476,39 @@ public func routes(_ app: Application) throws
             }
         }
     }
+    
+    // POST /users/search — filtered search (keeps PII out of URL)
+    s.post("users", "search")
+    {
+        req async throws -> HTTPDTO.Users.SearchResponse in
+        let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
+
+        let body = try req.content.decode(HTTPDTO.Users.SearchBody.self)
+
+        guard let sql = req.db as? any SQLDatabase
+        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+
+        let input = Func.ViewUsers.In(
+            cognito_sub: sub,
+            usernames: body.usernames,
+            emails: body.emails,
+            phones: body.phones
+        )
+
+        let rs = try await sql.raw(Func.ViewUsers.query(input)).all()
+        let rows: [Func.ViewUsers.Results] = try rs.map(Func.ViewUsers.decode)
+
+        return .init(results: rows.map {
+            .init(user_uuid: $0.user_uuid,
+                  username: $0.username,
+                  display_name: $0.display_name,
+                  matched_by: $0.matched_by,
+                  can_invite: $0.can_invite)
+        })
+    }
+    
+    
 
     // MARK: - END System INSERTS (s*) or POST ROUTES
     

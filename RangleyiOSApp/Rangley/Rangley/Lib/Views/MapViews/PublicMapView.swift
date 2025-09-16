@@ -368,6 +368,22 @@ public struct PublicMapView: View
     // MARK: - END Hamburger Menu
     // =========================================================
     
+    // =========================================================
+    // MARK: - DockView Menu
+    // =========================================================
+    @State private var currentToken: String = ""
+    private func ensureToken() async {
+        if currentToken.isEmpty {
+            do {
+                currentToken = try await fetchIdToken()
+            } catch {
+                print("Failed to get token: \(error)")
+            }
+        }
+    }
+    // =========================================================
+    // MARK: - END DockView Menu
+    // =========================================================
     
     // =========================================================
     // MARK: - Body (your existing body stays below)
@@ -531,7 +547,6 @@ public struct PublicMapView: View
                     onPickLocation: nil
                 )
             }
-
             // REMOVE or comment out these lines:
             // - The @State private var shouldAnimateToLocation: CLLocationCoordinate2D?
             // - The entire .onChange(of: shouldAnimateToLocation) modifier at the botto
@@ -605,9 +620,18 @@ public struct PublicMapView: View
             HStack {
                 Spacer()
                 DockView(
+                    baseURL: Env.apiBaseURL,
+                    token: currentToken,
                     onSignOut: { signOutAndGoStart() },
-                    onSearch:  { print("Search tapped") },
-                    onCreateMeet: { showCreateForm = true }
+                    onCreateMeet: { showCreateForm = true },
+                    onMeetSelected: { meet in
+                        selectedMeet = meet
+                        showMeetOverlay = true
+                    },
+                    onUserSelected: { user in
+                        print("Selected user: \(user.display_name)")
+                        // Handle user selection - maybe show user profile or invite to meet
+                    }
                 )
                 Spacer()
             }
@@ -627,8 +651,12 @@ public struct PublicMapView: View
             .preferredColorScheme(.dark)
         }
         // Load on appear
-        .task { await loadMeets() }
-        .onAppear { clock = Date() }  
+        .task
+        {
+            await ensureToken()
+            await loadMeets()
+        }
+        .onAppear { clock = Date() }
         //.overlay(RefreshShim(onRefresh: { await loadMeets() }))
     }
     

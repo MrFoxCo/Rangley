@@ -11,7 +11,7 @@ import AWSPluginsCore
 
 @MainActor
 final class SessionModel: ObservableObject {
-    @Published private(set) var me: ViewUserMe?
+    @Published private(set) var me: ViewUserMeModel?
     @Published private(set) var isLoading = false
 
     func ensureMe() async {

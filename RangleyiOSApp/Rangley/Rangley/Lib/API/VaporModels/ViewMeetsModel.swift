@@ -32,3 +32,8 @@ public struct ViewMeetsModel: Codable, Identifiable, Sendable
     public var id: String { meet_id_uuid }
 }
 
+extension ViewMeetsModel: Equatable {
+    public static func == (lhs: ViewMeetsModel, rhs: ViewMeetsModel) -> Bool {
+        lhs.id == rhs.id
+    }
+}

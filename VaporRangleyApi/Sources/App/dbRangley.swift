@@ -31,9 +31,10 @@ enum RangleyProcName: String
 // Essentially these are views because postgres doesn't allow procedural views in an easy way
 enum RangleyFunc: String
 {
-    case v_user_by_cognito_sub  = "rangley.rangley_fn_v_user_by_cognito_sub"
-    case v_meets_by_cognito_sub = "rangley.rangley_fn_v_meets_by_cognito_sub"
-    case v_meet_categories      = "rangley.rangley_fn_v_meet_categories"
+    case v_user_by_cognito_sub       = "rangley.rangley_fn_v_user_by_cognito_sub"
+    case v_meets_by_cognito_sub      = "rangley.rangley_fn_v_meets_by_cognito_sub"
+    case v_meet_categories           = "rangley.rangley_fn_v_meet_categories"
+    case v_users_by_cognito_sub      = "rangley.rangley_fn_v_users_by_cognito_sub"
 }
 
 // MARK: - Generic call shapes
@@ -773,45 +774,49 @@ enum Func
         }
     }
 
-    enum ViewAllUsers: PgFunctionRows
+    
+    enum ViewUsers: PgFunctionRows
     {
-        static let funcName: RangleyFunc = .v_users_w_cognito_sub // or .v_user_clean
+        static let funcName: RangleyFunc = .v_users_by_cognito_sub
 
-        struct Param: Content, Sendable
-        {
+        // Inputs (server injects cognito_sub; arrays are optional)
+        struct In: Sendable {
             let cognito_sub: String
+            let usernames: [String]?
+            let emails: [String]?
+            let phones: [String]?   // raw strings; DB side normalizes
         }
 
-        struct Results: Content, Sendable
-        {
-            let user_uuid           : String
-            let username            : String
-            let display_name        : String
-            let cellphone           : String?
-            let email               : String?
-            let dob                 : Date
-            let dttm_created_utc    : Date
+        // Row shape returned by the function
+        struct Results: Content, Sendable {
+            let user_uuid: String
+            let username: String
+            let display_name: String
+            let matched_by: [String]   // e.g. ["username","phone"]
+            let can_invite: Bool
         }
-        
-        struct In: Sendable { let cognito_sub: String }
 
         static func query(_ input: In) -> SQLQueryString {
-            "SELECT * FROM \(unsafeRaw: funcName.rawValue)(\(bind: input.cognito_sub));"
+            // SELECT * FROM rangley_fn_v_users_by_cognito_sub($1,$2,$3,$4)
+            "SELECT * FROM \(unsafeRaw: funcName.rawValue)(" +
+                "\(bind: input.cognito_sub)," +
+                "\(bind: input.usernames)," +
+                "\(bind: input.emails)," +
+                "\(bind: input.phones)" +
+            ");"
         }
 
-        static func decode(_ r: any SQLRow) throws -> Results
-        {
+        static func decode(_ r: any SQLRow) throws -> Results {
             try .init(
-                user_uuid           : r.decode(column: "user_uuid",         as: String.self),
-                username            : r.decode(column: "username",          as: String.self),
-                display_name        : r.decode(column: "display_name",      as: String.self),
-                cellphone           : r.decode(column: "cellphone",         as: String?.self),
-                email               : r.decode(column: "email",             as: String?.self),
-                dob                 : r.decode(column: "dob",               as: Date.self),
-                dttm_created_utc    : r.decode(column: "dttm_created_utc",  as: Date.self)
+                user_uuid   : r.decode(column: "user_uuid",   as: String.self),
+                username    : r.decode(column: "username",    as: String.self),
+                display_name: r.decode(column: "display_name",as: String.self),
+                matched_by  : r.decode(column: "matched_by",  as: [String].self),
+                can_invite  : r.decode(column: "can_invite",  as: Bool.self)
             )
         }
     }
+
 
     
     

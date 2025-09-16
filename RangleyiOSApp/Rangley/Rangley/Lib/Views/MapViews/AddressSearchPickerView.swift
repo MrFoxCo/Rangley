@@ -69,6 +69,7 @@ struct AddressSearchPicker: View
     var body: some View {
         VStack(spacing: 0) {
             // Header
+            // Header
             HStack {
                 Button("Cancel") {
                     isDisappearing = true
@@ -95,8 +96,17 @@ struct AddressSearchPicker: View
                 .disabled(selectedItem == nil || isDisappearing)
             }
             .padding(.horizontal, 24)
-            .padding(.vertical, 20)
-            .background(AppPalette.Brand.russianViolet)
+            .padding(.vertical, 16)
+            .background(
+                LinearGradient(
+                    colors: [
+                        AppPalette.Brand.russianViolet.opacity(0.95),
+                        AppPalette.Brand.violetMid.opacity(0.70)
+                    ],
+                    startPoint: .top, endPoint: .bottom
+                )
+            )
+
 
             // Search Field
             VStack(spacing: 16) {
@@ -104,16 +114,13 @@ struct AddressSearchPicker: View
                     .font(.system(size: 16))
                     .foregroundColor(AppPalette.Text.primary)
                     .padding(16)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(AppPalette.Brand.nearBlack.opacity(0.6))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(AppPalette.Brand.violetMid, lineWidth: 1)
-                            )
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(AppPalette.Brand.violetMid.opacity(0.5), lineWidth: 1)
                     )
                     .disabled(isDisappearing)
-                
+
                 // Suggestions List
                 if !vm.suggestions.isEmpty {
                     ScrollView {
@@ -135,13 +142,14 @@ struct AddressSearchPicker: View
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 12)
                                 .background(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .fill(AppPalette.Brand.russianViolet.opacity(0.3))
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .fill(AppPalette.Brand.russianViolet.opacity(0.12))
                                         .overlay(
-                                            RoundedRectangle(cornerRadius: 8)
-                                                .stroke(AppPalette.Brand.violetMid.opacity(0.5), lineWidth: 0.5)
+                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                                .stroke(AppPalette.Brand.violetMid.opacity(0.35), lineWidth: 0.5)
                                         )
                                 )
+
                                 .contentShape(Rectangle())
                                 .onTapGesture {
                                     if !isDisappearing {
@@ -157,6 +165,7 @@ struct AddressSearchPicker: View
                 }
                 
                 // Selected Location Map
+                // Selected Location Map
                 if let item = selectedItem, !isDisappearing {
                     VStack(spacing: 16) {
                         Map {
@@ -166,15 +175,16 @@ struct AddressSearchPicker: View
                                     .font(.title2)
                             }
                             MapCircle(center: item.placemark.coordinate, radius: radiusMeters)
-                                .stroke(AppPalette.Brand.neonPink.opacity(0.4), lineWidth: 2)
-                                .foregroundStyle(AppPalette.Brand.neonPink.opacity(0.1))
+                                .stroke(AppPalette.Brand.neonPink.opacity(0.35), lineWidth: 2)
+                                .foregroundStyle(AppPalette.Brand.neonPink.opacity(0.08))
                         }
                         .frame(height: 220)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(AppPalette.Brand.violetMid, lineWidth: 1)
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(AppPalette.Brand.violetMid.opacity(0.5), lineWidth: 1)
                         )
+                        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .allowsHitTesting(!isDisappearing)
 
                         // Radius Slider
@@ -189,23 +199,18 @@ struct AddressSearchPicker: View
                                     .foregroundColor(AppPalette.Brand.neonPink)
                                     .monospacedDigit()
                             }
-                            
                             Slider(value: $radiusMeters, in: 50...20000, step: 50)
                                 .tint(AppPalette.Brand.neonPink)
                                 .disabled(isDisappearing)
                         }
                         .padding(16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(AppPalette.Brand.russianViolet.opacity(0.4))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(AppPalette.Brand.violetMid.opacity(0.6), lineWidth: 1)
-                                )
+                        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(AppPalette.Brand.violetMid.opacity(0.45), lineWidth: 1)
                         )
-                    }
-                }
-
+                    } // <- close inner VStack (map + radius)
+                } // <- close `if let item`
                 Spacer(minLength: 20)
             }
             .padding(.horizontal, 24)
@@ -214,13 +219,13 @@ struct AddressSearchPicker: View
         .background(
             LinearGradient(
                 colors: [
-                    AppPalette.Brand.russianViolet,
-                    AppPalette.Brand.nearBlack.opacity(0.8)
+                    AppPalette.Brand.russianViolet.opacity(0.92),
+                    AppPalette.Brand.violetMid.opacity(0.60)
                 ],
-                startPoint: .top,
-                endPoint: .bottom
+                startPoint: .top, endPoint: .bottom
             )
         )
+
         .preferredColorScheme(.dark)
         .presentationDetents([.large])
         .onDisappear {

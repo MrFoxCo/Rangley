@@ -11,7 +11,7 @@ import AWSPluginsCore
 
 struct AccountView: View
 {
-    @State private var profile: ViewUserMe?
+    @State private var profile: ViewUserMeModel?
     @State private var error: String?
     @State private var isAnimating = false
     @Environment(\.dismiss) private var dismiss
@@ -154,7 +154,7 @@ struct AccountView: View
     }
     
     // MARK: - Account Details
-    private func accountDetails(for profile: ViewUserMe) -> some View {
+    private func accountDetails(for profile: ViewUserMeModel) -> some View {
         VStack(spacing: 16) {
             accountInfoCard(
                 title: "Personal Information",

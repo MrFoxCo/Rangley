@@ -10,11 +10,72 @@ import Foundation
 enum AuthAPIError: Error, LocalizedError {
     case http(Int, String?)
     case decode
+    case encode
+    case transport(Error)
+
+    // MARK: LocalizedError
     var errorDescription: String? {
         switch self {
-        case .http(let c, let r): return "HTTP \(c): \(r ?? "Unknown error")"
-        case .decode:            return "Decode error"
+        case .http(let code, let reason):
+            return "HTTP \(code): \(reason ?? "Unknown error")"
+        case .decode:
+            return "Decode error"
+        case .encode:
+            return "Encode error"
+        case .transport(let underlying):
+            return "Network error: \(underlying.localizedDescription)"
         }
+    }
+
+    var failureReason: String? {
+        switch self {
+        case .http(_, let reason): return reason
+        case .decode:              return "Response couldn’t be decoded."
+        case .encode:              return "Request body couldn’t be encoded."
+        case .transport(let e):    return e.localizedDescription
+        }
+    }
+}
+extension AuthAPIError
+{
+    static func map(_ error: Error) -> AuthAPIError {
+        if let e = error as? AuthAPIError { return e }
+        return .transport(error)
+    }
+}
+extension AuthAPI
+{
+    /// GET /v/users — browse all discoverable (no filters). Server should allow no filters here.
+    static func browseAllUsers(
+        baseURL: URL,
+        token: String,
+        limit: Int? = nil,
+        offset: Int? = nil
+    ) async throws -> [ViewUsersModel] {
+        var url = makeURL(baseURL, ["v", "users"])
+        if let limit, let offset {
+            var comps = URLComponents(url: url, resolvingAgainstBaseURL: false)!
+            comps.queryItems = [
+                URLQueryItem(name: "limit", value: String(limit)),
+                URLQueryItem(name: "offset", value: String(offset))
+            ]
+            url = comps.url!
+        }
+
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
+        guard (200..<300).contains(http.statusCode) else {
+            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        }
+
+        // Server returns { results: [...] }
+        let wrapper = try isoDecoder.decode(UsersSearchResponse.self, from: data)
+        return wrapper.results
     }
 }
 
@@ -70,7 +131,7 @@ struct AuthAPI {
     }
 
     // GET /v/me  (protected; Bearer ID token)
-    static func me(baseURL: URL, token: String) async throws -> ViewUserMe
+    static func me(baseURL: URL, token: String) async throws -> ViewUserMeModel
     {
         var req = URLRequest(url: makeURL(baseURL, ["v", "me"]))
         req.httpMethod = "GET"
@@ -82,7 +143,7 @@ struct AuthAPI {
         guard (200..<300).contains(http.statusCode) else {
             throw AuthAPIError.http(http.statusCode, extractReason(from: data))
         }
-        do { return try isoDecoder.decode(ViewUserMe.self, from: data) }
+        do { return try isoDecoder.decode(ViewUserMeModel.self, from: data) }
         catch { throw AuthAPIError.decode }
     }
 
@@ -188,6 +249,125 @@ struct AuthAPI {
         do { return try isoDecoder.decode([ViewMeetsModel].self, from: data) }
         catch { throw AuthAPIError.decode }
     }
+    
+    
+    // MARK: - DTOs for Users API
+
+    private struct UsersSearchBody: Codable, Sendable {
+        let usernames: [String]?
+        let emails:    [String]?
+        let phones:    [String]?
+    }
+
+    private struct UsersSearchResponse: Codable, Sendable {
+        let results: [ViewUsersModel]
+    }
+
+    
+    /// GET /v/users — filtered search via query (?usernames=a&usernames=b&emails=...)
+    /// NOTE: your server 400s if no filters; we pre-check client-side.
+    static func viewUsers(
+        baseURL: URL,token: String,
+        usernames: [String]? = nil,emails: [String]? = nil,phones: [String]? = nil
+    ) async throws -> [ViewUsersModel]
+    {
+
+        // sanitize
+        func clean(_ xs: [String]?) -> [String]? {
+            let r = xs?.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                       .filter { !$0.isEmpty }
+            return (r?.isEmpty == false) ? r : nil
+        }
+        let cu = clean(usernames), ce = clean(emails), cp = clean(phones)
+
+        let hasFilters = (cu != nil) || (ce != nil) || (cp != nil)
+        guard hasFilters else {
+            throw AuthAPIError.http(400, "Provide at least one of usernames, emails, or phones.")
+        }
+
+        var comps = URLComponents(url: makeURL(baseURL, ["v", "users"]), resolvingAgainstBaseURL: false)!
+        var items: [URLQueryItem] = []
+        cu?.forEach { items.append(.init(name: "usernames", value: $0)) }
+        ce?.forEach { items.append(.init(name: "emails",    value: $0)) }
+        cp?.forEach { items.append(.init(name: "phones",    value: $0)) }
+        comps.queryItems = items
+        let url = comps.url!
+
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let data: Data, resp: URLResponse
+        do {
+            (data, resp) = try await URLSession.shared.data(for: req)
+        } catch {
+            throw AuthAPIError.transport(error)
+        }
+
+        guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
+        guard (200..<300).contains(http.statusCode) else {
+            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        }
+
+        do {
+            let wrapper = try isoDecoder.decode(UsersSearchResponse.self, from: data)
+            return wrapper.results
+        } catch {
+            throw AuthAPIError.decode
+        }
+    }
+
+    /// POST /s/users/search — filtered search with JSON body
+    static func searchUsers(
+        baseURL: URL,token: String,
+        usernames: [String]? = nil, emails: [String]? = nil,phones: [String]? = nil
+    ) async throws -> [ViewUsersModel]
+    {
+
+        // sanitize
+        func clean(_ xs: [String]?) -> [String]? {
+            let r = xs?.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                       .filter { !$0.isEmpty }
+            return (r?.isEmpty == false) ? r : nil
+        }
+        let body = UsersSearchBody(usernames: clean(usernames), emails: clean(emails), phones: clean(phones))
+
+        var req = URLRequest(url: makeURL(baseURL, ["s", "users", "search"]))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        do {
+            req.httpBody = try isoEncoder.encode(body)
+        } catch {
+            throw AuthAPIError.encode
+        }
+
+        let data: Data, resp: URLResponse
+        do {
+            (data, resp) = try await URLSession.shared.data(for: req)
+        } catch {
+            throw AuthAPIError.transport(error)
+        }
+
+        guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
+        guard (200..<300).contains(http.statusCode) else {
+            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        }
+
+        do {
+            let wrapper = try isoDecoder.decode(UsersSearchResponse.self, from: data)
+            return wrapper.results
+        } catch {
+            throw AuthAPIError.decode
+        }
+    }
+
+
+
+
 
 
     // MARK: - helpers

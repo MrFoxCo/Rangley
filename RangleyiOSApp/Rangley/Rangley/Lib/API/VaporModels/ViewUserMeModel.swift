@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-struct ViewUserMe: Codable, Identifiable
+struct ViewUserMeModel: Codable, Identifiable
 {
     let user_uuid           : String
     let username            : String

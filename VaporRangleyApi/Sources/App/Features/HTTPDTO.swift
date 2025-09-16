@@ -28,9 +28,12 @@ import Vapor
 /// - `*Response` types = **responses** you return to clients.
 /// - DB-facing types live elsewhere (e.g., `Proc.SystemInsertMeet.Params`) and
 ///   may include fields not exposed to clients (like `cognito_sub`).
-enum HTTPDTO {
-    enum Meets {
-        struct InsertBody: Content, Sendable {
+enum HTTPDTO
+{
+    enum Meets
+    {
+        struct InsertBody: Content, Sendable
+        {
             // Required
             let latitude        : Double
             let longitude       : Double
@@ -48,7 +51,8 @@ enum HTTPDTO {
         
 
         
-        struct InsertUpdatedBody: Content, Sendable {
+        struct InsertUpdatedBody: Content, Sendable
+        {
             // Required - must know which meet to update
             let meet_id_uuid    : String
             
@@ -68,13 +72,69 @@ enum HTTPDTO {
             let max_capacity    : Int32?
         }
         
-        struct InsertDeletedBody: Content, Sendable {
+        struct InsertDeletedBody: Content, Sendable
+        {
             // Required - must know which meet to update
             let meet_id_uuid    : String
         }
         
-        struct InsertResponse: Content, Sendable {
+        struct InsertResponse: Content, Sendable
+        {
             let num_inserted: Int32
         }
     }
+    
+    enum Users
+    {
+        // Client request payload (server reads cognito_sub from auth, not from body)
+        struct SearchBody: Content, Sendable
+        {
+            let usernames: [String]?  // optional
+            let emails:    [String]?  // optional
+            let phones:    [String]?  // optional
+        }
+
+        struct SearchItem: Content, Sendable
+        {
+            let user_uuid: String
+            let username: String
+            let display_name: String
+            let matched_by: [String]
+            let can_invite: Bool
+        }
+
+        struct SearchResponse: Content, Sendable
+        {
+            let results: [SearchItem]
+        }
+    }
 }
+/*
+ ADd this later
+ 
+ extension HTTPDTO.Users.SearchBody {
+     func sanitized() -> Self {
+         func clean(_ xs: [String]?) -> [String]? {
+             let r = xs?.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .filter { !$0.isEmpty }
+             return (r?.isEmpty == false) ? r : nil
+         }
+         return .init(usernames: clean(usernames), emails: clean(emails), phones: clean(phones))
+     }
+ }
+... then in routes
+ 
+ let body = try req.content.decode(HTTPDTO.Users.SearchBody.self).sanitized()
+ let q = (try? req.query.decode(HTTPDTO.Users.SearchBody.self))?.sanitized() ?? .init(usernames:nil, emails:nil, phones:nil)
+
+ 
+ to support browsing later
+ extension HTTPDTO.Users {
+     struct BrowseQuery: Content, Sendable {
+         let limit: Int?
+         let offset: Int?
+     }
+ }
+
+ 
+ */
