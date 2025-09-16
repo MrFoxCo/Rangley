@@ -31,6 +31,13 @@ struct AppPalette {
         static let hotPurple        = Color(hex: "#7B68EE")
         static let royalBlue        = Color(hex: "#4169E1")
         static let brightCyan       = Color(hex: "#00FFFF")
+        
+        // Green colors for active meets
+         static let neonGreen        = Color(hex: "#00FF41")
+         static let brightGreen      = Color(hex: "#32CD32")
+         static let electricGreen    = Color(hex: "#00FF00")
+         static let emeraldGreen     = Color(hex: "#50C878")
+         static let springGreen      = Color(hex: "#00FF7F")
     }
     
     struct Text {

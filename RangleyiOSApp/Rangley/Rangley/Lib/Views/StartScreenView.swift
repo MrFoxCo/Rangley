@@ -72,7 +72,6 @@ struct StartScreenView: View
         // <- THIS is what makes it show
         .toolbarBackground(.clear, for: .navigationBar)  // keep the bar transparent
         .toolbarBackground(.visible, for: .navigationBar)
-        .preferredColorScheme(.dark)
     }
 }
 

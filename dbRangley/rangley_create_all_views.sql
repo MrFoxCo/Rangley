@@ -19,6 +19,8 @@ DROP VIEW IF EXISTS rangley.vw_meet_change_stamps_desc CASCADE;
 DROP VIEW IF EXISTS rangley.vw_up_to_date_meets CASCADE;
 DROP VIEW IF EXISTS rangley.vw_meet_coordinates CASCADE;
 DROP VIEW IF EXISTS rangley.vw_meets CASCADE;
+DROP VIEW IF exists rangley.vw_user_privacy_settings cascade;
+
 
 
 CREATE OR REPLACE VIEW rangley.vw_meets AS 
@@ -82,6 +84,19 @@ SELECT
     ,dttm_modified_utc
     ,uuid
 FROM rangley.tb_users;
+
+
+CREATE OR REPLACE VIEW rangley.vw_user_privacy_settings AS
+SELECT
+     user_id 					
+    ,discoverable_by_username 	
+    ,discoverable_by_phone 		
+    ,discoverable_by_email 		
+    ,show_full_name 			
+    ,allow_invites_from_anyone 	
+    ,dttm_created_utc			
+    ,dttm_modified_utc 			
+FROM rangley.tb_user_privacy_settings;
 
 
 CREATE OR REPLACE VIEW rangley.vw_notifications AS

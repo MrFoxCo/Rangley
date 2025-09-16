@@ -14,6 +14,7 @@ DROP TABLE IF EXISTS rangley.tb_meet_ids;
 DROP TABLE IF EXISTS rangley.tb_change_stamps;
 DROP TABLE IF EXISTS rangley.tb_meet_coordinates;
 DROP TABLE IF EXISTS rangley.tb_meets;
+DROP TABLE IF exists rangley.tb_user_privacy_settings 
 
 
 -- Enable UUIDs if not already
@@ -270,6 +271,27 @@ CREATE TABLE rangley.tb_notifications
 CREATE INDEX IF NOT EXISTS idx_notif_meet
   ON rangley.tb_notifications (meet_id);
 
+CREATE TABLE IF NOT EXISTS rangley.tb_user_privacy_settings 
+(
+     user_id 					INT8 		PRIMARY KEY 
+    ,discoverable_by_username 	BOOLEAN 	DEFAULT TRUE
+    ,discoverable_by_phone 		BOOLEAN 	DEFAULT FALSE
+    ,discoverable_by_email 		BOOLEAN 	DEFAULT FALSE
+    ,show_full_name 			BOOLEAN 	DEFAULT FALSE
+    ,allow_invites_from_anyone 	BOOLEAN 	DEFAULT TRUE
+    ,dttm_created_utc			TIMESTAMPTZ DEFAULT NOW()
+    ,dttm_modified_utc 			TIMESTAMPTZ
+);
+
+-- Future enhancement when you add friends TODO: IMPLEMENT IN VERSION 2 OF APPLICATION
+--CREATE TABLE rangley.tb_user_connections (
+--    user_id 				BIGINT NOT NULL,
+--    connected_user_id 		BIGINT NOT NULL,
+--    connection_type 		VARCHAR(20), -- 'friend', 'follower', etc.
+--    dttm_created_utc 		TIMESTAMPTZ DEFAULT NOW(),
+--    PRIMARY KEY (user_id, connected_user_id)
+--);
+
 -- CONSIDER THE JSON BLOB THING FOR NOTIFICATIONS COULD BE USEFUL???
 CREATE TABLE rangley.tb_user_inboxes
 (
@@ -289,3 +311,76 @@ CREATE INDEX IF NOT EXISTS ix_inbox_notification
   ON rangley.tb_user_inboxes (notification_id);
 
 
+
+-- Triggers for users privacy settings
+
+-- 1) Seed defaults when a user is created (no FK used)
+CREATE OR REPLACE FUNCTION rangley.trg_seed_privacy_defaults()
+RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  INSERT INTO rangley.tb_user_privacy_settings (user_id)
+  VALUES (NEW.user_id)
+  ON CONFLICT (user_id) DO NOTHING;  -- idempotent
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS seed_privacy_defaults ON rangley.tb_users;
+CREATE TRIGGER seed_privacy_defaults
+AFTER INSERT ON rangley.tb_users
+FOR EACH ROW
+EXECUTE FUNCTION rangley.trg_seed_privacy_defaults();
+
+-- 2) Touch modified timestamp on privacy updates
+CREATE OR REPLACE FUNCTION rangley.trg_privacy_touch_modified()
+RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  NEW.dttm_modified_utc := NOW();
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS bu_privacy_touch_modified ON rangley.tb_user_privacy_settings;
+CREATE TRIGGER bu_privacy_touch_modified
+BEFORE UPDATE ON rangley.tb_user_privacy_settings
+FOR EACH ROW
+EXECUTE FUNCTION rangley.trg_privacy_touch_modified();
+
+-- 3) (Optional) emulate cascade on user delete, still FK-free
+CREATE OR REPLACE FUNCTION rangley.trg_delete_privacy_on_user_delete()
+RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  DELETE FROM rangley.tb_user_privacy_settings
+  WHERE user_id = OLD.user_id;
+  RETURN OLD;
+END $$;
+
+DROP TRIGGER IF EXISTS ad_delete_privacy_on_user_delete ON rangley.tb_users;
+CREATE TRIGGER ad_delete_privacy_on_user_delete
+AFTER DELETE ON rangley.tb_users
+FOR EACH ROW
+EXECUTE FUNCTION rangley.trg_delete_privacy_on_user_delete();
+
+
+-- Insert if users already existed
+INSERT INTO rangley.tb_user_privacy_settings (user_id)
+SELECT u.user_id
+FROM rangley.tb_users u
+LEFT JOIN rangley.tb_user_privacy_settings ps USING (user_id)
+WHERE ps.user_id IS NULL
+ON CONFLICT (user_id) DO NOTHING;
+
+
+-- Expect 0
+SELECT COUNT(*) AS users_missing_privacy
+FROM rangley.tb_users u
+LEFT JOIN rangley.tb_user_privacy_settings ps USING (user_id)
+WHERE ps.user_id IS NULL;
+
+-- Spot-check
+SELECT u.user_id, u.username, ps.discoverable_by_username, ps.discoverable_by_email, ps.discoverable_by_phone
+FROM rangley.tb_users u
+JOIN rangley.tb_user_privacy_settings ps USING (user_id)
+ORDER BY u.user_id
+LIMIT 20;

@@ -11,12 +11,25 @@ import SwiftUI
 import Amplify
 import AWSPluginsCore
 
-// MARK: - Bubble (the little circle)
 struct MeetBubbleButton: View
 {
     let meet: ViewMeetsModel
     let ns: Namespace.ID
     let onTap: () -> Void
+
+    // Time awareness (for the live halo only)
+    @State private var now: Date = .init()
+    private let timer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
+    private var isActive: Bool { now >= meet.dttm_start_utc && now < meet.dttm_end_utc }
+
+    // Pulse
+    @State private var pulse = false
+
+    // Green palette for rings/glow
+    private let g1 = Color(hex: "#39FF14")  // neon green
+    private let g2 = Color(hex: "#00E676")  // spring green
+    private let g3 = Color(hex: "#00C853")  // deep green
+    private let g4 = Color(hex: "#B9F6CA")  // mint highlight
 
     private var initials: String {
         let n = meet.display_name.trimmingCharacters(in: .whitespaces)
@@ -32,62 +45,22 @@ struct MeetBubbleButton: View
             withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { onTap() }
         } label: {
             ZStack {
-                // Static outer ring
-                Circle()
-                    .stroke(
-                        AngularGradient(
-                            colors: [
-                                AppPalette.Brand.neonPink,
-                                AppPalette.Brand.electricViolet,
-                                AppPalette.Brand.brightTeal,
-                                AppPalette.Brand.neonPurple,
-                                AppPalette.Brand.vibrantBlue,
-                                AppPalette.Brand.neonPink
-                            ],
-                            center: .center
-                        ),
-                        lineWidth: 3
-                    )
-                    .frame(width: 100, height: 100)
-                    .opacity(0.7)
-                
-                // Middle prismatic ring
-                Circle()
-                    .stroke(
-                        AngularGradient(
-                            colors: [
-                                AppPalette.Brand.brightCyan,
-                                AppPalette.Brand.hotPurple,
-                                AppPalette.Brand.electricBlue,
-                                AppPalette.Brand.brightTeal,
-                                AppPalette.Brand.brightCyan
-                            ],
-                            center: .center,
-                            startAngle: .degrees(45),
-                            endAngle: .degrees(405)
-                        ),
-                        lineWidth: 2
-                    )
-                    .frame(width: 92, height: 92)
-                    .opacity(0.5)
-                
-                // Inner glow
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [
-                                AppPalette.Brand.neonPink.opacity(0.3),
-                                AppPalette.Brand.electricViolet.opacity(0.2),
-                                Color.clear
-                            ],
-                            center: .center,
-                            startRadius: 20,
-                            endRadius: 45
-                        )
-                    )
-                    .frame(width: 85, height: 85)
-                
-                // The actual sticker image
+                // ACTIVE: pulsing green halo (outside the rings)
+                if isActive {
+                    Circle()
+                        .fill(g1.opacity(0.22))
+                        .frame(width: 89, height: 89)
+                        .blur(radius: 7)
+                        .scaleEffect(pulse ? 1.06 : 0.98)
+                        .animation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true), value: pulse)
+
+                    Circle()
+                        .stroke(g1.opacity(0.9), lineWidth: 3)
+                        .frame(width: 89, height: 89)
+                        .blur(radius: 0.5)
+                }
+
+                // Sticker
                 Image("RangleySticker")
                     .resizable()
                     .scaledToFit()
@@ -95,14 +68,17 @@ struct MeetBubbleButton: View
             }
         }
         .buttonStyle(.plain)
-        .frame(width: 120, height: 120) // Larger hit area
-        .contentShape(Rectangle()) // Use rectangle instead of circle for easier tapping
+        .frame(width: 120, height: 120)
+        .contentShape(Rectangle())
         .simultaneousGesture(
             TapGesture().onEnded { _ in
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { onTap() }
             }
         )
+        .onReceive(timer) { now = $0 }
+        .onAppear { pulse = true }
+        .accessibilityHint(isActive ? "Active now" : "Not active")
     }
 }
 
@@ -167,6 +143,13 @@ private struct MeetCardView: View
     @State private var showDeleteConfirm = false
     @State private var addressText: String = "Loading address..."
     @State private var geocodingTask: Task<Void, Never>?
+    
+    // "Live" time awareness
+    @State private var now: Date = .init()
+    private let timer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
+    private var isActive: Bool { now >= meet.dttm_start_utc && now < meet.dttm_end_utc }
+    private let liveGreen = Color(hex: "#39FF14") // swap to AppPalette.Brand.neonGreen if you have it
+
 
     // Address components from geocoding
     @State private var displayAddressName  : String = ""
@@ -231,15 +214,20 @@ private struct MeetCardView: View
         VStack(alignment: .leading, spacing: 16)
         {
             // Header with creator name and action buttons
-            HStack(alignment: .center) {
-                VStack(alignment: .leading, spacing: 2)
-                {
-                    Text("Created by")
-                        .font(.caption)
-                        .foregroundStyle(AppPalette.Text.tertiary)
-                    Text(meet.display_name)
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(AppPalette.Text.primary)
+            HStack(alignment: .center)
+            {
+                HStack(spacing: 8) {
+                    if isActive {
+                        LiveDot(color: liveGreen) // small, inline; won't overlap content
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Created by")
+                            .font(.caption)
+                            .foregroundStyle(AppPalette.Text.tertiary)
+                        Text(meet.display_name)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(AppPalette.Text.primary)
+                    }
                 }
                 
                 Spacer()
@@ -385,6 +373,27 @@ private struct MeetCardView: View
         } message: {
             Text("This action cannot be undone.")
         }
+    }
+}
+
+
+// MARK: - Live badge
+private struct LiveDot: View
+{
+    let color: Color
+    var body: some View
+    {
+        ZStack {
+            Circle()
+                .fill(color.opacity(0.22))
+                .frame(width: 20, height: 20)
+                .blur(radius: 1.0)
+            Circle()
+                .fill(color)
+                .frame(width: 10, height: 10)
+        }
+        .padding(10) // nudges it off the top-left corner of the card
+        .accessibilityLabel("Live")
     }
 }
 

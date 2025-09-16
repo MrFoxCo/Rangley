@@ -18,7 +18,6 @@ struct RootGate: View {
                 ProgressView().task { await checkSession() }
             } else if isAuthed {
                 PublicMapView()
-                    .preferredColorScheme(.dark)
             } else {
                 StartScreenView(onAuthenticated: { isAuthed = true })
             }

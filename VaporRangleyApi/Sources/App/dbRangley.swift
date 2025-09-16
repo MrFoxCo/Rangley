@@ -773,7 +773,48 @@ enum Func
         }
     }
 
+    enum ViewAllUsers: PgFunctionRows
+    {
+        static let funcName: RangleyFunc = .v_users_w_cognito_sub // or .v_user_clean
 
+        struct Param: Content, Sendable
+        {
+            let cognito_sub: String
+        }
+
+        struct Results: Content, Sendable
+        {
+            let user_uuid           : String
+            let username            : String
+            let display_name        : String
+            let cellphone           : String?
+            let email               : String?
+            let dob                 : Date
+            let dttm_created_utc    : Date
+        }
+        
+        struct In: Sendable { let cognito_sub: String }
+
+        static func query(_ input: In) -> SQLQueryString {
+            "SELECT * FROM \(unsafeRaw: funcName.rawValue)(\(bind: input.cognito_sub));"
+        }
+
+        static func decode(_ r: any SQLRow) throws -> Results
+        {
+            try .init(
+                user_uuid           : r.decode(column: "user_uuid",         as: String.self),
+                username            : r.decode(column: "username",          as: String.self),
+                display_name        : r.decode(column: "display_name",      as: String.self),
+                cellphone           : r.decode(column: "cellphone",         as: String?.self),
+                email               : r.decode(column: "email",             as: String?.self),
+                dob                 : r.decode(column: "dob",               as: Date.self),
+                dttm_created_utc    : r.decode(column: "dttm_created_utc",  as: Date.self)
+            )
+        }
+    }
+
+    
+    
     enum ViewMeetCategories: PgFunctionRows
     {
         static let funcName: RangleyFunc = .v_meet_categories

@@ -1,6 +1,6 @@
 //
 //  ContentView.swift
-//  Freebird
+//  Rangley
 //
 //  Created by Anthony Guzzardo on 7/1/25.
 //
@@ -31,8 +31,22 @@ import AWSPluginsCore
 public struct PublicMapView: View
 {
     //@EnvironmentObject private var session: SessionModel
+    // =========================================================
+    // MARK: - Toggle Day Night Theme
+    // =========================================================
     
-    
+    @State private var clock: Date = .init()
+    private let dayNightTimer = Timer.publish(every: 300, on: .main, in: .common).autoconnect() // 5 min
+
+    private var isDaylight: Bool {
+        // Simple heuristic: 6am ≤ local time < 8pm
+        let hour = Calendar.current.component(.hour, from: clock)
+        return hour >= 6 && hour < 20
+    }
+
+    // =========================================================
+    // MARK: - END Toggle Day Night Theme
+    // =========================================================
     
     // =========================================================
     // MARK: - Managing Taps
@@ -384,6 +398,9 @@ public struct PublicMapView: View
                         }
                         UserAnnotation() // THIS IS HOW WE DISPLAY THE USER'S LOCATION
                     }
+                    // TODO: - fix doesnt' appear to be working 
+                    .environment(\.colorScheme, isDaylight ? .light : .dark)
+                    .onReceive(dayNightTimer) { clock = $0 }
                     .onMapCameraChange(frequency: .onEnd) { ctx in
                         lastSpan = ctx.region.span
                         currentRegion = ctx.region
@@ -554,6 +571,7 @@ public struct PublicMapView: View
                 }
             }
         }
+        .environment(\.colorScheme, .dark)
         // RELOAD BUTTON
         .overlay(alignment: .topLeading) {
             // Hide reload button when any overlay is active OR badge is expanded
@@ -608,10 +626,9 @@ public struct PublicMapView: View
             })
             .preferredColorScheme(.dark)
         }
-        .preferredColorScheme(.dark)
         // Load on appear
         .task { await loadMeets() }
-
+        .onAppear { clock = Date() }  
         //.overlay(RefreshShim(onRefresh: { await loadMeets() }))
     }
     

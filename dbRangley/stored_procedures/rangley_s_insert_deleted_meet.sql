@@ -79,7 +79,6 @@ BEGIN
     SELECT 
         utdm.meet_id,
         utdm.meet_coordinate_id,
-        utdm.meet_status_id,
         utdm.name,
         utdm.description,
         utdm.meet_category_id,

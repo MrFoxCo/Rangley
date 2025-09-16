@@ -187,7 +187,6 @@ struct LogInPageView: View
                 }
             }
         }
-        .preferredColorScheme(.dark)
     }
 }
 
