@@ -211,7 +211,7 @@ public struct PublicMapView: View
     // MARK: - Meet Creation No Tap Flow
     // =========================================================
     @State private var showCreateForm = false
-
+    
     private func seedForCreate() -> LocationInfo?
     {
         if let sel = selectedLocation { return sel }     // from tap, if any
@@ -226,6 +226,7 @@ public struct PublicMapView: View
             Country: nil, IsoCountryCode: nil, TimeZone: nil, InlandWater: nil, Ocean: nil
         )
     }
+    
     
     // =========================================================
     // MARK: - END Meet Creation No Tap Flow
@@ -387,28 +388,29 @@ public struct PublicMapView: View
                         lastSpan = ctx.region.span
                         currentRegion = ctx.region
                     }
-                    .onTapGesture { location in
-                        Task {
-                            try? await Task.sleep(nanoseconds: 200_000_000) // Increase delay to 0.2s
-                            guard !showLocationPopup && !showMeetOverlay else { return }
-                            // cancel previous debounce
-                            tapTask?.cancel()
-                            tapTask = Task {
-                                try? await Task.sleep(nanoseconds: 300_000_000) // 0.3s - debounce delay
-                                
-                                if let coordinate = proxy.convert(location, from: .local) {
-                                    let geocoder = CLGeocoder()
-                                    let clLocation = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
-                                    if let locationInfo = await createLocationInfoObject(geocoder, clLocation) {
-                                        await MainActor.run {
-                                            selectedLocation = locationInfo
-                                            showLocationPopup = true
+                    .gesture(
+                        SpatialTapGesture().onEnded { value in
+                            Task {
+                                try? await Task.sleep(nanoseconds: 200_000_000)
+                                guard !showLocationPopup && !showMeetOverlay else { return }
+                                tapTask?.cancel()
+                                tapTask = Task {
+                                    try? await Task.sleep(nanoseconds: 300_000_000)
+                                    let point = value.location
+                                    if let coordinate = proxy.convert(point, from: .local) {
+                                        let geocoder = CLGeocoder()
+                                        let clLocation = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+                                        if let locationInfo = await createLocationInfoObject(geocoder, clLocation) {
+                                            await MainActor.run {
+                                                selectedLocation = locationInfo
+                                                showLocationPopup = true
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
-                    }
+                    )
                     .ignoresSafeArea()
                     .simultaneousGesture(
                         // This allows both gestures to work
@@ -471,20 +473,51 @@ public struct PublicMapView: View
                 }
             )
             .allowsHitTesting(showMeetOverlay)
+            // Replace your sheet modifier for showCreateForm with this:
             .sheet(isPresented: $showCreateForm) {
                 MeetCreationFormView(
                     mode: .create(location: seedForCreate()),
                     onCreate: { body in
-                        let token = try await fetchIdToken()
-                        _ = try await AuthAPI.createMeet(baseURL: Env.apiBaseURL, token: token, body: body)
-                        await loadMeets()                 // refresh after success
+                        Task {
+                            do {
+                                // Cache coordinates before async calls
+                                let newLat = body.latitude
+                                let newLon = body.longitude
+                                
+                                let token = try await fetchIdToken()
+                                _ = try await AuthAPI.createMeet(baseURL: Env.apiBaseURL, token: token, body: body)
+                                await loadMeets()
+                                
+                                // Dismiss sheet first, THEN animate camera
+                                await MainActor.run {
+                                    showCreateForm = false
+                                }
+                                
+                                // Add a small delay to ensure sheet is fully dismissed
+                                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+                                
+                                // Now animate to the new location
+                                await MainActor.run {
+                                    withAnimation(.easeInOut(duration: 1.0)) {
+                                        cameraPosition = .region(MKCoordinateRegion(
+                                            center: CLLocationCoordinate2D(latitude: newLat, longitude: newLon),
+                                            span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+                                        ))
+                                    }
+                                }
+                            } catch {
+                                print("createMeet error:", error)
+                            }
+                        }
                     },
                     onClose: { showCreateForm = false },
-                    onPickLocation: nil  // uses your existing picker bridge
-
-                   // onPickLocation: { await pickLocation() }   // uses your existing picker bridge
+                    onPickLocation: nil
                 )
             }
+
+            // REMOVE or comment out these lines:
+            // - The @State private var shouldAnimateToLocation: CLLocationCoordinate2D?
+            // - The entire .onChange(of: shouldAnimateToLocation) modifier at the botto
             .sheet(isPresented: $showEditSheet)
             {
                 if let editing = selectedMeet {
@@ -578,6 +611,7 @@ public struct PublicMapView: View
         .preferredColorScheme(.dark)
         // Load on appear
         .task { await loadMeets() }
+
         //.overlay(RefreshShim(onRefresh: { await loadMeets() }))
     }
     
