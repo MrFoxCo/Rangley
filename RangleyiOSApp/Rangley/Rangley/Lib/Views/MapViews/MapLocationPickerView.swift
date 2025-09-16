@@ -9,7 +9,9 @@ import SwiftUI
 import MapKit
 import CoreLocation
 
-struct MapLocationPicker: View {
+// THIS IS ITHE BAD BOY THAT WE USE FOR PICKING LOCATIONS NOT VIA TAP .. also by tap if u want
+struct MapLocationPicker: View
+{
     let initial: LocationInfo
     let onPick: (LocationInfo) -> Void
     let onCancel: () -> Void

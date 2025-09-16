@@ -24,7 +24,8 @@ public struct DockView: View {
         self.onCreateMeet = onCreateMeet
     }
     
-    public var body: some View {
+    public var body: some View
+    {
         HStack(spacing: 16) {
             // Search button
             Button(action: onSearch) {

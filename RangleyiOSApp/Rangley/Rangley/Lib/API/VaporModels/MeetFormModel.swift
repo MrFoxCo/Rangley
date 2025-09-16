@@ -1,5 +1,5 @@
 //
-//  MeetFormViewModel.swift
+//  MeetFormModel.swift
 //  Rangley
 //
 //  Created by Anthony Guzzardo on 9/14/25.
@@ -10,11 +10,12 @@ import Foundation
 import CoreLocation
 
 enum MeetFormMode {
-    case update(existing: ViewMeetsModel)
     case create(location: LocationInfo? = nil)
+    case update(existing: ViewMeetsModel)
 }
 
-final class MeetFormViewModel: ObservableObject {
+final class MeetFormModel: ObservableObject
+{
     // Inputs (originals for update)
     private let mode: MeetFormMode
     private let meetIDUUID: String? // present in update mode
@@ -47,7 +48,8 @@ final class MeetFormViewModel: ObservableObject {
     private var origRegLon: Double?
     private var origRegRad: Double?
 
-    init(mode: MeetFormMode) {
+    init(mode: MeetFormMode)
+    {
         self.mode = mode
         
         switch mode {
@@ -118,7 +120,8 @@ final class MeetFormViewModel: ObservableObject {
     }
 
     // Validation
-    func validate() -> String? {
+    func validate() -> String?
+    {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "Name is required." }
         guard trimmed.count <= 50 else { return "Name must be 50 characters or fewer." }
@@ -151,7 +154,8 @@ final class MeetFormViewModel: ObservableObject {
     }
 
     // Build update body (send only diffs; return nil if no changes)
-    func makeUpdateBody() -> UpdatedMeetInsertBody? {
+    func makeUpdateBody() -> UpdatedMeetInsertBody?
+    {
         guard case .update = mode, let id = meetIDUUID else { return nil }
 
         // Simple diffs
@@ -230,7 +234,8 @@ final class MeetFormViewModel: ObservableObject {
     }
     
     // Build create body (for new meets)
-    func makeCreateBody() -> MeetInsertBody? {
+    func makeCreateBody() -> MeetInsertBody?
+    {
         guard case .create = mode else { return nil }
         guard let lat = latitude, let lon = longitude,
               let rLat = regionLatitude, let rLon = regionLongitude,

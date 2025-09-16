@@ -9,7 +9,8 @@ import SwiftUI
 import MapKit
 import CoreLocation
 
-final class AddressSearchVM: NSObject, ObservableObject, MKLocalSearchCompleterDelegate {
+final class AddressSearchVM: NSObject, ObservableObject, MKLocalSearchCompleterDelegate
+{
     @Published var query = "" { didSet { completer.queryFragment = query } }
     @Published var suggestions: [MKLocalSearchCompletion] = []
     let completer = MKLocalSearchCompleter()

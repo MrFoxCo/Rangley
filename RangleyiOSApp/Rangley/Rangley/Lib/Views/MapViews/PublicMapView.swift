@@ -15,10 +15,14 @@ import AWSPluginsCore
 // =========================================================
 // =========================================================
 // =========================================================
-// MARK: - IGNORE THE BLOW TODOs FOR NOW
+// MARK: - IGNORE THE BELOW TODOs FOR NOW
 // TODO: - FIGURE OUT A WAY TO TRIGER UPDATES ON OTHER PHONES WHEN MEETS ARE CREATED OR UPDATED
 // TODO: - Fix the rotating screen view -- probably should look to be vertical
 // TODO: - Create UNDO for deletes and updates
+// TODO: - Create UNDO for deletes and updates
+// TODO: - Fix recenter compass top right
+// TODO: - return to user tap
+// TODO: - Remeber User when Login Option and for Create New Account
 // MARK: - IGNORE THE ABOVE TODOs FOR NOW
 // =========================================================
 // =========================================================
@@ -203,6 +207,29 @@ public struct PublicMapView: View
     // =========================================================
     // MARK: - END Meet Creation FLow
     // =========================================================
+    // =========================================================
+    // MARK: - Meet Creation No Tap Flow
+    // =========================================================
+    @State private var showCreateForm = false
+
+    private func seedForCreate() -> LocationInfo?
+    {
+        if let sel = selectedLocation { return sel }     // from tap, if any
+        if let user = seedFromUser() { return user }     // your helper
+        // fall back to current map center
+        let c = currentRegion.center
+        let coord = Coordinate(c.latitude, c.longitude)
+        return LocationInfo(
+            Coordinate: coord, RegionCoordinate: coord, RegionRadius: 600,
+            Name: nil, ThoroughFare: nil, SubThoroughFare: nil, Locality: nil, SubLocality: nil,
+            AdministrativeArea: nil, SubAdministrativeArea: nil, PostalCode: nil,
+            Country: nil, IsoCountryCode: nil, TimeZone: nil, InlandWater: nil, Ocean: nil
+        )
+    }
+    
+    // =========================================================
+    // MARK: - END Meet Creation No Tap Flow
+    // =========================================================
     
     // =========================================================
     // MARK: - Edit Meet FLow
@@ -245,42 +272,6 @@ public struct PublicMapView: View
         isDeletingMeet = false
     }
     
-    // MARK: - Location Picker bridge
-    private enum _PickerRoute: Identifiable { case map, address; var id: Int { hashValue } }
-
-    @State private var _pickerRoute: _PickerRoute?
-    @State private var _pickerSeed: LocationInfo = {
-        // Fallback seed (downtown Chicago). Replace with your current map center if you have it.
-        let c = Coordinate(41.8781, -87.6298)
-        return LocationInfo(
-            Coordinate: c, RegionCoordinate: c, RegionRadius: 2000,
-            Name: nil, ThoroughFare: nil, SubThoroughFare: nil,
-            Locality: nil, SubLocality: nil, AdministrativeArea: nil,
-            SubAdministrativeArea: nil,
-            PostalCode: nil, Country: nil, IsoCountryCode: nil,
-            TimeZone: nil, InlandWater: nil, Ocean: nil
-        )
-    }()
-
-    @State private var _pickerContinuation: CheckedContinuation<LocationInfo?, Never>?
-    
-    // Call this anywhere in PublicMapView:  let picked = await pickLocation()
-    private func pickLocation() async -> LocationInfo?
-    {
-        // If you have a current map center/region, set `_pickerSeed` here before showing the sheet.
-        await withCheckedContinuation { (cont: CheckedContinuation<LocationInfo?, Never>) in
-            _pickerContinuation = cont
-            _pickerRoute = .map // default; user can switch via context menu below if you add one
-        }
-    }
-
-    //^^^ GOES TOGETHer
-    private func resumePicker(with value: LocationInfo?)
-    {
-        _pickerContinuation?.resume(returning: value)
-        _pickerContinuation = nil
-        _pickerRoute = nil
-    }
     // =========================================================
     // MARK: - END Edit Meet FLow
     // =========================================================
@@ -426,7 +417,8 @@ public struct PublicMapView: View
                 }
             }
             // Nearby Meets Badge - positioned in top-right
-            VStack {
+            VStack
+            {
                 HStack {
                     Spacer()
                     
@@ -449,7 +441,7 @@ public struct PublicMapView: View
             }
             .allowsHitTesting(!showMeetOverlay && !showLocationPopup)
             // ADD THIS: Pink location popup overlay
-            MeetCreationOverlay(
+            MeetCreationOverlayByTap(
                 selectedLocation: $selectedLocation,
                 showPopup: $showLocationPopup,
                 onCreateMeet: { location, name, start, end in
@@ -478,30 +470,20 @@ public struct PublicMapView: View
                     }
                 }
             )
-
             .allowsHitTesting(showMeetOverlay)
-            .sheet(item: $_pickerRoute)
-            { route in
-                switch route {
-                case .map:
-                    MapLocationPicker(
-                        initial: _pickerSeed,
-                        onPick: { picked in resumePicker(with: picked) },
-                        onCancel: { resumePicker(with: nil) }
-                    )
-                    .interactiveDismissDisabled(false)
-                    .onDisappear { if _pickerRoute == nil { /* already handled */ } else { resumePicker(with: nil) } }
+            .sheet(isPresented: $showCreateForm) {
+                MeetCreationFormView(
+                    mode: .create(location: seedForCreate()),
+                    onCreate: { body in
+                        let token = try await fetchIdToken()
+                        _ = try await AuthAPI.createMeet(baseURL: Env.apiBaseURL, token: token, body: body)
+                        await loadMeets()                 // refresh after success
+                    },
+                    onClose: { showCreateForm = false },
+                    onPickLocation: nil  // uses your existing picker bridge
 
-
-                case .address:
-                    AddressSearchPicker(
-                        initialRadiusMeters: _pickerSeed.RegionRadius,
-                        onPick: { picked in resumePicker(with: picked) },
-                        onCancel: { resumePicker(with: nil) }
-                    )
-                    .interactiveDismissDisabled(false)
-                    .onDisappear { if _pickerRoute == nil { } else { resumePicker(with: nil) } }
-                }
+                   // onPickLocation: { await pickLocation() }   // uses your existing picker bridge
+                )
             }
             .sheet(isPresented: $showEditSheet)
             {
@@ -518,7 +500,8 @@ public struct PublicMapView: View
                             }
                         },
                         onClose: { showEditSheet = false },
-                        onPickLocation: { await pickLocation() } // if you have one
+                        onPickLocation: nil
+                        // onPickLocation: { await editMeetPickLocation() } // if you have one
                     )
                 }
             }
@@ -572,14 +555,8 @@ public struct PublicMapView: View
                 Spacer()
                 DockView(
                     onSignOut: { signOutAndGoStart() },
-                    onSearch: {
-                        // TODO: Implement search logic
-                        print("Search tapped")
-                    },
-                    onCreateMeet: {
-                        // TODO: Implement create meet logic
-                        print("Create meet tapped")
-                    }
+                    onSearch:  { print("Search tapped") },
+                    onCreateMeet: { showCreateForm = true }
                 )
                 Spacer()
             }

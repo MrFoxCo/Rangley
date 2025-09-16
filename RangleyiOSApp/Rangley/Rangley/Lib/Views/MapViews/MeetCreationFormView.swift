@@ -2,318 +2,138 @@
 //  MeetCreationFormView.swift
 //  Rangley
 //
-//  Created by Anthony Guzzardo on 9/12/25.
+//  Created by Anthony Guzzardo on 9/14/25.
 //
 
-import UIKit
 import SwiftUI
 import CoreLocation
-import QuartzCore // for confetti supports the CA_* stuff
+import QuartzCore
+
 struct MeetCreationFormView: View
 {
-    let locationInfo: LocationInfo
-    let onConfirm: (String, Date, Date) -> Void
-    let onBack: () -> Void
+    @State private var showLocationPicker = false
+    
+    // Location display states
+    @State private var displayLocationName: String = "Loading location..."
+    @State private var displayLocationSubtitle: String = ""
+    @State private var geocodingTask: Task<Void, Never>?
+    
+    private func pickLocation() async -> LocationInfo? {
+        // Your location picking logic here
+        // This could open a location picker, use current location, etc.
+        // For now, just return nil
+        return nil
+    }
+    
+    // Seed from the existing meet (so the picker opens where the meet is now)
+    private var seedLocation: LocationInfo
+    {
+        switch mode {
+        case .create(let location):
+            if let location { return location }
+            // Default (can be replaced by user’s current)
+            return LocationInfo(
+                Coordinate: .init(37.7749, -122.4194),
+                RegionCoordinate: .init(37.7749, -122.4194),
+                RegionRadius: 1000.0,
+                Name: "Default Location",
+                ThoroughFare: nil, SubThoroughFare: nil,
+                Locality: nil, SubLocality: nil,
+                AdministrativeArea: nil, SubAdministrativeArea: nil,
+                PostalCode: nil,
+                Country: nil, IsoCountryCode: nil,
+                TimeZone: nil, InlandWater: nil, Ocean: nil
+            )
+        }
+    }
 
-    @State private var meetName = ""
-    @State private var startTime = Date()
-    @State private var endTime = Date().addingTimeInterval(3600) // Default 1 hour later
+    // MARK: Inputs
+    let mode: MeetFormNoTapMode                     // .create(location: ...)
+    let onCreate: (MeetInsertBody) async throws -> Void
+    let onClose: () -> Void
+    /// Optional async location picker; return a full LocationInfo (all 5 fields).
+    let onPickLocation: (() async -> LocationInfo?)?
 
+    // MARK: VM
+    @StateObject private var vm: MeetFormNoTapModel
+
+    // MARK: UI State
     @State private var isAnimating = false
-    @State private var currentFieldStep: FieldStep = .name
-
+    @State private var isSubmitting = false
+    @State private var submitError: String?
+    @State private var currentFieldStep: FieldStep = .location
     @FocusState private var isNameFieldFocused: Bool
 
+    init(
+        mode: MeetFormNoTapMode,
+        onCreate: @escaping (MeetInsertBody) async throws -> Void,
+        onClose: @escaping () -> Void,
+        onPickLocation: (() async -> LocationInfo?)? = nil
+    ) {
+        self.mode = mode
+        self.onCreate = onCreate
+        self.onClose = onClose
+        self.onPickLocation = onPickLocation
+        _vm = StateObject(wrappedValue: MeetFormNoTapModel(mode: mode))
+    }
+
+    // MARK: Steps
     enum FieldStep: CaseIterable
     {
-        case name, startTime, endTime, review
+        case location, name, startTime, endTime, review
 
-        var title: String {
+        func title() -> String {
             switch self {
-            case .name: return "Name your meet"
+            case .location:  return "Choose your location"
+            case .name:      return "Name your meet"
             case .startTime: return "When does it start?"
-            case .endTime: return "When does it end?"
-            case .review: return "Review & Create"
-            }
-        }
-
-        var stepNumber: Int {
-            switch self {
-            case .name: return 1
-            case .startTime: return 2
-            case .endTime: return 3
-            case .review: return 4
+            case .endTime:   return "When does it end?"
+            case .review:    return "Review & Create"
             }
         }
     }
 
     private var totalSteps: Int { FieldStep.allCases.count }
 
-    private var locationDisplayName: String
-    {
-        if let name = locationInfo.Name, !name.isEmpty { return name }
-        if let thoroughfare = locationInfo.ThoroughFare { return thoroughfare }
-        if let locality = locationInfo.Locality { return locality }
-        return "Selected location"
-    }
-
+    // MARK: Progress enablement
     private var canProceed: Bool
     {
         switch currentFieldStep {
+        case .location:
+            // Require all 5 fields for create
+            return coordProvidedCount == 5
         case .name:
-            return !meetName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            return !vm.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         case .startTime:
             return true
         case .endTime:
-            return endTime > startTime
+            return vm.end > vm.start
         case .review:
-            return !meetName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                && endTime > startTime
+            if let err = vm.validate() { submitError = err; return false }
+            // For create, ensure body is buildable
+            return vm.makeCreateBody() != nil
         }
     }
 
-    private func nextStep() {
-      withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-        switch currentFieldStep {
-        case .name:
-          isNameFieldFocused = false   // hide keyboard before moving on
-          currentFieldStep = .startTime
-        case .startTime: currentFieldStep = .endTime
-        case .endTime:   currentFieldStep = .review
-        case .review:
-          let trimmed = meetName.trimmingCharacters(in: .whitespacesAndNewlines)
-          onConfirm(String(trimmed.prefix(50)), startTime, endTime)
-        }
-      }
-    }
-
-
-    private func previousStep()
-    {
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-            switch currentFieldStep {
-            case .name:
-                onBack()
-            case .startTime:
-                currentFieldStep = .name
-            case .endTime:
-                currentFieldStep = .startTime
-            case .review:
-                currentFieldStep = .endTime
-            }
-        }
-    }
-    struct DetailRow: View
-    {
-        let label: String
-        let value: String
-    
-        var body: some View {
-            HStack {
-                Text(label)
-                    .font(.system(size: 14))
-                    .foregroundColor(AppPalette.Text.secondary)
-    
-                Spacer()
-    
-                Text(value)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(AppPalette.Text.primary)
-            }
-        }
-    }
+    // MARK: View Body
     var body: some View
     {
-        VStack(spacing: 0) {
-            // Header with back button and progress
-            VStack(spacing: 16) {
-                HStack {
-                    Button(action: previousStep) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "chevron.left")
-                                .font(.system(size: 16, weight: .medium))
-                            Text(currentFieldStep == .name ? "Cancel" : "Back")
-                                .font(.system(size: 16, weight: .medium))
-                        }
-                        .foregroundColor(AppPalette.Brand.neonPink)
-                    }
+        VStack(spacing: 0)
+        {
+            header
+            progressBar
 
-                    Spacer()
+            // Location card + change button
+            locationCard
 
-                    // Dynamic step indicator
-                    Text("Step \(currentFieldStep.stepNumber) of \(totalSteps)")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(AppPalette.Text.secondary)
-                }
+            // Current step content
+            contentForCurrentStep
 
-                // Progress bar (dynamic)
-                GeometryReader { geometry in
-                    ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 2)
-                            .fill(AppPalette.Surface.fieldFill)
-                            .frame(height: 4)
-
-                        RoundedRectangle(cornerRadius: 2)
-                            .fill(AppPalette.Brand.neonPink)
-                            .frame(
-                                width: geometry.size.width * (Double(currentFieldStep.stepNumber) / Double(totalSteps)),
-                                height: 4
-                            )
-                            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: currentFieldStep)
-                    }
-                }
-                .frame(height: 4)
-            }
-            .padding(.horizontal, 24)
-            .padding(.top, 20)
-            .padding(.bottom, 24)
-
-            // Location preview (always visible)
-            VStack(alignment: .leading, spacing: 8) {
-                Label {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(locationDisplayName)
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(AppPalette.Text.primary)
-
-                        if let locality = locationInfo.Locality,
-                           let state = locationInfo.AdministrativeArea {
-                            Text("\(locality), \(state)")
-                                .font(.system(size: 12))
-                                .foregroundColor(AppPalette.Text.secondary)
-                        }
-                    }
-                } icon: {
-                    Image(systemName: "location.fill")
-                        .foregroundColor(AppPalette.Brand.neonPink)
-                        .font(.system(size: 16))
-                }
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(AppPalette.Surface.fieldFill)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
-                        )
-                )
-            }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 24)
-
-            // Current field content
-            VStack(spacing: 24) {
-                Text(currentFieldStep.title)
-                    .font(.system(size: 24, weight: .bold))
-                    .foregroundColor(AppPalette.Text.primary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 24)
-
-                Group {
-                    switch currentFieldStep {
-                    case .name:
-                        VStack(alignment: .leading, spacing: 8) {
-                            TextField("", text: $meetName, prompt: Text("Enter meet name").foregroundColor(AppPalette.Text.tertiary))
-                                .font(.system(size: 18))
-                                .foregroundColor(AppPalette.Text.primary)
-                                .focused($isNameFieldFocused)
-                                .padding(16)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .fill(AppPalette.Surface.fieldFill)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 12)
-                                                .stroke(
-                                                    isNameFieldFocused ? AppPalette.Surface.focusStroke : AppPalette.Surface.fieldStroke,
-                                                    lineWidth: isNameFieldFocused ? 2 : 1
-                                                )
-                                        )
-                                )
-                                .onAppear {
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                                        isNameFieldFocused = true
-                                    }
-                                }
-                        }
-                        .padding(.horizontal, 24)
-
-                    case .startTime:
-                        VStack(spacing: 16) {
-                            DatePicker("", selection: $startTime, displayedComponents: [.date, .hourAndMinute])
-                                .datePickerStyle(.wheel)
-                                .labelsHidden()
-                                .tint(AppPalette.Brand.neonPink)
-                                .frame(height: 200)
-                                .padding(.horizontal, 8)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .fill(AppPalette.Surface.fieldFill)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 12)
-                                                .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
-                                        )
-                                )
-                        }
-                        .padding(.horizontal, 24)
-
-                    case .endTime:
-                        VStack(spacing: 16) {
-                            DatePicker("", selection: $endTime, in: startTime..., displayedComponents: [.date, .hourAndMinute])
-                                .datePickerStyle(.wheel)
-                                .labelsHidden()
-                                .tint(AppPalette.Brand.neonPink)
-                                .frame(height: 200)
-                                .padding(.horizontal, 8)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .fill(AppPalette.Surface.fieldFill)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 12)
-                                                .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
-                                        )
-                                )
-
-                            if endTime <= startTime {
-                                Text("End time must be after start time")
-                                    .font(.system(size: 12))
-                                    .foregroundColor(AppPalette.Brand.neonPink)
-                            }
-                        }
-                        .padding(.horizontal, 24)
-
-                    case .review:
-                        VStack(spacing: 20) {
-                            VStack(alignment: .leading, spacing: 16) {
-                                DetailRow(label: "Meet Name", value: meetName)
-                                DetailRow(label: "Start", value: formatDate(startTime))
-                                DetailRow(label: "End", value: formatDate(endTime))
-                                DetailRow(label: "Duration", value: formatDuration(from: startTime, to: endTime))
-                                // Capacity intentionally removed (feature paused)
-                            }
-                            .padding(20)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(AppPalette.Surface.fieldFill)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
-                                    )
-                            )
-                        }
-                        .padding(.horizontal, 24)
-                    }
-                }
-                .transition(.asymmetric(
-                    insertion: .move(edge: .trailing).combined(with: .opacity),
-                    removal: .move(edge: .leading).combined(with: .opacity)
-                ))
-            }
-
-            Spacer()
+            Spacer(minLength: 0)
 
             // Action button
-            Button(action: nextStep) {
+            Button(action: nextStep)
+            {
                 Text(currentFieldStep == .review ? "Create Meet" : "Next")
                     .font(.system(size: 16, weight: .bold))
                     .foregroundColor(.white)
@@ -324,9 +144,17 @@ struct MeetCreationFormView: View
                             .fill(canProceed ? AppPalette.Brand.neonPink : AppPalette.Brand.neonPink.opacity(0.5))
                     )
             }
-            .disabled(!canProceed)
+            .disabled(!canProceed || isSubmitting)
             .padding(.horizontal, 24)
             .padding(.bottom, 24)
+            .overlay(alignment: .bottom) {
+                if let submitError, currentFieldStep == .review {
+                    Text(submitError)
+                        .font(.footnote)
+                        .foregroundColor(.red)
+                        .padding(.bottom, 4)
+                }
+            }
         }
         .background(
             RoundedRectangle(cornerRadius: 24)
@@ -343,13 +171,514 @@ struct MeetCreationFormView: View
             withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                 isAnimating = true
             }
-            if endTime <= startTime { endTime = startTime.addingTimeInterval(3600) }
+            // Ensure end > start on entry
+            if vm.end <= vm.start { vm.end = vm.start.addingTimeInterval(3600) }
+            // Load the current location address
+            loadCurrentLocationAddress()
         }
-        .onChange(of: startTime) { _, newStart in
-            if endTime <= newStart { endTime = newStart.addingTimeInterval(3600) }
+        .onChange(of: vm.start, initial: false) { _, newStart in
+            if vm.end <= newStart { vm.end = newStart.addingTimeInterval(3600) }
         }
-        .onTapGesture {
-            isNameFieldFocused = false
+        .onTapGesture { isNameFieldFocused = false }
+        .onDisappear { geocodingTask?.cancel() }
+        .sheet(isPresented: $showLocationPicker) {
+            LocationPickerSheet(
+                initial: seedLocation,
+                onPick: { picked in
+                    // same apply code as above…
+                    vm.latitude        = picked.Coordinate.latitude
+                    vm.longitude       = picked.Coordinate.longitude
+                    vm.regionLatitude  = picked.RegionCoordinate.latitude
+                    vm.regionLongitude = picked.RegionCoordinate.longitude
+                    vm.regionRadius    = picked.RegionRadius
+                    displayLocationName = "Loading new location..."
+                    displayLocationSubtitle = ""
+                    loadNewLocationAddress(picked)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { showLocationPicker = false }
+                },
+                onCancel: { DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { showLocationPicker = false } }
+            )
+        }
+
+
+    }
+
+    // MARK: Location helpers
+    private func applyPickedLocation(_ picked: LocationInfo) {
+        vm.latitude        = picked.Coordinate.latitude
+        vm.longitude       = picked.Coordinate.longitude
+        vm.regionLatitude  = picked.RegionCoordinate.latitude
+        vm.regionLongitude = picked.RegionCoordinate.longitude
+        vm.regionRadius    = picked.RegionRadius
+
+        // Show temporary state while loading new address
+        displayLocationName = "Loading new location..."
+        displayLocationSubtitle = ""
+        loadNewLocationAddress(picked)
+    }
+
+    private func reviewLocationString() -> String {
+        if let lat = vm.latitude, let lon = vm.longitude {
+            return "\(displayLocationName) • \(String(format: "%.4f", lat)), \(String(format: "%.4f", lon))"
+        }
+        return displayLocationName
+    }
+
+    // MARK: Location Address Loading
+    private func loadCurrentLocationAddress() {
+        geocodingTask?.cancel()
+        switch mode {
+        case .create(let location):
+            if let location {
+                geocodingTask = Task {
+                    let geocoder = CLGeocoder()
+                    let clLocation = CLLocation(latitude: location.Coordinate.latitude, longitude: location.Coordinate.longitude)
+                    do {
+                        let placemarks = try await geocoder.reverseGeocodeLocation(clLocation)
+                        guard let p = placemarks.first else {
+                            await MainActor.run {
+                                displayLocationName = "Unknown location"
+                                displayLocationSubtitle = "Lat: \(String(format: "%.4f", location.Coordinate.latitude)), Lng: \(String(format: "%.4f", location.Coordinate.longitude))"
+                            }
+                            return
+                        }
+                        let name = p.name?.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let street = p.thoroughfare?.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let number = p.subThoroughfare?.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let city = p.locality?.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let state = p.administrativeArea?.trimmingCharacters(in: .whitespacesAndNewlines)
+                        await MainActor.run {
+                            displayLocationName = name ?? street ?? "New Location"
+                            displayLocationSubtitle = [
+                                [number, street].compactMap { $0 }.joined(separator: " "),
+                                [city, state].compactMap { $0 }.joined(separator: ", ")
+                            ].filter { !$0.isEmpty }.joined(separator: " • ")
+                        }
+                    } catch {
+                        await MainActor.run {
+                            displayLocationName = "New location"
+                            displayLocationSubtitle = "Lat: \(String(format: "%.4f", location.Coordinate.latitude)), Lng: \(String(format: "%.4f", location.Coordinate.longitude))"
+                        }
+                    }
+                }
+            } else {
+                displayLocationName = "Choose a location"
+                displayLocationSubtitle = "Tap 'Change Location' to select"
+            }
+        }
+    }
+    
+    private func loadNewLocationAddress(_ locationInfo: LocationInfo) {
+        geocodingTask?.cancel()
+        geocodingTask = Task {
+            let geocoder = CLGeocoder()
+            let location = CLLocation(latitude: locationInfo.Coordinate.latitude, longitude: locationInfo.Coordinate.longitude)
+            do {
+                let placemarks = try await geocoder.reverseGeocodeLocation(location)
+                guard let p = placemarks.first else {
+                    await MainActor.run {
+                        displayLocationName = "New location selected"
+                        displayLocationSubtitle = "Lat: \(String(format: "%.4f", locationInfo.Coordinate.latitude)), Lng: \(String(format: "%.4f", locationInfo.Coordinate.longitude))"
+                    }
+                    return
+                }
+                let name = p.name?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let street = p.thoroughfare?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let number = p.subThoroughfare?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let city = p.locality?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let state = p.administrativeArea?.trimmingCharacters(in: .whitespacesAndNewlines)
+                await MainActor.run {
+                    displayLocationName = name ?? street ?? "New Location"
+                    displayLocationSubtitle = [
+                        [number, street].compactMap { $0 }.joined(separator: " "),
+                        [city, state].compactMap { $0 }.joined(separator: ", ")
+                    ].filter { !$0.isEmpty }.joined(separator: " • ")
+                }
+            } catch {
+                await MainActor.run {
+                    displayLocationName = "New location selected"
+                    displayLocationSubtitle = "Lat: \(String(format: "%.4f", locationInfo.Coordinate.latitude)), Lng: \(String(format: "%.4f", locationInfo.Coordinate.longitude))"
+                }
+            }
+        }
+    }
+
+    // MARK: Header & Progress
+    private var header: some View {
+        VStack(spacing: 16) {
+            HStack {
+                Button(action: previousStep) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 16, weight: .medium))
+                        Text(currentFieldStep == .location ? "Cancel" : "Back")
+                            .font(.system(size: 16, weight: .medium))
+                    }
+                    .foregroundColor(AppPalette.Brand.neonPink)
+                }
+
+                Spacer()
+
+                Text("Step \(stepNumber(for: currentFieldStep)) of \(totalSteps)")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(AppPalette.Text.secondary)
+                    .accessibilityValue("Step \(stepNumber(for: currentFieldStep)) of \(totalSteps)")
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 20)
+        }
+        .padding(.bottom, 12)
+    }
+
+    private func stepNumber(for step: FieldStep) -> Int
+    {
+        switch step {
+        case .location: return 1
+        case .name: return 2
+        case .startTime: return 3
+        case .endTime: return 4
+        case .review: return 5
+        }
+    }
+
+    private var progressBar: some View
+    {
+        GeometryReader { geometry in
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(AppPalette.Surface.fieldFill)
+                    .frame(height: 4)
+
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(AppPalette.Brand.neonPink)
+                    .frame(
+                        width: geometry.size.width * (Double(stepNumber(for: currentFieldStep)) / Double(totalSteps)),
+                        height: 4
+                    )
+                    .animation(.spring(response: 0.3, dampingFraction: 0.8), value: currentFieldStep)
+            }
+        }
+        .frame(height: 4)
+        .padding(.horizontal, 24)
+        .padding(.bottom, 24)
+    }
+
+    // MARK: Location Card
+    private var locationCard: some View
+    {
+        VStack(alignment: .leading, spacing: 8)
+        {
+            Label {
+                VStack(alignment: .leading, spacing: 4)
+                {
+                    Text(displayLocationName)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(AppPalette.Text.primary)
+
+                    Text(displayLocationSubtitle)
+                        .font(.system(size: 12))
+                        .foregroundColor(AppPalette.Text.secondary)
+                }
+            } icon: {
+                Image(systemName: "location.fill")
+                    .foregroundColor(AppPalette.Brand.neonPink)
+                    .font(.system(size: 16))
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(AppPalette.Surface.fieldFill)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
+                    )
+            )
+
+            HStack {
+                Button {
+                    if let picker = onPickLocation {
+                        Task {
+                            if let picked = await picker() {
+                                await MainActor.run { applyPickedLocation(picked) }
+                            }
+                        }
+                    } else {
+                        showLocationPicker = true
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "mappin.and.ellipse")
+                        Text("Change Location")
+                    }
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(AppPalette.Brand.neonPink)
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(AppPalette.Brand.neonPink.opacity(0.6), lineWidth: 1)
+                    )
+                }
+
+                if coordProvidedCount > 0 && coordProvidedCount != 5 {
+                    Text("Provide all 5 fields or none")
+                        .foregroundColor(.red)
+                        .font(.footnote)
+                        .padding(.leading, 8)
+                }
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.bottom, 24)
+    }
+
+    private var coordProvidedCount: Int
+    {
+        [vm.latitude, vm.longitude, vm.regionLatitude, vm.regionLongitude, vm.regionRadius]
+            .compactMap { $0 }.count
+    }
+
+    // MARK: Step Content
+    private var contentForCurrentStep: some View
+    {
+        VStack(spacing: 24) {
+            Text(currentFieldStep.title())
+                .font(.system(size: 24, weight: .bold))
+                .foregroundColor(AppPalette.Text.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 24)
+
+            Group {
+                switch currentFieldStep
+                {
+                case .location:
+                    VStack(spacing: 12) {
+                        Text("Pick a spot for your meet. Use the button below or the card above.")
+                            .font(.system(size: 14))
+                            .foregroundColor(AppPalette.Text.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                        Button {
+                            if let picker = onPickLocation {
+                                Task {
+                                    if let picked = await picker() {
+                                        await MainActor.run { applyPickedLocation(picked) }
+                                    }
+                                }
+                            } else {
+                                showLocationPicker = true
+                            }
+                        } label: {
+                            HStack {
+                                Image(systemName: "map")
+                                Text("Open Location Picker")
+                            }
+                            .font(.system(size: 16, weight: .semibold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(AppPalette.Brand.neonPink, lineWidth: 1)
+                            )
+                        }
+                        .padding(.top, 4)
+                    }
+                    .padding(.horizontal, 24)
+
+                case .name:
+                    VStack(alignment: .leading, spacing: 8)
+                    {
+                        TextField("", text: $vm.name, prompt: Text("Enter meet name").foregroundColor(AppPalette.Text.tertiary))
+                            .font(.system(size: 18))
+                            .foregroundColor(AppPalette.Text.primary)
+                            .focused($isNameFieldFocused)
+                            .padding(16)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(AppPalette.Surface.fieldFill)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(
+                                                isNameFieldFocused ? AppPalette.Surface.focusStroke : AppPalette.Surface.fieldStroke,
+                                                lineWidth: isNameFieldFocused ? 2 : 1
+                                            )
+                                    )
+                            )
+                            .onAppear {
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                    isNameFieldFocused = true
+                                }
+                            }
+
+                        Text("\(vm.name.count)/50")
+                            .font(.footnote)
+                            .foregroundColor(AppPalette.Text.tertiary)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                    }
+                    .padding(.horizontal, 24)
+
+                case .startTime:
+                    VStack(spacing: 16)
+                    {
+                        DatePicker("", selection: $vm.start, displayedComponents: [.date, .hourAndMinute])
+                            .datePickerStyle(.wheel)
+                            .labelsHidden()
+                            .tint(AppPalette.Brand.neonPink)
+                            .frame(height: 200)
+                            .padding(.horizontal, 8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(AppPalette.Surface.fieldFill)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
+                                    )
+                            )
+                    }
+                    .padding(.horizontal, 24)
+
+                case .endTime:
+                    VStack(spacing: 16)
+                    {
+                        DatePicker("", selection: $vm.end, in: vm.start..., displayedComponents: [.date, .hourAndMinute])
+                            .datePickerStyle(.wheel)
+                            .labelsHidden()
+                            .tint(AppPalette.Brand.neonPink)
+                            .frame(height: 200)
+                            .padding(.horizontal, 8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(AppPalette.Surface.fieldFill)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
+                                    )
+                            )
+
+                        if vm.end <= vm.start {
+                            Text("End time must be after start time")
+                                .font(.system(size: 12))
+                                .foregroundColor(AppPalette.Brand.neonPink)
+                        }
+                    }
+                    .padding(.horizontal, 24)
+
+                case .review:
+                    VStack(spacing: 20)
+                    {
+                        VStack(alignment: .leading, spacing: 16)
+                        {
+                            DetailRow(label: "Meet Location", value: reviewLocationString())
+                            DetailRow(label: "Meet Name", value: vm.name)
+                            DetailRow(label: "Start", value: formatDate(vm.start))
+                            DetailRow(label: "End", value: formatDate(vm.end))
+                            DetailRow(label: "Duration", value: formatDuration(from: vm.start, to: vm.end))
+
+                            if let desc = vm.descriptionText, !desc.isEmpty {
+                                DetailRow(label: "Description", value: desc)
+                            }
+                            if let cap = vm.maxCapacity {
+                                DetailRow(label: "Capacity", value: "\(cap)")
+                            }
+                            DetailRow(label: "Ready", value: vm.makeCreateBody() != nil ? "Yes" : "No")
+                        }
+                        .padding(20)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(AppPalette.Surface.fieldFill)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
+                                )
+                        )
+                    }
+                    .padding(.horizontal, 24)
+                }
+            }
+            .transition(.asymmetric(
+                insertion: .move(edge: .trailing).combined(with: .opacity),
+                removal: .move(edge: .leading).combined(with: .opacity)
+            ))
+        }
+    }
+
+    // MARK: Actions
+    private func nextStep()
+    {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            switch currentFieldStep {
+            case .location:
+                currentFieldStep = .name
+            case .name:
+                isNameFieldFocused = false
+                currentFieldStep = .startTime
+            case .startTime:
+                currentFieldStep = .endTime
+            case .endTime:
+                currentFieldStep = .review
+            case .review:
+                submit()
+            }
+        }
+    }
+
+    private func previousStep()
+    {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            switch currentFieldStep {
+            case .location:
+                onClose()
+            case .name:
+                currentFieldStep = .location
+            case .startTime:
+                currentFieldStep = .name
+            case .endTime:
+                currentFieldStep = .startTime
+            case .review:
+                currentFieldStep = .endTime
+            }
+        }
+    }
+
+    private func submit()
+    {
+        if isSubmitting { return }
+        submitError = vm.validate()
+        guard submitError == nil else { return }
+
+        isSubmitting = true
+        Task {
+            defer { Task { @MainActor in isSubmitting = false } }
+            do {
+                if let body = vm.makeCreateBody() {
+                    try await onCreate(body)
+                    await MainActor.run { onClose() }
+                } else {
+                    await MainActor.run { submitError = "Missing required fields." }
+                }
+            } catch {
+                await MainActor.run { submitError = error.localizedDescription }
+            }
+        }
+    }
+
+    // MARK: Helpers
+    private struct DetailRow: View
+    {
+        let label: String
+        let value: String
+        var body: some View {
+            HStack {
+                Text(label)
+                    .font(.system(size: 14))
+                    .foregroundColor(AppPalette.Text.secondary)
+                Spacer()
+                Text(value)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(AppPalette.Text.primary)
+                    .multilineTextAlignment(.trailing)
+            }
         }
     }
 
@@ -359,173 +688,18 @@ struct MeetCreationFormView: View
         f.timeStyle = .short
         return f
     }()
+    
     private func formatDate(_ date: Date) -> String {
         Self.reviewFormatter.string(from: date)
     }
-
-
-    private func formatDuration(from start: Date, to end: Date) -> String {
+    
+    private func formatDuration(from start: Date, to end: Date) -> String
+    {
         let interval = max(0, end.timeIntervalSince(start))
         let hours = Int(interval) / 3600
         let minutes = (Int(interval) % 3600) / 60
         if hours > 0 && minutes > 0 { return "\(hours)h \(minutes)m" }
         if hours > 0 { return "\(hours) hour\(hours == 1 ? "" : "s")" }
         return "\(minutes) minute\(minutes == 1 ? "" : "s")"
-
-    }
-}
-
-struct MeetCreationOverlay: View
-{
-    @Binding var selectedLocation: LocationInfo?
-    @Binding var showPopup: Bool
-    // Make this async + throws
- 
-    //================================================
-    // MARK: - MeetCreation API Flow
-    //================================================
-    let onCreateMeet: (LocationInfo, String, Date, Date) async throws -> Void
-
-    @State private var currentStep: Step = .locationConfirm
-    @State private var isSubmitting = false
-    @State private var submitError: String?
-    
-    //================================================
-    // MARK: - END MeetCreation API Flow
-    //================================================
-
-    //================================================
-    // MARK: - MeetCreation Effect Flow
-    //================================================
-    @State private var isExploding = false
-    @State private var showConfetti = false
-    
-    private func explodeThenDismiss()
-    {
-        guard !isExploding else { return }
-        isExploding = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) { showConfetti = true }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-            showConfetti = false
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                showPopup = false
-                currentStep = .locationConfirm
-                isExploding = false
-            }
-        }
-        UINotificationFeedbackGenerator().notificationOccurred(.success)
-    }
-    //================================================
-    // MARK: - END MeetCreation Effect Flow
-    //================================================
-    
-    enum Step { case locationConfirm, meetDetails }
-
-    var body: some View
-    {
-        ZStack {
-            if showPopup, let location = selectedLocation {
-                Color.black.opacity(0.4)
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        if currentStep == .locationConfirm {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                showPopup = false
-                                currentStep = .locationConfirm
-                            }
-                        }
-                    }
-
-                Group {
-                    switch currentStep
-                    {
-                    case .locationConfirm:
-                        LocationConfirmationPopupView(
-                            locationInfo: location,
-                            onConfirm: {
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                    currentStep = .meetDetails
-                                }
-                            },
-                            onCancel: {
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                    showPopup = false
-                                    currentStep = .locationConfirm
-                                }
-                            }
-                        )
-                        .transition(.asymmetric(
-                            insertion: .scale.combined(with: .opacity),
-                            removal: .scale(scale: 0.95).combined(with: .opacity)
-                        ))
-
-                    case .meetDetails:
-                        ZStack {
-                            MeetCreationFormView(
-                                locationInfo: location,
-                                onConfirm: { name, start, end in
-                                    guard !isSubmitting else { return }
-                                    submitError = nil
-                                    isSubmitting = true
-                                    Task {
-                                        do {
-                                            try await onCreateMeet(location, name, start, end)
-                                            await MainActor.run {
-                                                withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
-                                                    explodeThenDismiss()
-                                                }
-                                            }
-                                        } catch {
-                                            await MainActor.run {
-                                                submitError = error.localizedDescription
-                                            }
-                                        }
-                                        await MainActor.run { isSubmitting = false }
-                                    }
-                                },
-                                onBack: {
-                                    guard !isExploding else { return }
-                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                        currentStep = .locationConfirm
-                                    }
-                                }
-                            )
-                            .frame(maxWidth: 400, maxHeight: 650)
-                            .allowsHitTesting(!isSubmitting && !isExploding)
-                            .scaleEffect(isExploding ? 0.6 : 1.0)
-                            .opacity(isExploding ? 0.0 : 1.0)
-                            .animation(.spring(response: 0.35, dampingFraction: 0.85), value: isExploding)
-                            
-                            if isSubmitting {
-                                ProgressView("Creating…")
-                                    .padding(12)
-                                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-                            }
-
-                            if let submitError {
-                                VStack {
-                                    Spacer()
-                                    Text(submitError)
-                                        .font(.footnote)
-                                        .foregroundStyle(.red)
-                                        .padding(.bottom, 8)
-                                }
-                                .transition(.opacity)
-                            }
-                            
-                            if showConfetti {
-                                ConfettiBurst(color: UIColor(AppPalette.Brand.neonPink), duration: 1.0, intensity: 1.0)
-                                    .allowsHitTesting(false)
-                                    .transition(.opacity)
-                            }
-                            
-                        }
-                       
-                    }
-                }
-            }
-        }
-        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showPopup)
-        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: currentStep)
     }
 }
