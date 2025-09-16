@@ -25,22 +25,84 @@ struct MeetBubbleButton: View
         return String(chars).uppercased()
     }
 
-    var body: some View {
+    var body: some View
+    {
         Button {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { onTap() }
         } label: {
-            Image("RangleySticker")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 80, height: 80)
-                .shadow(color: AppPalette.Brand.neonPink, radius: 8, x: 0, y: 0)
-                .shadow(color: AppPalette.Brand.neonPink.opacity(0.6), radius: 16, x: 0, y: 0)
-                .shadow(color: AppPalette.Brand.neonPink.opacity(0.3), radius: 24, x: 0, y: 0)
+            ZStack {
+                // Static outer ring
+                Circle()
+                    .stroke(
+                        AngularGradient(
+                            colors: [
+                                AppPalette.Brand.neonPink,
+                                AppPalette.Brand.electricViolet,
+                                AppPalette.Brand.brightTeal,
+                                AppPalette.Brand.neonPurple,
+                                AppPalette.Brand.vibrantBlue,
+                                AppPalette.Brand.neonPink
+                            ],
+                            center: .center
+                        ),
+                        lineWidth: 3
+                    )
+                    .frame(width: 100, height: 100)
+                    .opacity(0.7)
+                
+                // Middle prismatic ring
+                Circle()
+                    .stroke(
+                        AngularGradient(
+                            colors: [
+                                AppPalette.Brand.brightCyan,
+                                AppPalette.Brand.hotPurple,
+                                AppPalette.Brand.electricBlue,
+                                AppPalette.Brand.brightTeal,
+                                AppPalette.Brand.brightCyan
+                            ],
+                            center: .center,
+                            startAngle: .degrees(45),
+                            endAngle: .degrees(405)
+                        ),
+                        lineWidth: 2
+                    )
+                    .frame(width: 92, height: 92)
+                    .opacity(0.5)
+                
+                // Inner glow
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                AppPalette.Brand.neonPink.opacity(0.3),
+                                AppPalette.Brand.electricViolet.opacity(0.2),
+                                Color.clear
+                            ],
+                            center: .center,
+                            startRadius: 20,
+                            endRadius: 45
+                        )
+                    )
+                    .frame(width: 85, height: 85)
+                
+                // The actual sticker image
+                Image("RangleySticker")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 80, height: 80)
+            }
         }
         .buttonStyle(.plain)
-        .frame(width: 90, height: 90) // Slightly larger hit area
-        .contentShape(Rectangle()) // Ensure entire frame is tappable
+        .frame(width: 120, height: 120) // Larger hit area
+        .contentShape(Rectangle()) // Use rectangle instead of circle for easier tapping
+        .simultaneousGesture(
+            TapGesture().onEnded { _ in
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { onTap() }
+            }
+        )
     }
 }
 

@@ -9,6 +9,7 @@ import SwiftUI
 import CoreLocation
 import QuartzCore
 
+
 struct MeetFormView: View
 {
     @State private var showLocationPicker = false
@@ -42,6 +43,25 @@ struct MeetFormView: View
                 Country: nil, IsoCountryCode: nil,
                 TimeZone: nil, InlandWater: nil, Ocean: nil
             )
+        case .create(let location):
+            // If location is provided, use it; otherwise use a default location
+            if let location = location {
+                return location
+            } else {
+                // Return a default location (you might want to use user's current location or a sensible default)
+                return LocationInfo(
+                    Coordinate: .init(37.7749, -122.4194), // San Francisco as default
+                    RegionCoordinate: .init(37.7749, -122.4194),
+                    RegionRadius: 1000.0, // 1km radius
+                    Name: "Default Location",
+                    ThoroughFare: nil, SubThoroughFare: nil,
+                    Locality: nil, SubLocality: nil,
+                    AdministrativeArea: nil, SubAdministrativeArea: nil,
+                    PostalCode: nil,
+                    Country: nil, IsoCountryCode: nil,
+                    TimeZone: nil, InlandWater: nil, Ocean: nil
+                )
+            }
         }
     }
 
@@ -207,6 +227,7 @@ struct MeetFormView: View
     }
 
     // MARK: Location Address Loading
+    // MARK: Location Address Loading
     private func loadCurrentLocationAddress() {
         geocodingTask?.cancel()
         
@@ -245,6 +266,48 @@ struct MeetFormView: View
                         displayLocationSubtitle = "Lat: \(String(format: "%.4f", e.latitude)), Lng: \(String(format: "%.4f", e.longitude))"
                     }
                 }
+            }
+            
+        case .create(let location):
+            if let location = location {
+                geocodingTask = Task {
+                    let geocoder = CLGeocoder()
+                    let clLocation = CLLocation(latitude: location.Coordinate.latitude, longitude: location.Coordinate.longitude)
+                    
+                    do {
+                        let placemarks = try await geocoder.reverseGeocodeLocation(clLocation)
+                        guard let p = placemarks.first else {
+                            await MainActor.run {
+                                displayLocationName = "Unknown location"
+                                displayLocationSubtitle = "Lat: \(String(format: "%.4f", location.Coordinate.latitude)), Lng: \(String(format: "%.4f", location.Coordinate.longitude))"
+                            }
+                            return
+                        }
+                        
+                        let name = p.name?.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let street = p.thoroughfare?.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let number = p.subThoroughfare?.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let city = p.locality?.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let state = p.administrativeArea?.trimmingCharacters(in: .whitespacesAndNewlines)
+                        
+                        await MainActor.run {
+                            displayLocationName = name ?? street ?? "New Location"
+                            displayLocationSubtitle = [
+                                [number, street].compactMap { $0 }.joined(separator: " "),
+                                [city, state].compactMap { $0 }.joined(separator: ", ")
+                            ].filter { !$0.isEmpty }.joined(separator: " • ")
+                        }
+                    } catch {
+                        await MainActor.run {
+                            displayLocationName = "New location"
+                            displayLocationSubtitle = "Lat: \(String(format: "%.4f", location.Coordinate.latitude)), Lng: \(String(format: "%.4f", location.Coordinate.longitude))"
+                        }
+                    }
+                }
+            } else {
+                // No location provided for create mode
+                displayLocationName = "Choose a location"
+                displayLocationSubtitle = "Tap 'Change Location' to select"
             }
         }
     }

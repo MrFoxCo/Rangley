@@ -8,9 +8,16 @@
 import CoreLocation
 import Combine
 
-public final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate
-{
+public struct GeocodeDisplay: Equatable {
+    public let name: String
+    public let subtitle: String
+}
+
+public final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     private let manager = CLLocationManager()
+
+    // ❌ @State not allowed here; use a plain Task reference
+    private var geocodingTask: Task<GeocodeDisplay, Never>?
 
     @Published public private(set) var userLocation: CLLocation?
     @Published public private(set) var status: CLAuthorizationStatus = .notDetermined
@@ -21,48 +28,34 @@ public final class LocationManager: NSObject, ObservableObject, CLLocationManage
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
         manager.distanceFilter = 50
-
-        if #available(iOS 14.0, *) {
-            status = manager.authorizationStatus
-        } else {
-            status = type(of: manager).authorizationStatus()
-        }
+        if #available(iOS 14.0, *) { status = manager.authorizationStatus }
+        else { status = type(of: manager).authorizationStatus() }
         handle(status)
     }
 
-    public func requestWhenInUse()
-    {
+    public func requestWhenInUse() {
         guard CLLocationManager.locationServicesEnabled() else {
             print("⚠️ Location Services OFF at system level.")
             return
         }
-        // Check authorization status without blocking the main thread
         let currentStatus = manager.authorizationStatus
-        
-        // Only request authorization if not determined
         if currentStatus == .notDetermined {
             DispatchQueue.main.async { [weak self] in
                 self?.manager.requestWhenInUseAuthorization()
             }
-            // The actual location request will happen in locationManagerDidChangeAuthorization
-            // when the user grants permission
         } else {
-            // Status is already determined, handle it immediately
             handle(currentStatus)
         }
-
     }
 
-
-    private func handle(_ s: CLAuthorizationStatus)
-    {
+    private func handle(_ s: CLAuthorizationStatus) {
         Task { @MainActor in
             self.status = s
             switch s {
             case .authorizedAlways, .authorizedWhenInUse:
                 self.isAuthorized = true
-                self.manager.requestLocation()        // immediate fix
-                self.manager.startUpdatingLocation()  // keep fresh
+                self.manager.requestLocation()
+                self.manager.startUpdatingLocation()
             case .notDetermined:
                 self.isAuthorized = false
             case .restricted, .denied:
@@ -73,21 +66,58 @@ public final class LocationManager: NSObject, ObservableObject, CLLocationManage
         }
     }
 
-    // MARK: - CLLocationManagerDelegate (non-isolated; hop to MainActor when mutating)
-    public func locationManagerDidChangeAuthorization(_ manager: CLLocationManager)
-    {
+    // MARK: CLLocationManagerDelegate
+    public func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         handle(manager.authorizationStatus)
     }
 
-    public func locationManager(_ manager: CLLocationManager,
-                                didUpdateLocations locations: [CLLocation])
-    {
+    public func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let loc = locations.last else { return }
         Task { @MainActor in self.userLocation = loc }
     }
 
-    public func locationManager(_ manager: CLLocationManager, didFailWithError error: Error)
-    {
+    public func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         print("Location error:", error.localizedDescription)
+    }
+
+    // MARK: Reverse-geocode (returns strings for the View to display)
+    public func reverseGeocodeDisplay(for info: LocationInfo) async -> GeocodeDisplay {
+        geocodingTask?.cancel()
+
+        let lat = info.Coordinate.latitude
+        let lon = info.Coordinate.longitude
+        let fallback = GeocodeDisplay(
+            name: "New location selected",
+            subtitle: "Lat: \(String(format: "%.4f", lat)), Lng: \(String(format: "%.4f", lon))"
+        )
+
+        let task = Task<GeocodeDisplay, Never> {
+            let geocoder = CLGeocoder()
+            do {
+                let placemarks = try await geocoder.reverseGeocodeLocation(CLLocation(latitude: lat, longitude: lon))
+                guard let p = placemarks.first else { return fallback }
+
+                let name   = p.name?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let street = p.thoroughfare?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let number = p.subThoroughfare?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let city   = p.locality?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let state  = p.administrativeArea?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                let subtitle = [
+                    [number, street].compactMap { $0 }.joined(separator: " "),
+                    [city, state].compactMap { $0 }.joined(separator: ", ")
+                ].filter { !$0.isEmpty }.joined(separator: " • ")
+
+                return GeocodeDisplay(
+                    name: (name ?? street ?? "New Location"),
+                    subtitle: subtitle.isEmpty ? fallback.subtitle : subtitle
+                )
+            } catch {
+                return fallback
+            }
+        }
+
+        geocodingTask = task
+        return await task.value
     }
 }

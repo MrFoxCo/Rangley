@@ -186,6 +186,20 @@ public struct PublicMapView: View
         meetCoordinate.longitude >= lonMin && meetCoordinate.longitude <= lonMax
     }
     
+    private func seedFromUser() -> LocationInfo?
+    {
+        guard let c = lm.userLocation?.coordinate else { return nil }
+        let coord = Coordinate(c.latitude, c.longitude)
+        return LocationInfo(
+            Coordinate: coord, RegionCoordinate: coord, RegionRadius: 600,
+            Name: nil, ThoroughFare: nil, SubThoroughFare: nil,
+            Locality: nil, SubLocality: nil, AdministrativeArea: nil,
+            SubAdministrativeArea: nil, PostalCode: nil, Country: nil,
+            IsoCountryCode: nil, TimeZone: nil, InlandWater: nil, Ocean: nil
+        )
+    }
+
+    
     // =========================================================
     // MARK: - END Meet Creation FLow
     // =========================================================
@@ -368,7 +382,7 @@ public struct PublicMapView: View
                             Annotation(
                                 meet.name,
                                 coordinate: CLLocationCoordinate2D(latitude: meet.latitude, longitude: meet.longitude),
-                                anchor: .bottom
+                                anchor: .center // Instead of .bottom
                             ) {
                                 MeetBubbleButton(meet: meet, ns: meetNS) {
                                     selectedMeet = meet
@@ -384,9 +398,8 @@ public struct PublicMapView: View
                     }
                     .onTapGesture { location in
                         Task {
-                            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s - let button taps process first
+                            try? await Task.sleep(nanoseconds: 200_000_000) // Increase delay to 0.2s
                             guard !showLocationPopup && !showMeetOverlay else { return }
-                            
                             // cancel previous debounce
                             tapTask?.cancel()
                             tapTask = Task {
@@ -406,6 +419,10 @@ public struct PublicMapView: View
                         }
                     }
                     .ignoresSafeArea()
+                    .simultaneousGesture(
+                        // This allows both gestures to work
+                        TapGesture().onEnded { _ in }
+                    )
                 }
             }
             // Nearby Meets Badge - positioned in top-right
