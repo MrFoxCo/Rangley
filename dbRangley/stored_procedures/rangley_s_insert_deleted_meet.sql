@@ -131,7 +131,7 @@ BEGIN
     VALUES
     (
 		v_meet_id,
-		new_change_stamp,
+		v_new_change_stamp,
 		current_coordinate_id,
 		v_meet_status_id,
 		current_name,
@@ -152,7 +152,7 @@ BEGIN
     END IF;
 
     RAISE LOG '[INFO] Updated meet_id=% with change_stamp=% and meet_coordinate_id=% by user_id=%',
-        v_meet_id, v_new_change_stamp, final_coordinate_id, v_user_id;
+        v_meet_id, v_new_change_stamp, current_coordinate_id, v_user_id;
 
 EXCEPTION
     WHEN unique_violation THEN
