@@ -25,7 +25,8 @@ final class AddressSearchVM: NSObject, ObservableObject, MKLocalSearchCompleterD
     }
 }
 
-struct AddressSearchPicker: View {
+struct AddressSearchPicker: View
+{
     var initialRadiusMeters: Double = 2000
     var onPick: (LocationInfo) -> Void
     var onCancel: () -> Void

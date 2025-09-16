@@ -9,24 +9,20 @@ import SwiftUI
 import CoreLocation
 import QuartzCore
 
-private enum LocationPickerRoute: Identifiable
-{
-    case map
-    case address
-    var id: Int { hashValue }
-}
-
 struct MeetFormView: View
 {
-    @State private var activePicker: LocationPickerRoute?
+    @State private var showLocationPicker = false
+    
     private func pickLocation() async -> LocationInfo? {
         // Your location picking logic here
         // This could open a location picker, use current location, etc.
         // For now, just return nil
         return nil
     }
+    
     // Seed from the existing meet (so the picker opens where the meet is now)
-    private var seedLocation: LocationInfo {
+    private var seedLocation: LocationInfo
+    {
         switch mode {
         case .update(let e):
             return LocationInfo(
@@ -178,37 +174,19 @@ struct MeetFormView: View
             if vm.end <= newStart { vm.end = newStart.addingTimeInterval(3600) }
         }
         .onTapGesture { isNameFieldFocused = false }
-        .sheet(item: $activePicker) { route in
-            switch route {
-            case .map:
-                MapLocationPicker(
-                    initial: seedLocation,
-                    onPick: { picked in
-                        // set all 5 or none (you already enforce this)
-                        vm.latitude        = picked.Coordinate.latitude
-                        vm.longitude       = picked.Coordinate.longitude
-                        vm.regionLatitude  = picked.RegionCoordinate.latitude
-                        vm.regionLongitude = picked.RegionCoordinate.longitude
-                        vm.regionRadius    = picked.RegionRadius
-                        activePicker = nil
-                    },
-                    onCancel: { activePicker = nil }
-                )
-
-            case .address:
-                AddressSearchPicker(
-                    initialRadiusMeters: seedLocation.RegionRadius,
-                    onPick: { picked in
-                        vm.latitude        = picked.Coordinate.latitude
-                        vm.longitude       = picked.Coordinate.longitude
-                        vm.regionLatitude  = picked.RegionCoordinate.latitude
-                        vm.regionLongitude = picked.RegionCoordinate.longitude
-                        vm.regionRadius    = picked.RegionRadius
-                        activePicker = nil
-                    },
-                    onCancel: { activePicker = nil }
-                )
-            }
+        .sheet(isPresented: $showLocationPicker) {
+            LocationPickerSheet(
+                initial: seedLocation,
+                onPick: { picked in
+                    vm.latitude        = picked.Coordinate.latitude
+                    vm.longitude       = picked.Coordinate.longitude
+                    vm.regionLatitude  = picked.RegionCoordinate.latitude
+                    vm.regionLongitude = picked.RegionCoordinate.longitude
+                    vm.regionRadius    = picked.RegionRadius
+                    showLocationPicker = false
+                },
+                onCancel: { showLocationPicker = false }
+            )
         }
     }
 
@@ -313,12 +291,10 @@ struct MeetFormView: View
 
             HStack
             {
-                Button
-                {
-                    activePicker = .map   // default
+                Button {
+                    showLocationPicker = true
                 } label: {
-                    HStack(spacing: 6)
-                    {
+                    HStack(spacing: 6) {
                         Image(systemName: "mappin.and.ellipse")
                         Text("Change Location")
                     }
@@ -330,10 +306,6 @@ struct MeetFormView: View
                         RoundedRectangle(cornerRadius: 10)
                             .stroke(AppPalette.Brand.neonPink.opacity(0.6), lineWidth: 1)
                     )
-                }
-                .contextMenu {
-                    Button("Pick on Map")    { activePicker = .map }
-                    Button("Enter Address")  { activePicker = .address }
                 }
 
                 if coordProvidedCount > 0 && coordProvidedCount != 5 {
@@ -579,5 +551,71 @@ struct MeetFormView: View
         if hours > 0 && minutes > 0 { return "\(hours)h \(minutes)m" }
         if hours > 0 { return "\(hours) hour\(hours == 1 ? "" : "s")" }
         return "\(minutes) minute\(minutes == 1 ? "" : "s")"
+    }
+}
+
+// MARK: - LocationPickerSheet
+struct LocationPickerSheet: View {
+    let initial: LocationInfo
+    let onPick: (LocationInfo) -> Void
+    let onCancel: () -> Void
+    
+    @State private var selectedMethod: LocationMethod = .map
+    
+    enum LocationMethod: String, CaseIterable {
+        case map = "Pick on Map"
+        case address = "Enter Address"
+        
+        var icon: String {
+            switch self {
+            case .map: return "map"
+            case .address: return "magnifyingglass"
+            }
+        }
+    }
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                // Method selector
+                Picker("Location Method", selection: $selectedMethod) {
+                    ForEach(LocationMethod.allCases, id: \.self) { method in
+                        Label(method.rawValue, systemImage: method.icon)
+                            .tag(method)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .padding()
+                
+                // Content based on selected method
+                Group {
+                    switch selectedMethod {
+                    case .map:
+                        MapLocationPicker(
+                            initial: initial,
+                            onPick: onPick,
+                            onCancel: onCancel
+                        )
+                    case .address:
+                        AddressSearchPicker(
+                            initialRadiusMeters: initial.RegionRadius,
+                            onPick: onPick,
+                            onCancel: onCancel
+                        )
+                    }
+                }
+                .transition(.opacity.combined(with: .slide))
+                .animation(.easeInOut(duration: 0.3), value: selectedMethod)
+            }
+            .navigationTitle("Choose Location")
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarBackButtonHidden()
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Cancel", action: onCancel)
+                }
+            }
+        }
+        .presentationDetents([.large])
     }
 }

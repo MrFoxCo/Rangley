@@ -57,6 +57,7 @@ struct MapLocationPicker: View {
                         Image(systemName: "mappin.circle.fill")
                     }
                     MapCircle(center: center, radius: radiusMeters)
+                        .foregroundStyle(.secondary.opacity(0.2))  // Opaque fill
                         .stroke(.secondary.opacity(0.3), lineWidth: 2)
                 }
                 .gesture(
