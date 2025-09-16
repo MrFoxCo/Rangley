@@ -20,6 +20,7 @@ WITH me AS (
   SELECT u.user_id
   FROM rangley.tb_users u
   WHERE u.cognito_sub = p_searching_cognito_sub
+     OR u.user_id IN (0,1)  -- Add this line
 ),
 san AS (
   SELECT
@@ -30,51 +31,93 @@ san AS (
     CASE WHEN p_phones   IS NULL THEN NULL
          ELSE ARRAY(SELECT regexp_replace(x, '\D', '', 'g') FROM unnest(p_phones) AS x) END AS phones_san
 ),
-rows AS (
-  SELECT
-      u.user_id,
-      u.uuid,
-      u.username,
-      u.display_name,
-      -- normalize DB phone to digits-only for matching
-      regexp_replace(COALESCE(u.cellphone,''), '\D', '', 'g') AS phone_db,
-      -- raw hits (inputs)
-      (san.usernames_san IS NOT NULL AND lower(u.username) = ANY (san.usernames_san)) AS hit_username,
-      (san.emails_san    IS NOT NULL AND lower(u.email)    = ANY (san.emails_san))    AS hit_email,
-      (san.phones_san    IS NOT NULL) AS phones_were_supplied,
-      -- privacy flags (defaults: username TRUE, email/phone FALSE)
-      COALESCE(ps.discoverable_by_username, TRUE)  AS allow_username,
-      COALESCE(ps.discoverable_by_email,    FALSE) AS allow_email,
-      COALESCE(ps.discoverable_by_phone,    FALSE) AS allow_phone,
-      san.phones_san
-  FROM rangley.vw_users u
-  LEFT JOIN rangley.tb_user_privacy_settings ps ON ps.user_id = u.user_id
-  CROSS JOIN san
-  WHERE NOT EXISTS (SELECT 1 FROM me WHERE me.user_id = u.user_id)
+rows AS
+(
+-- Assumes CTEs or temp tables named `san` (search inputs) and `me` (caller/self)
+-- are already defined earlier in the statement.
+
+	SELECT
+	    u.user_id, u.uuid, u.username, u.display_name,
+	
+	    -- Normalize DB phone to digits only (e.g., "(312) 555-1212" -> "3125551212")
+	    regexp_replace(COALESCE(u.cellphone, ''), '\D', '', 'g') AS phone_db,
+	
+	    -- Username hit: any sanitized username fragment appears in username
+	    (
+	        san.usernames_san IS NOT NULL
+	        AND EXISTS (
+	            SELECT 1
+	            FROM unnest(san.usernames_san) AS search_term
+	            WHERE lower(u.username) ILIKE '%' || search_term || '%'
+	        )
+	    ) AS hit_username,
+	
+	    -- Display-name hit: any sanitized username fragment appears in display_name
+	    (
+	        san.usernames_san IS NOT NULL
+	        AND EXISTS (
+	            SELECT 1
+	            FROM unnest(san.usernames_san) AS search_term
+	            WHERE lower(u.display_name) ILIKE '%' || search_term || '%'
+	        )
+	    ) AS hit_display_name,
+	
+	    -- Exact email hit (already sanitized to lowercase)
+	    (
+	        san.emails_san IS NOT NULL
+	        AND lower(u.email) = ANY (san.emails_san)
+	    ) AS hit_email,
+	
+	    -- Just a flag that phone inputs were provided (matching may be done elsewhere)
+	    (
+			san.phones_san IS NOT NULL
+		) AS phones_were_supplied,
+	
+	    -- Privacy flags (defaults: username TRUE, email/phone FALSE)
+	    COALESCE(ps.discoverable_by_username, TRUE)  AS allow_username,
+	    COALESCE(ps.discoverable_by_email,    FALSE) AS allow_email,
+	    COALESCE(ps.discoverable_by_phone,    FALSE) AS allow_phone,
+	
+	    -- For debugging/visibility: the sanitized phone inputs array
+	    san.phones_san
+
+	FROM rangley.vw_users AS u
+	LEFT JOIN rangley.tb_user_privacy_settings AS ps
+	       ON ps.user_id = u.user_id
+	CROSS JOIN san
+	WHERE NOT EXISTS (
+	    SELECT 1
+	    FROM me
+	    WHERE me.user_id = u.user_id
+	)
+
 )
 SELECT
     r.uuid AS user_uuid,
     r.username,
     r.display_name,
-    ARRAY_REMOVE(ARRAY[
-        CASE WHEN r.hit_username AND r.allow_username THEN 'username' END,
-        CASE WHEN r.hit_email    AND r.allow_email    THEN 'email'    END,
-        CASE WHEN r.phones_were_supplied
-                  AND r.allow_phone
-                  AND r.phone_db = ANY (r.phones_san) THEN 'phone' END
-    ], NULL) AS matched_by,
-    (
-      (r.hit_username AND r.allow_username) OR
-      (r.hit_email    AND r.allow_email)    OR
-      (r.phones_were_supplied AND r.allow_phone AND r.phone_db = ANY (r.phones_san))
-    ) AS can_invite
+	ARRAY_REMOVE(ARRAY[
+	    CASE WHEN r.hit_username AND r.allow_username THEN 'username' END,
+	    CASE WHEN r.hit_display_name AND r.allow_username THEN 'display_name' END,  -- Add this line
+	    CASE WHEN r.hit_email AND r.allow_email THEN 'email' END,
+	    CASE WHEN r.phones_were_supplied
+	        AND r.allow_phone
+	        AND r.phone_db = ANY (r.phones_san) THEN 'phone' END
+	], NULL) AS matched_by,
+	(
+	    (r.hit_username AND r.allow_username) OR
+	    (r.hit_display_name AND r.allow_username) OR  -- Add this line
+	    (r.hit_email AND r.allow_email) OR
+	    (r.phones_were_supplied AND r.allow_phone AND r.phone_db = ANY (r.phones_san))
+	) AS can_invite
 FROM rows r
 WHERE
-    (r.hit_username OR r.hit_email OR (r.phones_were_supplied AND r.phone_db = ANY (r.phones_san)))
-  AND (
-      (r.hit_username AND r.allow_username) OR
-      (r.hit_email    AND r.allow_email)    OR
-      (r.phones_were_supplied AND r.allow_phone AND r.phone_db = ANY (r.phones_san))
-  )
+    (r.hit_username OR r.hit_display_name OR r.hit_email OR (r.phones_were_supplied AND r.phone_db = ANY (r.phones_san)))
+AND (
+    (r.hit_username AND r.allow_username) OR
+    (r.hit_display_name AND r.allow_username) OR  -- Add this line
+    (r.hit_email AND r.allow_email) OR
+    (r.phones_were_supplied AND r.allow_phone AND r.phone_db = ANY (r.phones_san))
+)
 ORDER BY lower(r.display_name), lower(r.username);
 $$;

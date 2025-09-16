@@ -363,8 +363,14 @@ public struct SearchView: View {
         }
     }
     
+    /// need to input exactly the username
     private func searchUsers(query: String, scope: SearchScope) async -> [ViewUsersModel] {
         guard scope == .all || scope == .users else {
+            return []
+        }
+        
+        // Don't search if query is empty or just whitespace
+        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return []
         }
         
@@ -375,8 +381,30 @@ public struct SearchView: View {
                 usernames: [query]
             )
         } catch {
-            // Log error but don't fail entire search
             print("User search failed: \(error)")
+            return []
+        }
+    }
+    
+    /// partial search
+    private func browseUsers(query: String, scope: SearchScope) async -> [ViewUsersModel] {
+        guard scope == .all || scope == .users else {
+            return []
+        }
+        
+        do {
+            let allUsers = try await AuthAPI.browseAllUsers(
+                baseURL: baseURL,
+                token: token,
+                limit: 1000
+            )
+
+            return allUsers.filter { user in
+                user.username.localizedCaseInsensitiveContains(query) ||
+                user.display_name.localizedCaseInsensitiveContains(query)
+            }
+        } catch {
+            print("User browse failed: \(error)")
             return []
         }
     }
