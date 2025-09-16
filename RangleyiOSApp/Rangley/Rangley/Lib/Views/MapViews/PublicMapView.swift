@@ -553,8 +553,18 @@ public struct PublicMapView: View
         {
             HStack {
                 Spacer()
-                HamburgerMenu { signOutAndGoStart() }
-                    .padding(.trailing, 16)
+                DockView(
+                    onSignOut: { signOutAndGoStart() },
+                    onSearch: {
+                        // TODO: Implement search logic
+                        print("Search tapped")
+                    },
+                    onCreateMeet: {
+                        // TODO: Implement create meet logic
+                        print("Create meet tapped")
+                    }
+                )
+                Spacer()
             }
             .padding(.bottom, 8)
         }

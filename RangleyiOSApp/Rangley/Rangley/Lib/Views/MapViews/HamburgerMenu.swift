@@ -16,6 +16,11 @@ public struct HamburgerMenu: View {
 
     public var body: some View {
         Menu {
+            // TODO: - I NEED THIS BUTTON TO LOOK LIKE THE MIGRAINE AURA I SHARED WITH YOU
+            // TODO: - We Need to add a magnifying glass search button that allows us to search shit...
+            // the logic inside it is tbd
+            // TODO: - WE NEED A + button that brings up the MeetFormView ... or something similar that allows us to create a meet via the Overlay that is used for the edit meet... lmk if that makes sense?
+            
             Button {
                 showAccount = true
             } label: {

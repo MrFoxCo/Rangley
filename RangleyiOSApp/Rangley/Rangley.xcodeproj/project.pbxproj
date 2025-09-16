@@ -48,6 +48,7 @@
 				Lib/Deprecated/DbInserts.txt,
 				Lib/Deprecated/LibraryIssues_READ.txt,
 				Lib/Utilities/HelpfulComments.txt,
+				Lib/Views/MapViews/Untitled.swift,
 			);
 			target = 65FAB44F2E1468F0004AFBE8 /* Rangley */;
 		};

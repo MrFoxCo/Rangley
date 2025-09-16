@@ -289,12 +289,10 @@ struct MeetFormView: View
     }
 
     // MARK: Header & Progress
-    private var header: some View
-    {
+    private var header: some View {
         VStack(spacing: 16) {
             HStack {
-                Button(action: previousStep)
-                {
+                Button(action: previousStep) {
                     HStack(spacing: 4) {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 16, weight: .medium))
@@ -314,6 +312,7 @@ struct MeetFormView: View
             .padding(.horizontal, 24)
             .padding(.top, 20)
         }
+        .padding(.bottom, 12) // ⬅️ increase this number for more space
     }
 
     private func stepNumber(for step: FieldStep) -> Int
