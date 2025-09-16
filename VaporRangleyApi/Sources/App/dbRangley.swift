@@ -22,6 +22,7 @@ enum RangleyProcName: String
     case i_meet                  = "rangley.rangley_i_meet"
     case s_insert_meet           = "rangley.rangley_s_insert_meet"
     case s_insert_updated_meet   = "rangley.rangley_s_insert_updated_meet"
+    case s_insert_deleted_meet   = "rangley.rangley_s_insert_deleted_meet"
     case i_change_stamp          = "rangley.rangley_i_change_stamp"
     case i_updated_meet          = "rangley.rangley_i_updated_meet"
     case m_user                  = "rangley.rangley_m_user"
@@ -254,6 +255,39 @@ enum Proc
                 ,\(bind: i.change_reason    )::varchar(50)
                 ,\(bind: i.meet_category_id )::int2
                 ,\(bind: i.max_capacity     )::int4
+            );
+            """
+        }
+        static func decode(_ row: any SQLRow) throws -> Result
+        {
+            try .init(num_inserted: row.decode(column: "num_inserted", as: Int32.self))
+        }
+    }
+    
+    enum SystemInsertDeletedMeet: PgCallableRow
+    {
+        static let procName: RangleyProcName = .s_insert_deleted_meet  // ensure this resolves to schema-qualified "rangley.rangley_s_insert_meet" or your search_path includes 'rangley'
+        
+        struct Params: Content, Sendable
+        {
+            // Required
+            let cognito_sub         : String
+            let meet_id_uuid        : String  // This is required for updates
+            
+        }
+
+        struct Result: Content, Sendable {
+            let num_inserted: Int32
+        }
+
+        static func query(_ i: Params, _ o: Result) -> SQLQueryString {
+            """
+            CALL \(unsafeRaw: procName.rawValue)
+            (
+                 NULL::int4  -- OUT parameter placeholder
+                -- REQUIRED
+                ,\(bind: i.cognito_sub      )::text
+                ,\(bind: i.meet_id_uuid     )::uuid  -- FIX: was cognito_sub
             );
             """
         }

@@ -530,7 +530,8 @@ struct MeetCreationOverlay: View
     }
 }
 
-private struct ConfettiBurst: UIViewRepresentable {
+private struct ConfettiBurst: UIViewRepresentable
+{
     var color: UIColor = .systemPink
     var duration: TimeInterval = 1.0
     var intensity: CGFloat = 1.0
@@ -543,7 +544,8 @@ private struct ConfettiBurst: UIViewRepresentable {
     func updateUIView(_ uiView: ConfettiUIView, context: Context) {}
 }
 
-private final class ConfettiUIView: UIView {
+private final class ConfettiUIView: UIView
+{
     private var emitter: CAEmitterLayer?
 
     override init(frame: CGRect) {

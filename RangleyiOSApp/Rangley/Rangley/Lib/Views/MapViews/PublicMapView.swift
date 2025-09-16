@@ -15,9 +15,11 @@ import AWSPluginsCore
 // =========================================================
 // =========================================================
 // =========================================================
-// MARK: - IGNORE THE BLOW TODO FOR NOW
+// MARK: - IGNORE THE BLOW TODOs FOR NOW
 // TODO: - FIGURE OUT A WAY TO TRIGER UPDATES ON OTHER PHONES WHEN MEETS ARE CREATED OR UPDATED
-// MARK: - IGNORE THE ABOVE TODO FOR NOW
+// TODO: - Fix the rotating screen view -- probably should look to be vertical
+// TODO: - Create UNDO for deletes and updates
+// MARK: - IGNORE THE ABOVE TODOs FOR NOW
 // =========================================================
 // =========================================================
 // =========================================================
