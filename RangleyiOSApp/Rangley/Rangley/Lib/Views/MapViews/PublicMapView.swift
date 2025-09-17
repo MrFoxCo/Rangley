@@ -116,7 +116,7 @@ public struct PublicMapView: View
     // PublicMapView.swift
     private func submitMeet(
         locationInfo: LocationInfo,name: String,
-        startTime: Date,endTime: Date) async throws
+        startTime: Date,endTime: Date, invitedUsers: [ViewUsersModel]) async throws
     {
         // Derive required fields (non-optionals)
         let lat  = locationInfo.Coordinate.latitude
@@ -479,12 +479,19 @@ public struct PublicMapView: View
             MeetCreationOverlayByTap(
                 selectedLocation: $selectedLocation,
                 showPopup: $showLocationPopup,
-                onCreateMeet: { location, name, start, end in
+                baseURL: Env.apiBaseURL, // You'll need to pass this
+                token: currentToken,     // You'll need to pass this
+                onCreateMeet: { location, name, start, end, invitedUsers in
                     Task {
-                        do
-                        {
-                            try await submitMeet(locationInfo: location, name: name, startTime: start, endTime: end)
-                            await loadMeets() // refresh screen when new meets?
+                        do {
+                            try await submitMeet(
+                                locationInfo: location,
+                                name: name,
+                                startTime: start,
+                                endTime: end,
+                                invitedUsers: invitedUsers // New parameter
+                            )
+                            await loadMeets()
                         }
                         catch { print("createMeet error:", error) }
                     }

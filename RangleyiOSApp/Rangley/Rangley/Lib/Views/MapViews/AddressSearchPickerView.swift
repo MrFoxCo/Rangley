@@ -69,168 +69,214 @@ struct AddressSearchPicker: View
     var body: some View {
         VStack(spacing: 0) {
             // Header
-            // Header
-            HStack {
-                Button("Cancel") {
-                    isDisappearing = true
-                    onCancel()
-                }
-                .font(.system(size: 16, weight: .medium))
-                .foregroundColor(AppPalette.Text.secondary)
+            searchHeader
+            
+            // Content
+            VStack(spacing: 20) {
+                // Search Field
+                searchField
                 
-                Spacer()
-                
-                Text("Enter Address")
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundColor(AppPalette.Text.primary)
-                
-                Spacer()
-                
-                Button("Use") {
-                    guard let item = selectedItem else { return }
-                    isDisappearing = true
-                    onPick(makeLocationInfo(from: item, radius: radiusMeters))
-                }
-                .font(.system(size: 16, weight: .bold))
-                .foregroundColor(selectedItem != nil ? AppPalette.Brand.neonPink : AppPalette.Text.tertiary)
-                .disabled(selectedItem == nil || isDisappearing)
-            }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 16)
-            .background(
-                LinearGradient(
-                    colors: [
-                        AppPalette.Brand.russianViolet.opacity(0.95),
-                        AppPalette.Brand.violetMid.opacity(0.70)
-                    ],
-                    startPoint: .top, endPoint: .bottom
-                )
-            )
-
-
-            // Search Field
-            VStack(spacing: 16) {
-                TextField("", text: $vm.query, prompt: Text("Search address or place").foregroundColor(AppPalette.Text.tertiary))
-                    .font(.system(size: 16))
-                    .foregroundColor(AppPalette.Text.primary)
-                    .padding(16)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(AppPalette.Brand.violetMid.opacity(0.5), lineWidth: 1)
-                    )
-                    .disabled(isDisappearing)
-
                 // Suggestions List
                 if !vm.suggestions.isEmpty {
-                    ScrollView {
-                        LazyVStack(spacing: 0) {
-                            ForEach(vm.suggestions, id: \.self) { suggestion in
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(suggestion.title)
-                                        .font(.system(size: 15, weight: .medium))
-                                        .foregroundColor(AppPalette.Text.primary)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                    
-                                    if !suggestion.subtitle.isEmpty {
-                                        Text(suggestion.subtitle)
-                                            .font(.system(size: 13))
-                                            .foregroundColor(AppPalette.Text.secondary)
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                    }
-                                }
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 12)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        .fill(AppPalette.Brand.russianViolet.opacity(0.12))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                                .stroke(AppPalette.Brand.violetMid.opacity(0.35), lineWidth: 0.5)
-                                        )
-                                )
-
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    if !isDisappearing {
-                                        Task { await select(suggestion) }
-                                    }
-                                }
-                                .padding(.horizontal, 4)
-                                .padding(.vertical, 2)
-                            }
-                        }
-                    }
-                    .frame(maxHeight: 200)
+                    suggestionsList
                 }
                 
                 // Selected Location Map
-                // Selected Location Map
                 if let item = selectedItem, !isDisappearing {
-                    VStack(spacing: 16) {
-                        Map {
-                            Annotation("Selected", coordinate: item.placemark.coordinate) {
-                                Image(systemName: "mappin.circle.fill")
-                                    .foregroundColor(AppPalette.Brand.neonPink)
-                                    .font(.title2)
-                            }
-                            MapCircle(center: item.placemark.coordinate, radius: radiusMeters)
-                                .stroke(AppPalette.Brand.neonPink.opacity(0.35), lineWidth: 2)
-                                .foregroundStyle(AppPalette.Brand.neonPink.opacity(0.08))
-                        }
-                        .frame(height: 220)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .stroke(AppPalette.Brand.violetMid.opacity(0.5), lineWidth: 1)
-                        )
-                        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .allowsHitTesting(!isDisappearing)
-
-                        // Radius Slider
-                        VStack(spacing: 8) {
-                            HStack {
-                                Text("Radius:")
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(AppPalette.Text.secondary)
-                                Spacer()
-                                Text("\(Int(radiusMeters)) meters")
-                                    .font(.system(size: 14, weight: .bold))
-                                    .foregroundColor(AppPalette.Brand.neonPink)
-                                    .monospacedDigit()
-                            }
-                            Slider(value: $radiusMeters, in: 50...20000, step: 50)
-                                .tint(AppPalette.Brand.neonPink)
-                                .disabled(isDisappearing)
-                        }
-                        .padding(16)
-                        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .stroke(AppPalette.Brand.violetMid.opacity(0.45), lineWidth: 1)
-                        )
-                    } // <- close inner VStack (map + radius)
-                } // <- close `if let item`
+                    selectedLocationSection(item)
+                }
+                
                 Spacer(minLength: 20)
             }
-            .padding(.horizontal, 24)
+            .padding(.horizontal, 20)
             .padding(.vertical, 20)
         }
-        .background(
-            LinearGradient(
-                colors: [
-                    AppPalette.Brand.russianViolet.opacity(0.92),
-                    AppPalette.Brand.violetMid.opacity(0.60)
-                ],
-                startPoint: .top, endPoint: .bottom
-            )
-        )
-
+        .background(AppPalette.bgGradient)
         .preferredColorScheme(.dark)
         .presentationDetents([.large])
         .onDisappear {
             isDisappearing = true
         }
+    }
+    
+    // MARK: - Search Header
+    private var searchHeader: some View {
+        HStack(spacing: 16) {
+            // Close button
+            Button(action: {
+                isDisappearing = true
+                onCancel()
+            }) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(AppPalette.Brand.neonPink)
+                    .frame(width: 32, height: 32)
+                    .background(
+                        Circle()
+                            .fill(AppPalette.Brand.neonPink.opacity(0.1))
+                    )
+            }
+            .disabled(isDisappearing)
+            
+            // Title
+            Text("Enter Address")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(AppPalette.Text.primary)
+                .frame(maxWidth: .infinity)
+            
+            // Use button
+            Button(action: {
+                guard let item = selectedItem else { return }
+                isDisappearing = true
+                onPick(makeLocationInfo(from: item, radius: radiusMeters))
+            }) {
+                Text("Use")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(selectedItem != nil ? AppPalette.Brand.neonPink : AppPalette.Text.tertiary)
+                    .frame(width: 32, height: 32)
+            }
+            .disabled(selectedItem == nil || isDisappearing)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 20)
+        .padding(.bottom, 16)
+    }
+    
+    // MARK: - Search Field
+    private var searchField: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "location")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(AppPalette.Brand.neonPink.opacity(0.7))
+            
+            TextField("Search address or place", text: $vm.query)
+                .font(.system(size: 16))
+                .foregroundStyle(Color.primary)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .disabled(isDisappearing)
+            
+            if !vm.query.isEmpty {
+                Button(action: { vm.query = "" }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 14))
+                        .foregroundStyle(AppPalette.Brand.neonPink.opacity(0.7))
+                }
+                .disabled(isDisappearing)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(.systemBackground))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1)
+                )
+        )
+    }
+    
+    // MARK: - Suggestions List
+    private var suggestionsList: some View {
+        ScrollView {
+            LazyVStack(spacing: 8) {
+                ForEach(vm.suggestions, id: \.self) { suggestion in
+                    suggestionRow(suggestion)
+                }
+            }
+            .padding(.vertical, 8)
+        }
+        .frame(maxHeight: 200)
+    }
+    
+    private func suggestionRow(_ suggestion: MKLocalSearchCompletion) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(suggestion.title)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(AppPalette.Text.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            
+            if !suggestion.subtitle.isEmpty {
+                Text(suggestion.subtitle)
+                    .font(.system(size: 13))
+                    .foregroundStyle(AppPalette.Text.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(.systemBackground).opacity(0.05))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(AppPalette.Brand.neonPink.opacity(0.2), lineWidth: 1)
+                )
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if !isDisappearing {
+                Task { await select(suggestion) }
+            }
+        }
+    }
+    
+    // MARK: - Selected Location Section
+    private func selectedLocationSection(_ item: MKMapItem) -> some View {
+        VStack(spacing: 16) {
+            // Map
+            Map {
+                Annotation("Selected", coordinate: item.placemark.coordinate) {
+                    Image(systemName: "mappin.circle.fill")
+                        .foregroundColor(AppPalette.Brand.neonPink)
+                        .font(.title2)
+                }
+                MapCircle(center: item.placemark.coordinate, radius: radiusMeters)
+                    .stroke(AppPalette.Brand.neonPink.opacity(0.35), lineWidth: 2)
+                    .foregroundStyle(AppPalette.Brand.neonPink.opacity(0.08))
+            }
+            .frame(height: 220)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1)
+            )
+            .allowsHitTesting(!isDisappearing)
+            
+            // Radius Control
+            radiusControl
+        }
+    }
+    
+    // MARK: - Radius Control
+    private var radiusControl: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Text("Search Radius")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(AppPalette.Text.secondary)
+                Spacer()
+                Text("\(Int(radiusMeters))m")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(AppPalette.Brand.neonPink)
+                    .monospacedDigit()
+            }
+            
+            Slider(value: $radiusMeters, in: 50...20000, step: 50)
+                .tint(AppPalette.Brand.neonPink)
+                .disabled(isDisappearing)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(.systemBackground).opacity(0.05))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(AppPalette.Brand.neonPink.opacity(0.2), lineWidth: 1)
+                )
+        )
     }
 
     private func select(_ s: MKLocalSearchCompletion) async {

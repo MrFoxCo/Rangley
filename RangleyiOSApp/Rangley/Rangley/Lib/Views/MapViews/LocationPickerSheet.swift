@@ -5,6 +5,20 @@
 //  Created by Anthony Guzzardo on 9/16/25.
 //
 
+
+// =========================================================
+// =========================================================
+// =========================================================
+// MARK: - IGNORE THE BELOW TODOs FOR NOW
+
+// TODO: - Figure out radius logic is a little messy
+
+// MARK: - IGNORE THE ABOVE TODOs FOR NOW
+// =========================================================
+// =========================================================
+// =========================================================
+
+
 import SwiftUI
 
 /// Used for manually searching the address by typing or creating a popup draggable map

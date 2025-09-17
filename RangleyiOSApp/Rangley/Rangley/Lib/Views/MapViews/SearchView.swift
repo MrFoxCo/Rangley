@@ -2,12 +2,13 @@
 //  SearchView.swift
 //  Rangley
 //
-//  Created by Claude on 9/16/25.
+//  Created by Anthony Guzzardo on 9/14/25.
 //
 
 import SwiftUI
 
-public struct SearchView: View {
+public struct SearchView: View
+{
     @State private var searchText = ""
     @State private var selectedScope: SearchScope = .all
     @State private var searchResults = SearchResults()
@@ -40,7 +41,8 @@ public struct SearchView: View {
         self.onUserSelected = onUserSelected
     }
     
-    public var body: some View {
+    public var body: some View
+    {
         NavigationView {
             VStack(spacing: 0) {
                 // Search header
@@ -81,7 +83,8 @@ public struct SearchView: View {
     }
     
     // MARK: - Search Header
-    private var searchHeader: some View {
+    private var searchHeader: some View
+    {
         HStack(spacing: 16) {
             // Close button
             Button(action: onDismiss) {
@@ -132,7 +135,8 @@ public struct SearchView: View {
     }
     
     // MARK: - Scope Selector
-    private var scopeSelector: some View {
+    private var scopeSelector: some View
+    {
         HStack(spacing: 12) {
             ForEach(SearchScope.allCases, id: \.self) { scope in
                 Button(action: { selectedScope = scope }) {
@@ -165,7 +169,8 @@ public struct SearchView: View {
     }
     
     // MARK: - Loading View
-    private var loadingView: some View {
+    private var loadingView: some View
+    {
         VStack(spacing: 16) {
             ProgressView()
                 .scaleEffect(1.2)
@@ -179,7 +184,8 @@ public struct SearchView: View {
     }
     
     // MARK: - Empty State
-    private var emptyStateView: some View {
+    private var emptyStateView: some View
+    {
         VStack(spacing: 20) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 48, weight: .light))
@@ -201,7 +207,8 @@ public struct SearchView: View {
     }
     
     // MARK: - No Results View
-    private var noResultsView: some View {
+    private var noResultsView: some View
+    {
         VStack(spacing: 20) {
             Image(systemName: "exclamationmark.magnifyingglass")
                 .font(.system(size: 48, weight: .light))
@@ -223,7 +230,8 @@ public struct SearchView: View {
     }
     
     // MARK: - Results List
-    private var searchResultsList: some View {
+    private var searchResultsList: some View
+    {
         ScrollView(.vertical, showsIndicators: false) {
             LazyVStack(spacing: 16) {
                 // Meets Section
@@ -266,7 +274,8 @@ public struct SearchView: View {
         icon: String,
         count: Int,
         @ViewBuilder content: () -> Content
-    ) -> some View {
+    ) -> some View
+    {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
                 Image(systemName: icon)
@@ -290,7 +299,8 @@ public struct SearchView: View {
     }
     
     // MARK: - Search Logic
-    private func performSearch(query: String) {
+    private func performSearch(query: String)
+    {
         // Cancel previous search
         searchTask?.cancel()
         
@@ -332,7 +342,8 @@ public struct SearchView: View {
         }
     }
     
-    private func executeSearch(query: String) async throws -> SearchResults {
+    private func executeSearch(query: String) async throws -> SearchResults
+    {
         // Capture the current scope to avoid actor isolation issues
         let currentScope = await MainActor.run { selectedScope }
         
@@ -344,7 +355,8 @@ public struct SearchView: View {
         return SearchResults(meets: meets, users: users)
     }
     
-    private func searchMeets(query: String, scope: SearchScope) async -> [ViewMeetsModel] {
+    private func searchMeets(query: String, scope: SearchScope) async -> [ViewMeetsModel]
+    {
         guard scope == .all || scope == .meets else {
             return []
         }
@@ -364,7 +376,8 @@ public struct SearchView: View {
     }
     
     /// need to input exactly the username
-    private func searchUsers(query: String, scope: SearchScope) async -> [ViewUsersModel] {
+    private func searchUsers(query: String, scope: SearchScope) async -> [ViewUsersModel]
+    {
         guard scope == .all || scope == .users else {
             return []
         }
@@ -386,8 +399,9 @@ public struct SearchView: View {
         }
     }
     
-    /// partial search
-    private func browseUsers(query: String, scope: SearchScope) async -> [ViewUsersModel] {
+    /// partial search deprecated
+    private func browseUsers(query: String, scope: SearchScope) async -> [ViewUsersModel]
+    {
         guard scope == .all || scope == .users else {
             return []
         }
@@ -412,7 +426,8 @@ public struct SearchView: View {
 
 // MARK: - Supporting Types
 
-private enum SearchScope: String, CaseIterable {
+private enum SearchScope: String, CaseIterable
+{
     case all = "all"
     case meets = "meets"
     case users = "users"
@@ -445,7 +460,8 @@ private struct SearchResults {
 
 // MARK: - Result Cards
 
-private struct MeetSearchResultCard: View {
+struct MeetSearchResultCard: View
+{
     let meet: ViewMeetsModel
     let onTap: () -> Void
     
@@ -506,7 +522,8 @@ private struct MeetSearchResultCard: View {
     }
 }
 
-private struct UserSearchResultCard: View {
+struct UserSearchResultCard: View
+{
     let user: ViewUsersModel
     let onTap: () -> Void
     
@@ -569,7 +586,8 @@ private struct UserSearchResultCard: View {
         .buttonStyle(PlainButtonStyle())
     }
     
-    private func matchBadge(text: String, color: Color) -> some View {
+    private func matchBadge(text: String, color: Color) -> some View
+    {
         Text(text)
             .font(.system(size: 10, weight: .bold))
             .foregroundStyle(color)

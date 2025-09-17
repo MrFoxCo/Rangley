@@ -231,10 +231,9 @@ struct MeetCreationFormView: View
         loadNewLocationAddress(picked)
     }
 
-    private func reviewLocationString() -> String {
-        if let lat = vm.latitude, let lon = vm.longitude {
-            return "\(displayLocationName) • \(String(format: "%.4f", lat)), \(String(format: "%.4f", lon))"
-        }
+    // does nothing
+    private func reviewLocationString() -> String
+    {
         return displayLocationName
     }
 
@@ -583,7 +582,7 @@ struct MeetCreationFormView: View
                     {
                         VStack(alignment: .leading, spacing: 16)
                         {
-                            DetailRow(label: "Meet Location", value: reviewLocationString())
+                            DetailRow(label: "Meet Location", value: displayLocationName)
                             DetailRow(label: "Meet Name", value: vm.name)
                             DetailRow(label: "Start", value: formatDate(vm.start))
                             DetailRow(label: "End", value: formatDate(vm.end))

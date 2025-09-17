@@ -5,6 +5,18 @@
 //  Created by Anthony Guzzardo on 9/13/25.
 //
 
+// =========================================================
+// =========================================================
+// =========================================================
+// MARK: - IGNORE THE BELOW TODOs FOR NOW
+
+// TODO: - Might be some unreachable code you need to remove
+
+// MARK: - IGNORE THE ABOVE TODOs FOR NOW
+// =========================================================
+// =========================================================
+// =========================================================
+
 import SwiftUI
 import CoreLocation
 import MapKit
@@ -79,7 +91,7 @@ struct NearbyMeetsBadgeView: View
                         removal: .opacity.combined(with: .scale(scale: 0.9))
                     ))
             }
-            else
+            else // this may be unreachable
             {
                 // MAIN BADGE BUTTON - The floating capsule that shows "X nearby" or expanded info
                 Button {
