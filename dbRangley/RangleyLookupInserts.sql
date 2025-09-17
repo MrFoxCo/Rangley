@@ -65,6 +65,9 @@ INSERT INTO rangley.td_participant_status (participant_status_id, name) VALUES (
 INSERT INTO rangley.td_participant_status (participant_status_id, name) VALUES (3, 'Maybe');
 INSERT INTO rangley.td_participant_status (participant_status_id, name) VALUES (4, 'Pending');
 INSERT INTO rangley.td_participant_status (participant_status_id, name) VALUES (5, 'Invited');
+INSERT INTO rangley.td_participant_status (participant_status_id, name) VALUES (6, 'Declined');
+INSERT INTO rangley.td_participant_status (participant_status_id, name) VALUES (7, 'Accepted');
+INSERT INTO rangley.td_participant_status (participant_status_id, name) VALUES (8, 'Owner');
 
 -- Notification Types
 INSERT INTO rangley.td_notification_type (notification_type_id, name) VALUES (0, 'NULL_VALUE');

@@ -23,6 +23,7 @@ import AWSPluginsCore
 // TODO: - Fix recenter compass top right
 // TODO: - return to user tap
 // TODO: - Remeber User when Login Option and for Create New Account
+// TODO: - NEED TO ADD categories and max capacties as options
 // MARK: - IGNORE THE ABOVE TODOs FOR NOW
 // =========================================================
 // =========================================================

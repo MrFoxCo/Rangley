@@ -15,8 +15,8 @@ DECLARE
 BEGIN
     -- Map response to status ID
     v_new_status_id := CASE p_response
-        WHEN 'accept' THEN 2  -- accepted
-        WHEN 'decline' THEN 3 -- declined  
+        WHEN 'accept' THEN 5  -- accepted
+        WHEN 'decline' THEN 6 -- declined  
         WHEN 'maybe' THEN 4   -- maybe
         ELSE NULL
     END;

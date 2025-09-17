@@ -1,9 +1,9 @@
 CREATE OR REPLACE FUNCTION rangley.rangley_fn_invite_users_to_meet
 (
-    p_meet_id BIGINT,
-    p_inviter_user_id BIGINT,
-    p_invitee_user_ids BIGINT[],
-    p_invitation_message TEXT DEFAULT NULL
+     p_meet_id              INT8
+    ,p_inviter_user_id      INT8
+    ,p_invitee_user_ids     INT8[]
+    ,p_invitation_message   TEXT DEFAULT NULL
 )
 RETURNS TABLE (
     user_id BIGINT,
@@ -14,162 +14,176 @@ RETURNS TABLE (
 LANGUAGE plpgsql
 AS $$
 DECLARE
-    v_meet_record RECORD;
-    v_inviter_is_authorized BOOLEAN;
+    -- status ids (dictionary-backed; inline constants for speed)
+    v_attending_status_id     INT2 := 1;
+    v_not_attending_status_id INT2 := 2;
+    v_maybe_status_id         INT2 := 3;
+    v_invited_status_id       INT2 := 4;
+    v_declined_status_id      INT2 := 5;
+    v_accepted_status_id      INT2 := 6;
+    v_owner_status_id         INT2 := 7;
+    v_left_status_id          INT2 := 8;
+    v_removed_status_id       INT2 := 9;
+
+    -- meet facts from view (already latest & not ended/cancelled/postponed)
+    v_meet_uuid UUID;
+    v_meet_name VARCHAR(50);
+    v_meet_start TIMESTAMPTZ;
+    v_meet_end   TIMESTAMPTZ;
+    v_category_name TEXT;
+    v_meet_category_id INT2;
+    v_lat FLOAT8; v_lon FLOAT8;
+    v_max_capacity INT4;
+
+    v_current_participants INT;
+    v_notification_type_id INT2;
     v_notification_id BIGINT;
+
     v_user_id BIGINT;
     v_username VARCHAR(50);
-    v_already_participant BOOLEAN;
-    v_payload JSONB;
-    v_invited_status_id INT2 := 1; -- 'invited' status
-    v_host_status_id INT2 := 5; -- 'host' status
-    v_current_participants INT;
+    v_existing_status INT2;
+    v_allow_invites BOOLEAN;
 BEGIN
-    -- Get meet details from the up-to-date view
-    SELECT 
-        m.*,
-        (SELECT COUNT(*) FROM rangley.vw_meet_participants mp 
-         WHERE mp.meet_id = m.meet_id 
-         AND mp.participant_status_id IN (2, 5)) -- accepted or host
-    INTO v_meet_record, v_current_participants
-    FROM rangley.vw_up_to_date_meets m
-    WHERE m.meet_id = p_meet_id;
+    -- Latest active/up-to-date meet row
+    SELECT
+    	 um.meet_id_uuid	,um.name
+    	,um.dttm_start_utc	,um.dttm_end_utc
+        ,um.category_name	,um.meet_category_id
+        ,um.latitude		,um.longitude
+        ,um.max_capacity
+    INTO
+    	 v_meet_uuid		,v_meet_name
+    	,v_meet_start		,v_meet_end
+        ,v_category_name	,v_meet_category_id
+        ,v_lat				,v_lon				
+        ,v_max_capacity
+    FROM rangley.vw_up_to_date_meets um
+    WHERE um.meet_id = p_meet_id;
 
     IF NOT FOUND THEN
-        RAISE EXCEPTION 'Meet with ID % does not exist or is no longer active', p_meet_id;
+        RAISE EXCEPTION 'Meet % not found, inactive, or already ended.', p_meet_id;
     END IF;
 
-    -- Check authorization: inviter must be host or meet creator
-    SELECT EXISTS(
-        SELECT 1 
-        FROM rangley.vw_meet_participants mp
-        WHERE mp.meet_id = p_meet_id 
-        AND mp.user_id = p_inviter_user_id
-        AND mp.participant_status_id = v_host_status_id
-        
-        UNION
-        
-        SELECT 1
-        FROM rangley.vw_meet_ids mi
-        WHERE mi.meet_id = p_meet_id 
-        AND mi.created_by_user_id = p_inviter_user_id
-    ) INTO v_inviter_is_authorized;
-
-    IF NOT v_inviter_is_authorized THEN
-        RAISE EXCEPTION 'User % does not have permission to invite others to meet %', 
-            p_inviter_user_id, p_meet_id;
+    -- Authorization: owner OR creator
+    IF NOT EXISTS (
+        SELECT 1 FROM rangley.vw_meet_participants mp
+        WHERE 	mp.meet_id = p_meet_id
+        AND 	mp.user_id = p_inviter_user_id 
+        AND 	mp.participant_status_id = v_owner_status_id
+    ) AND NOT EXISTS (
+        SELECT 1 FROM rangley.vw_meet_ids mi
+        WHERE 	mi.meet_id = p_meet_id
+        AND 	mi.created_by_user_id = p_inviter_user_id
+    ) THEN
+        RAISE EXCEPTION 'User % lacks permission to invite for meet %', p_inviter_user_id, p_meet_id;
     END IF;
 
-    -- Check capacity before inviting
-    IF v_current_participants + array_length(p_invitee_user_ids, 1) > v_meet_record.max_capacity THEN
-        RAISE NOTICE 'Warning: Inviting % users would exceed meet capacity of %', 
-            array_length(p_invitee_user_ids, 1), v_meet_record.max_capacity;
+    -- Current accepted+owner count (capacity signal; doesn’t block)
+    SELECT COUNT(*) INTO v_current_participants
+    FROM rangley.vw_meet_participants
+    WHERE meet_id = p_meet_id
+      AND participant_status_id IN (v_accepted_status_id, v_owner_status_id);
+
+    -- Notification type id by name (fallback to 1 if not seeded yet)
+    SELECT nt.notification_type_id
+    INTO v_notification_type_id
+    FROM rangley.vw_notification_type nt
+    WHERE lower(nt.name) = 'meet_invitation'
+    LIMIT 1;
+
+    IF v_notification_type_id IS NULL THEN
+        v_notification_type_id := 1;
     END IF;
 
-    -- Process each invitee
-    FOREACH v_user_id IN ARRAY p_invitee_user_ids
-    LOOP
-        -- Get username for response
-        SELECT u.username 
-        INTO v_username
+    FOREACH v_user_id IN ARRAY p_invitee_user_ids LOOP
+        IF v_user_id IS NULL THEN
+            RETURN QUERY SELECT NULL::BIGINT, NULL::VARCHAR(50), 'user_not_found'::TEXT, NULL::BIGINT;
+            CONTINUE;
+        END IF;
+
+        SELECT u.username INTO v_username
         FROM rangley.vw_users u
         WHERE u.user_id = v_user_id;
 
-        -- Skip if user doesn't exist
         IF v_username IS NULL THEN
-            RETURN QUERY SELECT 
-                v_user_id,
-                NULL::VARCHAR(50),
-                'user_not_found'::TEXT,
-                NULL::BIGINT;
+            RETURN QUERY SELECT v_user_id, NULL::VARCHAR(50), 'user_not_found'::TEXT, NULL::BIGINT;
             CONTINUE;
         END IF;
 
-        -- Check if user is already a participant
-        SELECT EXISTS(
-            SELECT 1 
-            FROM rangley.vw_meet_participants mp
-            WHERE mp.meet_id = p_meet_id 
-            AND mp.user_id = v_user_id
-            AND mp.participant_status_id NOT IN (3, 6, 7) -- not declined, left, or removed
-        ) INTO v_already_participant;
-
-        IF v_already_participant THEN
-            RETURN QUERY SELECT 
-                v_user_id,
-                v_username,
-                'already_participant'::TEXT,
-                NULL::BIGINT;
+        -- self-invite guard
+        IF v_user_id = p_inviter_user_id THEN
+            RETURN QUERY SELECT v_user_id, v_username, 'cannot_invite_self'::TEXT, NULL::BIGINT;
             CONTINUE;
         END IF;
 
-        -- Add user as invited participant (or re-invite if they previously declined/left)
-        INSERT INTO rangley.tb_meet_participants (
-            meet_id, 
-            user_id, 
-            participant_status_id,
-            dttm_joined_utc
-        )
-        VALUES (
-            p_meet_id, 
-            v_user_id, 
-            v_invited_status_id,
-            now()
-        )
-        ON CONFLICT (meet_id, user_id) 
-        DO UPDATE SET 
-            participant_status_id = v_invited_status_id,
-            dttm_modified_utc = now()
-        WHERE rangley.tb_meet_participants.participant_status_id IN (3, 6, 7); -- only re-invite if declined/left/removed
+        -- privacy
+        SELECT COALESCE(s.allow_invites_from_anyone, TRUE)
+        INTO v_allow_invites
+        FROM rangley.vw_user_privacy_settings s
+        WHERE s.user_id = v_user_id;
 
-        -- Build notification payload
-        v_payload := jsonb_build_object(
-            'meet_id', p_meet_id,
-            'meet_id_uuid', v_meet_record.meet_id_uuid,
-            'meet_name', v_meet_record.name,
-            'meet_start', v_meet_record.dttm_start_utc,
-            'meet_end', v_meet_record.dttm_end_utc,
-            'meet_location', jsonb_build_object(
-                'latitude', v_meet_record.latitude,
-                'longitude', v_meet_record.longitude
-            ),
-            'category_name', v_meet_record.category_name,
-            'invited_by_user_id', p_inviter_user_id,
-            'invitation_message', p_invitation_message,
-            'action_required', 'respond_to_invitation'
-        );
+        IF NOT v_allow_invites THEN
+            RETURN QUERY SELECT v_user_id, v_username, 'invites_blocked'::TEXT, NULL::BIGINT;
+            CONTINUE;
+        END IF;
 
-        -- Create notification
-        INSERT INTO rangley.tb_notifications (
-            notification_type_id,
-            meet_id,
-            created_by_user_id,
-            payload_json
-        )
+        -- existing participant state
+        SELECT participant_status_id
+        INTO v_existing_status
+        FROM rangley.vw_meet_participants
+        WHERE meet_id = p_meet_id AND user_id = v_user_id;
+
+        IF v_existing_status = v_invited_status_id THEN
+            RETURN QUERY SELECT v_user_id, v_username, 'already_invited'::TEXT, NULL::BIGINT;
+            CONTINUE;
+        ELSIF v_existing_status IS NOT NULL
+              AND v_existing_status NOT IN (v_declined_status_id, v_left_status_id, v_removed_status_id) THEN
+            RETURN QUERY SELECT v_user_id, v_username, 'already_participant'::TEXT, NULL::BIGINT;
+            CONTINUE;
+        END IF;
+
+        -- heads-up capacity (not a blocker)
+        IF v_current_participants + 1 > v_max_capacity THEN
+            RAISE NOTICE 'Inviting user % would exceed capacity %', v_user_id, v_max_capacity;
+        END IF;
+
+        -- insert / re-invite with proper timestamps
+        INSERT INTO rangley.tb_meet_participants(meet_id, user_id, participant_status_id, dttm_invited_utc)
+        VALUES (p_meet_id, v_user_id, v_invited_status_id, now())
+        ON CONFLICT (meet_id, user_id)
+        DO UPDATE SET
+            participant_status_id = EXCLUDED.participant_status_id,
+            dttm_invited_utc = now(),
+            dttm_accepted_utc = NULL,
+            dttm_left_utc = NULL,
+            dttm_modified_utc = now();
+
+        -- notification
+        INSERT INTO rangley.tb_notifications (notification_type_id, meet_id, created_by_user_id, payload_json)
         VALUES (
-            1, -- meet_invitation type
+            v_notification_type_id,
             p_meet_id,
             p_inviter_user_id,
-            v_payload
+            jsonb_build_object(
+                'meet_id', p_meet_id,
+                'meet_id_uuid', v_meet_uuid,
+                'meet_name', v_meet_name,
+                'meet_start', v_meet_start,
+                'meet_end', v_meet_end,
+                'meet_location', jsonb_build_object('latitude', v_lat, 'longitude', v_lon),
+                'category_name', v_category_name,
+                'meet_category_id', v_meet_category_id,
+                'invited_by_user_id', p_inviter_user_id,
+                'invitation_message', p_invitation_message,
+                'action_required', 'respond_to_invitation'
+            )
         )
         RETURNING notification_id INTO v_notification_id;
 
-        -- Add to user's inbox
-        INSERT INTO rangley.tb_user_inboxes (
-            user_id,
-            notification_id
-        )
-        VALUES (
-            v_user_id,
-            v_notification_id
-        );
+        INSERT INTO rangley.tb_user_inboxes (user_id, notification_id)
+        VALUES (v_user_id, v_notification_id);
 
-        -- Return success for this user
-        RETURN QUERY SELECT 
-            v_user_id,
-            v_username,
-            'invited'::TEXT,
-            v_notification_id;
+        RETURN QUERY SELECT v_user_id, v_username, 'invited'::TEXT, v_notification_id;
     END LOOP;
 
     RETURN;

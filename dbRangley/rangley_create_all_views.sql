@@ -7,11 +7,14 @@ DROP VIEW IF EXISTS rangley.vw_meet_status CASCADE;
 DROP VIEW IF EXISTS rangley.vw_features CASCADE;
 DROP VIEW IF EXISTS rangley.vw_meet_category CASCADE;
 DROP VIEW IF EXISTS rangley.vw_sub_category CASCADE;
-DROP VIEW IF EXISTS rangley.vw_notification_type CASCADE;
+
 DROP VIEW IF EXISTS rangley.vw_meet_icon CASCADE;
-DROP VIEW IF EXISTS rangley.vw_meet_participants CASCADE;
-DROP VIEW IF EXISTS rangley.vw_user_inboxes CASCADE;
+DROP VIEW IF EXISTS rangley.vw_notification_type CASCADE;
 DROP VIEW IF EXISTS rangley.vw_notifications CASCADE;
+DROP VIEW IF EXISTS rangley.vw_user_inboxes CASCADE;
+DROP VIEW IF EXISTS rangley.vw_meet_participants CASCADE;
+
+
 DROP VIEW IF EXISTS rangley.vw_users CASCADE;
 DROP VIEW IF EXISTS rangley.vw_meet_ids CASCADE;
 DROP VIEW IF EXISTS rangley.vw_change_stamps CASCADE;
@@ -126,7 +129,8 @@ SELECT
     ,meet_id
     ,user_id
     ,participant_status_id
-    ,dttm_joined_utc
+    ,dttm_invited_utc
+    ,dttm_accepted_utc
     ,dttm_left_utc
     ,dttm_created_utc
     ,dttm_modified_utc
