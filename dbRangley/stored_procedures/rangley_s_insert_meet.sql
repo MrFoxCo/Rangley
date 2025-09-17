@@ -1,25 +1,25 @@
 CREATE OR REPLACE PROCEDURE rangley.rangley_s_insert_meet
 (
     -- OUTs
-      OUT num_inserted            INT4
-
+     OUT num_inserted            INT4
+	,OUT new_meet_id_uuid        UUID
     -- INs
-    , IN  p_cognito_sub           text
+    ,IN  p_cognito_sub           text
 
     -- coordinates
-    , IN  p_latitude              FLOAT8
-    , IN  p_longitude             FLOAT8
-    , IN  p_region_latitude       FLOAT8
-    , IN  p_region_longitude      FLOAT8
-    , IN  p_region_radius         FLOAT8
+    ,IN  p_latitude              FLOAT8
+    ,IN  p_longitude             FLOAT8
+    ,IN  p_region_latitude       FLOAT8
+    ,IN  p_region_longitude      FLOAT8
+    ,IN  p_region_radius         FLOAT8
 
     -- meet fields
-    , IN  p_name                  varchar(50)
-    , IN  p_dttm_start_utc        timestamptz
-    , IN  p_dttm_end_utc          timestamptz
-    , IN  p_description           varchar(50) DEFAULT ''::varchar
-    , IN  p_meet_category_id      int2        DEFAULT 1::int2
-    , IN  p_max_capacity          int4        DEFAULT 2::int4
+    ,IN  p_name                  varchar(50)
+    ,IN  p_dttm_start_utc        timestamptz
+    ,IN  p_dttm_end_utc          timestamptz
+    ,IN  p_description           varchar(50) DEFAULT ''::varchar
+    ,IN  p_meet_category_id      int2        DEFAULT 1::int2
+    ,IN  p_max_capacity          int4        DEFAULT 2::int4
 )
 LANGUAGE plpgsql
 /*
@@ -77,6 +77,11 @@ BEGIN
     -- 1) create meet_id
     CALL rangley.rangley_i_meet_id(new_meet_id, created_by_user_id);
 
+	SELECT uuid INTO new_meet_id_uuid
+	FROM rangley.tb_meet_ids
+	WHERE meet_id = new_meet_id;
+
+
     -- 2) create meet_coordinate_id (has its own range/NULL checks)
     CALL rangley.rangley_i_meet_coordinate(
         new_meet_coordinate_id,
@@ -119,6 +124,14 @@ BEGIN
           MESSAGE='[ERRO] Unexpected insert count for tb_meets',
           DETAIL=format('rows=%s meet_id=%s', num_inserted, new_meet_id);
     END IF;
+
+    -- Seed owner participant (status = 7 Owner)
+    INSERT INTO rangley.tb_meet_participants(
+        meet_id, user_id, participant_status_id, dttm_invited_utc, dttm_accepted_utc
+    )
+    VALUES (new_meet_id, created_by_user_id, 7, now(), now())
+    ON CONFLICT (meet_id, user_id) DO NOTHING;
+
 
     RAISE LOG '[INFO] Created meet_id=% with meet_coordinate_id=% (change_stamp=0) by user_id=%',
         new_meet_id, new_meet_coordinate_id, created_by_user_id;

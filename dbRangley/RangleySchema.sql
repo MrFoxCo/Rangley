@@ -292,15 +292,6 @@ CREATE TABLE IF NOT EXISTS rangley.tb_user_privacy_settings
     ,dttm_modified_utc 			TIMESTAMPTZ
 );
 
--- Future enhancement when you add friends TODO: IMPLEMENT IN VERSION 2 OF APPLICATION
---CREATE TABLE rangley.tb_user_connections (
---    user_id 				BIGINT NOT NULL,
---    connected_user_id 		BIGINT NOT NULL,
---    connection_type 		VARCHAR(20), -- 'friend', 'follower', etc.
---    dttm_created_utc 		TIMESTAMPTZ DEFAULT NOW(),
---    PRIMARY KEY (user_id, connected_user_id)
---);
-
 -- CONSIDER THE JSON BLOB THING FOR NOTIFICATIONS COULD BE USEFUL???
 CREATE TABLE rangley.tb_user_inboxes
 (
@@ -320,6 +311,22 @@ CREATE INDEX IF NOT EXISTS ix_inbox_notification
   ON rangley.tb_user_inboxes (notification_id);
 
 
+
+-- Future enhancement when you add friends TODO: IMPLEMENT IN VERSION 2 OF APPLICATION
+--CREATE TABLE rangley.tb_user_connections (
+--    user_id 				BIGINT NOT NULL,
+--    connected_user_id 		BIGINT NOT NULL,
+--    connection_type 		VARCHAR(20), -- 'friend', 'follower', etc.
+--    dttm_created_utc 		TIMESTAMPTZ DEFAULT NOW(),
+--    PRIMARY KEY (user_id, connected_user_id)
+--);
+
+
+
+
+-- #################################################
+-- ########	   END TABLES BEGIN TRIGGERS	########
+-- #################################################
 
 -- Triggers for users privacy settings
 
@@ -348,6 +355,10 @@ BEGIN
   NEW.dttm_modified_utc := NOW();
   RETURN NEW;
 END $$;
+
+
+
+
 
 DROP TRIGGER IF EXISTS bu_privacy_touch_modified ON rangley.tb_user_privacy_settings;
 CREATE TRIGGER bu_privacy_touch_modified

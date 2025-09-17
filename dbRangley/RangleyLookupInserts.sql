@@ -63,11 +63,15 @@ INSERT INTO rangley.td_participant_status (participant_status_id, name) VALUES (
 INSERT INTO rangley.td_participant_status (participant_status_id, name) VALUES (1, 'Attending');
 INSERT INTO rangley.td_participant_status (participant_status_id, name) VALUES (2, 'Not Attending');
 INSERT INTO rangley.td_participant_status (participant_status_id, name) VALUES (3, 'Maybe');
-INSERT INTO rangley.td_participant_status (participant_status_id, name) VALUES (4, 'Pending');
-INSERT INTO rangley.td_participant_status (participant_status_id, name) VALUES (5, 'Invited');
-INSERT INTO rangley.td_participant_status (participant_status_id, name) VALUES (6, 'Declined');
-INSERT INTO rangley.td_participant_status (participant_status_id, name) VALUES (7, 'Accepted');
-INSERT INTO rangley.td_participant_status (participant_status_id, name) VALUES (8, 'Owner');
+INSERT INTO rangley.td_participant_status (participant_status_id, name) VALUES (4, 'Invited');
+INSERT INTO rangley.td_participant_status (participant_status_id, name) VALUES (5, 'Declined');
+INSERT INTO rangley.td_participant_status (participant_status_id, name) VALUES (6, 'Accepted');
+INSERT INTO rangley.td_participant_status (participant_status_id, name) VALUES (7, 'Owner');
+INSERT INTO rangley.td_participant_status (participant_status_id, name) VALUES (8, 'Left');
+INSERT INTO rangley.td_participant_status (participant_status_id, name) VALUES (9, 'Removed');
+
+delete from rangley.td_participant_status;
+
 
 -- Notification Types
 INSERT INTO rangley.td_notification_type (notification_type_id, name) VALUES (0, 'NULL_VALUE');

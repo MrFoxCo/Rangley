@@ -144,12 +144,13 @@ BEGIN
 
     GET DIAGNOSTICS num_inserted = ROW_COUNT;
 
+
     IF num_inserted <> 1 THEN
         RAISE EXCEPTION USING ERRCODE='23514',
           MESSAGE='[ERRO] Unexpected insert count for tb_meets',
           DETAIL=format('rows=%s meet_id=%s change_stamp=%s', num_inserted, v_meet_id, v_new_change_stamp);
     END IF;
-
+	
     RAISE LOG '[INFO] Updated meet_id=% with change_stamp=% and meet_coordinate_id=% by user_id=%',
         v_meet_id, v_new_change_stamp, current_coordinate_id, v_user_id;
 

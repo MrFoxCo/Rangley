@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION rangley.rangley_fn_invite_users_to_meet
+CREATE OR REPLACE FUNCTION rangley.rangley_fn_i_invite_users_to_meet
 (
      p_meet_id              INT8
     ,p_inviter_user_id      INT8

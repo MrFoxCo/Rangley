@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION rangley.rangley_fn_invite_users_to_meet_by_meet_id_uuid
+CREATE OR REPLACE FUNCTION rangley.rangley_fn_i_invite_users_to_meet_by_meet_id_uuid
 (
      p_meet_id_uuid UUID
     ,p_inviter_user_uuid UUID
