@@ -124,7 +124,8 @@ struct MeetCreationFormByTapView: View
     }
     var body: some View
     {
-        VStack(spacing: 0) {
+        VStack(spacing: 0)
+        {
             // Header with back button and progress
             VStack(spacing: 16) {
                 HStack {
@@ -328,6 +329,7 @@ struct MeetCreationFormByTapView: View
             .padding(.horizontal, 24)
             .padding(.bottom, 24)
         }
+        .frame(maxWidth: 360)   // <- keep it compact on iPhone/iPad
         .background(
             RoundedRectangle(cornerRadius: 24)
                 .fill(AppPalette.Brand.russianViolet)
@@ -336,21 +338,18 @@ struct MeetCreationFormByTapView: View
                         .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1)
                 )
         )
+        .padding(.horizontal, 20) // <- breathing room from screen edges
         .shadow(color: AppPalette.Brand.neonPink.opacity(0.3), radius: 20, x: 0, y: 10)
         .scaleEffect(isAnimating ? 1 : 0.95)
         .opacity(isAnimating ? 1 : 0)
         .onAppear {
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                isAnimating = true
-            }
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { isAnimating = true }
             if endTime <= startTime { endTime = startTime.addingTimeInterval(3600) }
         }
         .onChange(of: startTime) { _, newStart in
             if endTime <= newStart { endTime = newStart.addingTimeInterval(3600) }
         }
-        .onTapGesture {
-            isNameFieldFocused = false
-        }
+        .onTapGesture { isNameFieldFocused = false }
     }
 
     private static let reviewFormatter: DateFormatter = {
@@ -487,9 +486,11 @@ struct MeetCreationOverlayByTap: View
                                 onBack: {
                                     guard !isExploding else { return }
                                     withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                        showPopup = false
                                         currentStep = .locationConfirm
                                     }
                                 }
+
                             )
                             .frame(maxWidth: 400, maxHeight: 650)
                             .allowsHitTesting(!isSubmitting && !isExploding)

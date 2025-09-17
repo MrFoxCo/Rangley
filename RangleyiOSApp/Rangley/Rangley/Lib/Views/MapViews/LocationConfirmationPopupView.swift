@@ -48,33 +48,31 @@ struct LocationConfirmationPopupView: View
     }
     
     var body: some View {
-        VStack(spacing: 20) {
-            // Pink circle indicator at top
-            Circle()
-                .fill(AppPalette.Brand.neonPink)
-                .frame(width: 12, height: 12)
-                .offset(y: -30)
-            
+        VStack(spacing: 0) {
             VStack(spacing: 16) {
                 // Title
                 Text("Create Meet Here?")
                     .font(.system(size: 20, weight: .bold))
                     .foregroundColor(AppPalette.Text.primary)
-                
+
                 // Location name
                 Text(locationDisplayName)
                     .font(.system(size: 16, weight: .medium))
                     .foregroundColor(AppPalette.Brand.neonPink)
                     .multilineTextAlignment(.center)
-                
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.9)
+
                 // Location details
                 if !locationDetails.isEmpty {
                     Text(locationDetails)
                         .font(.system(size: 14))
                         .foregroundColor(AppPalette.Text.secondary)
                         .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.9)
                 }
-                
+
                 // Buttons
                 HStack(spacing: 12) {
                     Button(action: onCancel) {
@@ -89,7 +87,7 @@ struct LocationConfirmationPopupView: View
                                     .stroke(Color.white.opacity(0.2), lineWidth: 1)
                             )
                     }
-                    
+
                     Button(action: onConfirm) {
                         Text("Create Meet")
                             .font(.system(size: 16, weight: .bold))
@@ -112,6 +110,8 @@ struct LocationConfirmationPopupView: View
                             .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1)
                     )
             )
+            .frame(maxWidth: 360)          // <- keep it compact
+            .padding(.horizontal, 20)      // <- breathing room on small phones
             .shadow(color: AppPalette.Brand.neonPink.opacity(0.3), radius: 20, x: 0, y: 10)
         }
         .scaleEffect(isAnimating ? 1 : 0.5)
@@ -122,6 +122,7 @@ struct LocationConfirmationPopupView: View
             }
         }
     }
+
 }
 
 // Overlay modifier for the map
