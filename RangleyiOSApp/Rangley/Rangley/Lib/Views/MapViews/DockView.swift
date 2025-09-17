@@ -1,3 +1,25 @@
+//
+//  DockView.swift
+//  Rangley
+//
+//  Created by Anthony Guzzardo on 9/10/25.
+//
+
+
+// =========================================================
+// =========================================================
+// =========================================================
+// MARK: - IGNORE THE BELOW TODOs FOR NOW
+
+// TODO: - PRobably need to move all the buttons into their own view
+// TODO: - Normalize the heigh of all the buttons
+
+// MARK: - IGNORE THE ABOVE TODOs FOR NOW
+// =========================================================
+// =========================================================
+// =========================================================
+
+
 import SwiftUI
 
 public struct DockView: View {
@@ -46,7 +68,8 @@ public struct DockView: View {
                 )
                 
                 // Create meet button with migraine aura effect
-                Button(action: onCreateMeet) {
+                Button(action: onCreateMeet)
+                {
                     ZStack {
                         // Migraine aura effect layers
                         ForEach(0..<3, id: \.self) { index in
@@ -125,7 +148,8 @@ public struct DockView: View {
                 }
                 
                 // Search button
-                Button(action: { showSearch = true }) {
+                Button(action: { showSearch = true })
+                {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: 18, weight: .semibold))
                         .imageScale(.large)
@@ -157,7 +181,8 @@ public struct DockView: View {
             )
             .shadow(color: AppPalette.Brand.neonPink.opacity(0.2), radius: 10, x: 0, y: 5)
         }
-        .fullScreenCover(isPresented: $showSearch) {
+        .fullScreenCover(isPresented: $showSearch)
+        {
             SearchView(
                 baseURL: baseURL,
                 token: token,

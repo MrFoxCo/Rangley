@@ -5,6 +5,20 @@
 //  Created by Anthony Guzzardo on 9/14/25.
 //
 
+
+// =========================================================
+// =========================================================
+// =========================================================
+// MARK: - IGNORE THE BELOW TODOs FOR NOW
+
+// TODO: - We need to unify all of these forms before friday too much duplicate code
+// TODO: - Also these views are way too wide
+
+// MARK: - IGNORE THE ABOVE TODOs FOR NOW
+// =========================================================
+// =========================================================
+// =========================================================
+
 import SwiftUI
 import CoreLocation
 import QuartzCore
