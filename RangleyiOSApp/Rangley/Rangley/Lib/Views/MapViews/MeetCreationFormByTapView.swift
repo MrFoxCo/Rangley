@@ -5,6 +5,18 @@
 //  Created by Anthony Guzzardo on 9/12/25.
 //
 
+// =========================================================
+// =========================================================
+// =========================================================
+// MARK: - IGNORE THE BELOW TODOs FOR NOW
+
+// TODO: - Closing the screens is a little too quick should be smoother
+
+// MARK: - IGNORE THE ABOVE TODOs FOR NOW
+// =========================================================
+// =========================================================
+// =========================================================
+
 import UIKit
 import SwiftUI
 import CoreLocation
@@ -21,6 +33,7 @@ struct MeetCreationFormByTapView: View
 
     @State private var isAnimating = false
     @State private var currentFieldStep: FieldStep = .name
+
 
     @FocusState private var isNameFieldFocused: Bool
 
@@ -378,6 +391,7 @@ struct MeetCreationOverlayByTap: View
 {
     @Binding var selectedLocation: LocationInfo?
     @Binding var showPopup: Bool
+    @State private var isSoftDismissing = false
     // Make this async + throws
  
     //================================================
@@ -485,11 +499,17 @@ struct MeetCreationOverlayByTap: View
                                 },
                                 onBack: {
                                     guard !isExploding else { return }
-                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                        showPopup = false
-                                        currentStep = .locationConfirm
+                                    isSoftDismissing = true
+                                    // run the fade/scale, then actually hide after it finishes
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
+                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
+                                            showPopup = false
+                                            currentStep = .locationConfirm
+                                            isSoftDismissing = false
+                                        }
                                     }
                                 }
+
 
                             )
                             .frame(maxWidth: 400, maxHeight: 650)
