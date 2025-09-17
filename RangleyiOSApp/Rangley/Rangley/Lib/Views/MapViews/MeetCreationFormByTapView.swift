@@ -574,9 +574,12 @@ private struct FullScreenUserCard: View
     let isSelected: Bool
     let onTap: () -> Void
     
-    var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 12) {
+    var body: some View
+    {
+        Button(action: onTap)
+        {
+            HStack(spacing: 12)
+            {
                 // Avatar
                 Circle()
                     .fill(AppPalette.Brand.neonPink.opacity(0.2))
@@ -607,7 +610,8 @@ private struct FullScreenUserCard: View
                         .stroke(isSelected ? AppPalette.Brand.neonPink : AppPalette.Text.tertiary, lineWidth: 2)
                         .frame(width: 24, height: 24)
                     
-                    if isSelected {
+                    if isSelected
+                    {
                         Circle()
                             .fill(AppPalette.Brand.neonPink)
                             .frame(width: 16, height: 16)
@@ -973,10 +977,11 @@ struct UserSearchView: View
             .padding(.bottom, 20)
         }
     }
-    
+
     // MARK: - Selected Users Bottom Section
     private var selectedUsersBottomSection: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 0)
+        {
             // Divider
             Rectangle()
                 .fill(AppPalette.Brand.neonPink.opacity(0.2))
@@ -999,19 +1004,31 @@ struct UserSearchView: View
                     .foregroundStyle(AppPalette.Text.secondary)
                 }
                 
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(selectedUsers) { user in
-                            SelectedUserChip(user: user) {
-                                removeUser(user)
-                            }
+                LazyVGrid(columns: [
+                    GridItem(.adaptive(minimum: 120), spacing: 8)
+                ], spacing: 8) {
+                    ForEach(selectedUsers) { user in
+                        SelectedUserChip(user: user) {
+                            removeUser(user)
                         }
                     }
-                    .padding(.horizontal, 4)
                 }
             }
             .padding(16)
             .background(Color(.systemBackground).opacity(0.95))
+            // Add this to the bottom of selectedUsersBottomSection:
+            Button(action: onDismiss) {
+                Text("Continue")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(AppPalette.Brand.neonPink)
+                    )
+            }
+            .padding(.top, 8)
         }
     }
     
@@ -1097,6 +1114,7 @@ struct UserSearchView: View
         }
     }
 }
+
 // MARK: - Simple Tap-to-Add User Card (replaces SelectableUserSearchResultCard)
 struct TapToAddUserCard: View
 {
@@ -1178,13 +1196,15 @@ struct TapToAddUserCard: View
             )
     }
 }
+
 // MARK: - Selected User Chip (for bottom section)
 struct SelectedUserChip: View
 {
     let user: ViewUsersModel
     let onRemove: () -> Void
     
-    var body: some View {
+    var body: some View
+    {
         HStack(spacing: 6) {
             // Avatar
             Circle()
@@ -1219,98 +1239,100 @@ struct SelectedUserChip: View
         )
     }
 }
-// MARK: - Selectable User Search Result Card
-struct SelectableUserSearchResultCard: View
-{
-    let user: ViewUsersModel
-    let isSelected: Bool
-    let onTap: () -> Void
-    
-    var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 12) {
-                // Avatar placeholder
-                Circle()
-                    .fill(AppPalette.Brand.neonPink.opacity(0.2))
-                    .frame(width: 44, height: 44)
-                    .overlay(
-                        Text(user.display_name.prefix(1))
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(AppPalette.Brand.neonPink)
-                    )
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(user.display_name)
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(Color.primary)
-                        .lineLimit(1)
-                    
-                    Text("@\(user.username)")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(Color.secondary)
-                        .lineLimit(1)
-                }
-                
-                Spacer()
-                
-                // Match badges (from original SearchView)
-                HStack(spacing: 6) {
-                    if user.matchedByUsername {
-                        matchBadge(text: "U", color: AppPalette.Brand.neonPink)
-                    }
-                    if user.matchedByEmail {
-                        matchBadge(text: "E", color: Color.blue)
-                    }
-                    if user.matchedByPhone {
-                        matchBadge(text: "P", color: Color.green)
-                    }
-                }
-                
-                // Selection indicator
-                ZStack {
-                    Circle()
-                        .stroke(isSelected ? AppPalette.Brand.neonPink : AppPalette.Text.tertiary, lineWidth: 2)
-                        .frame(width: 24, height: 24)
-                    
-                    if isSelected {
-                        Circle()
-                            .fill(AppPalette.Brand.neonPink)
-                            .frame(width: 16, height: 16)
-                            .overlay(
-                                Image(systemName: "checkmark")
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundStyle(.white)
-                            )
-                    }
-                }
-            }
-            .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(isSelected ? AppPalette.Brand.neonPink.opacity(0.05) : Color(.systemBackground))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(isSelected ? AppPalette.Brand.neonPink.opacity(0.5) : AppPalette.Brand.neonPink.opacity(0.2), lineWidth: 1)
-                    )
-            )
-        }
-        .buttonStyle(PlainButtonStyle())
-        .scaleEffect(isSelected ? 0.98 : 1.0)
-        .animation(.easeInOut(duration: 0.1), value: isSelected)
-    }
-    
-    private func matchBadge(text: String, color: Color) -> some View {
-        Text(text)
-            .font(.system(size: 10, weight: .bold))
-            .foregroundStyle(color)
-            .frame(width: 18, height: 18)
-            .background(
-                Circle()
-                    .fill(color.opacity(0.2))
-                    .overlay(
-                        Circle()
-                            .stroke(color.opacity(0.5), lineWidth: 1)
-                    )
-            )
-    }
-}
+
+/// Garbage we don't use ranymore
+//// MARK: - Selectable User Search Result Card
+//struct SelectableUserSearchResultCard: View
+//{
+//    let user: ViewUsersModel
+//    let isSelected: Bool
+//    let onTap: () -> Void
+//    
+//    var body: some View {
+//        Button(action: onTap) {
+//            HStack(spacing: 12) {
+//                // Avatar placeholder
+//                Circle()
+//                    .fill(AppPalette.Brand.neonPink.opacity(0.2))
+//                    .frame(width: 44, height: 44)
+//                    .overlay(
+//                        Text(user.display_name.prefix(1))
+//                            .font(.system(size: 18, weight: .semibold))
+//                            .foregroundStyle(AppPalette.Brand.neonPink)
+//                    )
+//                
+//                VStack(alignment: .leading, spacing: 4) {
+//                    Text(user.display_name)
+//                        .font(.system(size: 16, weight: .semibold))
+//                        .foregroundStyle(Color.primary)
+//                        .lineLimit(1)
+//                    
+//                    Text("@\(user.username)")
+//                        .font(.system(size: 14, weight: .medium))
+//                        .foregroundStyle(Color.secondary)
+//                        .lineLimit(1)
+//                }
+//                
+//                Spacer()
+//                
+//                // Match badges (from original SearchView)
+//                HStack(spacing: 6) {
+//                    if user.matchedByUsername {
+//                        matchBadge(text: "U", color: AppPalette.Brand.neonPink)
+//                    }
+//                    if user.matchedByEmail {
+//                        matchBadge(text: "E", color: Color.blue)
+//                    }
+//                    if user.matchedByPhone {
+//                        matchBadge(text: "P", color: Color.green)
+//                    }
+//                }
+//                
+//                // Selection indicator
+//                ZStack {
+//                    Circle()
+//                        .stroke(isSelected ? AppPalette.Brand.neonPink : AppPalette.Text.tertiary, lineWidth: 2)
+//                        .frame(width: 24, height: 24)
+//                    
+//                    if isSelected {
+//                        Circle()
+//                            .fill(AppPalette.Brand.neonPink)
+//                            .frame(width: 16, height: 16)
+//                            .overlay(
+//                                Image(systemName: "checkmark")
+//                                    .font(.system(size: 10, weight: .bold))
+//                                    .foregroundStyle(.white)
+//                            )
+//                    }
+//                }
+//            }
+//            .padding(16)
+//            .background(
+//                RoundedRectangle(cornerRadius: 12, style: .continuous)
+//                    .fill(isSelected ? AppPalette.Brand.neonPink.opacity(0.05) : Color(.systemBackground))
+//                    .overlay(
+//                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+//                            .stroke(isSelected ? AppPalette.Brand.neonPink.opacity(0.5) : AppPalette.Brand.neonPink.opacity(0.2), lineWidth: 1)
+//                    )
+//            )
+//        }
+//        .buttonStyle(PlainButtonStyle())
+//        .scaleEffect(isSelected ? 0.98 : 1.0)
+//        .animation(.easeInOut(duration: 0.1), value: isSelected)
+//    }
+//    
+//    private func matchBadge(text: String, color: Color) -> some View {
+//        Text(text)
+//            .font(.system(size: 10, weight: .bold))
+//            .foregroundStyle(color)
+//            .frame(width: 18, height: 18)
+//            .background(
+//                Circle()
+//                    .fill(color.opacity(0.2))
+//                    .overlay(
+//                        Circle()
+//                            .stroke(color.opacity(0.5), lineWidth: 1)
+//                    )
+//            )
+//    }
+//}
