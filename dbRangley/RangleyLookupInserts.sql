@@ -11,11 +11,14 @@ INSERT INTO rangley.te_version_features (version, feature_id) VALUES (1, 2);
 -- Meet Categories
 INSERT INTO rangley.td_meet_category (meet_category_id, name) VALUES (0, 'NULL_VALUE');
 INSERT INTO rangley.td_meet_category (meet_category_id, name) VALUES (1, 'Activity');
-INSERT INTO rangley.td_meet_category (meet_category_id, name) VALUES (2, 'Party');
-INSERT INTO rangley.td_meet_category (meet_category_id, name) VALUES (3, 'Food');
-INSERT INTO rangley.td_meet_category (meet_category_id, name) VALUES (4, 'Planned Trip');
-INSERT INTO rangley.td_meet_category (meet_category_id, name) VALUES (5, 'Spontaneous');
-INSERT INTO rangley.td_meet_category (meet_category_id, name) VALUES (6, 'Custom');
+INSERT INTO rangley.td_meet_category (meet_category_id, name) VALUES (2, 'Sports');
+INSERT INTO rangley.td_meet_category (meet_category_id, name) VALUES (3, 'Outdoors');
+INSERT INTO rangley.td_meet_category (meet_category_id, name) VALUES (4, 'Social');
+INSERT INTO rangley.td_meet_category (meet_category_id, name) VALUES (5, 'Music');
+INSERT INTO rangley.td_meet_category (meet_category_id, name) VALUES (6, 'Food');
+INSERT INTO rangley.td_meet_category (meet_category_id, name) VALUES (7, 'Planned Trip');
+INSERT INTO rangley.td_meet_category (meet_category_id, name) VALUES (8, 'Spontaneous');
+INSERT INTO rangley.td_meet_category (meet_category_id, name) VALUES (9, 'Custom');
 
 -- Sub Categories
 INSERT INTO rangley.td_sub_category (sub_category_id, meet_category_id, name) VALUES (0, 0, 'NULL_VALUE');
@@ -72,5 +75,15 @@ INSERT INTO rangley.td_notification_type (notification_type_id, name) VALUES (4,
 INSERT INTO rangley.td_notification_type (notification_type_id, name) VALUES (5, 'Attendee Left');
 INSERT INTO rangley.td_notification_type (notification_type_id, name) VALUES (6, 'Meet Reminder');
 INSERT INTO rangley.td_notification_type (notification_type_id, name) VALUES (7, 'System Alert');
+
+INSERT INTO rangley.td_notification_type (notification_type_id, name) VALUES (8, 'Meet Invitation Received');
+INSERT INTO rangley.td_notification_type (notification_type_id, name) VALUES (9, 'Meet Invitation Accepted');
+INSERT INTO rangley.td_notification_type (notification_type_id, name) VALUES (10, 'Meet Invitation Declined');
+INSERT INTO rangley.td_notification_type (notification_type_id, name) VALUES (11, 'Meet Invitation Expired');
+INSERT INTO rangley.td_notification_type (notification_type_id, name) VALUES (12, 'Meet Full');
+INSERT INTO rangley.td_notification_type (notification_type_id, name) VALUES (13, 'Meet Role Changed');
+INSERT INTO rangley.td_notification_type (notification_type_id, name) VALUES (14, 'Meet Location Changed');
+
+
 
 select * from rangley.td_meet_category;

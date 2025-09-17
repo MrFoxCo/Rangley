@@ -41,26 +41,41 @@ public struct DockView: View {
         ZStack {
             // Main dock content
             HStack(spacing: 16) {
-                // Search button
-                Button(action: { showSearch = true }) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 18, weight: .semibold))
-                        .imageScale(.large)
-                        .foregroundStyle(AppPalette.Brand.neonPink)
-                        .padding(12)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .fill(AppPalette.Brand.neonPink.opacity(0.14))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .stroke(AppPalette.Brand.neonPink.opacity(0.55), lineWidth: 1)
-                        )
-                        .contentShape(RoundedRectangle(cornerRadius: 16))
-                        .frame(width: 48, height: 48)
-                }
-                .accessibilityLabel("Search")
                 
+                // Hamburger menu (your existing component)
+                HamburgerMenu(onSignOut: onSignOut)
+                // Inbox placeholder button
+                Button(action: {
+                    // TODO: Add inbox action
+                    print("My Meets tapped")
+                }) {
+                    VStack(spacing: 2) {
+//                        Image(systemName: "tray")
+//                            .font(.system(size: 14, weight: .semibold))
+//                            .imageScale(.medium)
+//                            .foregroundStyle(AppPalette.Brand.neonPink)
+                        
+                        Text("My Meets")
+                            .font(.system(size: 25, weight: .medium))
+                            .foregroundStyle(AppPalette.Brand.neonPink)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(AppPalette.Brand.neonPink.opacity(0.14))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(AppPalette.Brand.neonPink.opacity(0.55), lineWidth: 1)
+                    )
+                    .contentShape(RoundedRectangle(cornerRadius: 16))
+                    .frame(height: 48)                // keep height
+                    .fixedSize(horizontal: true, vertical: false) // let width grow to fit "Meets"
+                    .lineLimit(1)
+
+                }
+                .accessibilityLabel("Meets Inbox")
                 // Create meet button with migraine aura effect
                 Button(action: onCreateMeet) {
                     ZStack {
@@ -139,9 +154,26 @@ public struct DockView: View {
                 .onAppear {
                     isAnimating = true
                 }
+                // Search button
+                Button(action: { showSearch = true }) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 18, weight: .semibold))
+                        .imageScale(.large)
+                        .foregroundStyle(AppPalette.Brand.neonPink)
+                        .padding(12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(AppPalette.Brand.neonPink.opacity(0.14))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .stroke(AppPalette.Brand.neonPink.opacity(0.55), lineWidth: 1)
+                        )
+                        .contentShape(RoundedRectangle(cornerRadius: 16))
+                        .frame(width: 48, height: 48)
+                }
+                .accessibilityLabel("Search")
                 
-                // Hamburger menu (your existing component)
-                HamburgerMenu(onSignOut: onSignOut)
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
