@@ -19,6 +19,15 @@ struct MyMeetsView: View
     let baseURL: URL
     let authToken: String
     
+    // Callback for when a meet is selected
+    let onMeetSelected: ((ViewMeetsModel) -> Void)?
+    
+    init(baseURL: URL, authToken: String, onMeetSelected: ((ViewMeetsModel) -> Void)? = nil) {
+        self.baseURL = baseURL
+        self.authToken = authToken
+        self.onMeetSelected = onMeetSelected
+    }
+    
     var body: some View {
         Button(action: {
             isPresented = true
@@ -26,13 +35,30 @@ struct MyMeetsView: View
                 await loadMeets()
             }
         }) {
-            VStack(spacing: 4) {
-                Image(systemName: "person.2.fill")
-                    .font(.system(size: 20))
+            VStack(spacing: 2) {
+        //                        Image(systemName: "tray")
+        //                            .font(.system(size: 14, weight: .semibold))
+        //                            .imageScale(.medium)
+        //                            .foregroundStyle(AppPalette.Brand.neonPink)
+                
                 Text("My Meets")
-                    .font(.caption2)
-                    .fontWeight(.medium)
+                    .font(.system(size: 25, weight: .medium))
+                    .foregroundStyle(AppPalette.Brand.neonPink)
             }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(AppPalette.Brand.neonPink.opacity(0.14))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(AppPalette.Brand.neonPink.opacity(0.55), lineWidth: 1)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 16))
+            .frame(height: 48)                // keep height
+            .fixedSize(horizontal: true, vertical: false) // let width grow to fit "Meets"
+            .lineLimit(1)
             .foregroundColor(.white)
         }
         .sheet(isPresented: $isPresented) {
@@ -44,6 +70,10 @@ struct MyMeetsView: View
                     Task {
                         await loadMeets()
                     }
+                },
+                onMeetSelected: { meet in
+                    isPresented = false  // Close the sheet
+                    onMeetSelected?(meet)  // Call the callback
                 }
             )
         }
@@ -74,6 +104,7 @@ struct MyMeetsOverlay: View
     let isLoading: Bool
     let errorMessage: String?
     let onRetry: () -> Void
+    let onMeetSelected: ((ViewMeetsModel) -> Void)?
     
     @Environment(\.dismiss) private var dismiss
     
@@ -131,7 +162,8 @@ struct MyMeetsOverlay: View
                                 title: "My Meets",
                                 subtitle: "\(ownedMeets.count) meet\(ownedMeets.count == 1 ? "" : "s")",
                                 meets: ownedMeets,
-                                emptyMessage: "You haven't created any meets yet"
+                                emptyMessage: "You haven't created any meets yet",
+                                onMeetSelected: onMeetSelected
                             )
                             
                             // Invited Meets Section (Placeholder)
@@ -140,7 +172,8 @@ struct MyMeetsOverlay: View
                                 subtitle: "Coming soon",
                                 meets: [],
                                 emptyMessage: "Your invitations will appear here",
-                                isPlaceholder: true
+                                isPlaceholder: true,
+                                onMeetSelected: onMeetSelected
                             )
                         }
                     }
@@ -162,13 +195,15 @@ struct MeetsSectionView: View
     let meets: [ViewMeetsModel]
     let emptyMessage: String
     let isPlaceholder: Bool
+    let onMeetSelected: ((ViewMeetsModel) -> Void)?
     
-    init(title: String, subtitle: String, meets: [ViewMeetsModel], emptyMessage: String, isPlaceholder: Bool = false) {
+    init(title: String, subtitle: String, meets: [ViewMeetsModel], emptyMessage: String, isPlaceholder: Bool = false, onMeetSelected: ((ViewMeetsModel) -> Void)? = nil) {
         self.title = title
         self.subtitle = subtitle
         self.meets = meets
         self.emptyMessage = emptyMessage
         self.isPlaceholder = isPlaceholder
+        self.onMeetSelected = onMeetSelected
     }
     
     var body: some View {
@@ -212,7 +247,7 @@ struct MeetsSectionView: View
                 .opacity(isPlaceholder ? 0.6 : 1.0)
             } else {
                 ForEach(meets) { meet in
-                    MeetRowView(meet: meet)
+                    MeetRowView(meet: meet, onMeetSelected: onMeetSelected)
                         .padding(.horizontal, 20)
                         .padding(.vertical, 1)
                 }
@@ -230,6 +265,7 @@ struct MeetsSectionView: View
 struct MeetRowView: View
 {
     let meet: ViewMeetsModel
+    let onMeetSelected: ((ViewMeetsModel) -> Void)?
     
     private var dateFormatter: DateFormatter {
         let formatter = DateFormatter()
@@ -298,8 +334,8 @@ struct MeetRowView: View
         .background(Color(.systemBackground))
         .contentShape(Rectangle())
         .onTapGesture {
-            // Handle meet selection - navigate to meet details
-            print("Tapped meet: \(meet.name)")
+            // Call the callback instead of just printing
+            onMeetSelected?(meet)
         }
     }
     

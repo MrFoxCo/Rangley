@@ -1,10 +1,3 @@
-//
-//  DockView.swift
-//  Rangley
-//
-//  Created by Anthony Guzzardo on 9/15/25.
-//
-
 import SwiftUI
 
 public struct DockView: View {
@@ -44,38 +37,14 @@ public struct DockView: View {
                 
                 // Hamburger menu (your existing component)
                 HamburgerMenu(onSignOut: onSignOut)
-                // Inbox placeholder button
-                Button(action: {
-                    // TODO: Add inbox action
-                    print("My Meets tapped")
-                }) {
-                    VStack(spacing: 2) {
-//                        Image(systemName: "tray")
-//                            .font(.system(size: 14, weight: .semibold))
-//                            .imageScale(.medium)
-//                            .foregroundStyle(AppPalette.Brand.neonPink)
-                        
-                        Text("My Meets")
-                            .font(.system(size: 25, weight: .medium))
-                            .foregroundStyle(AppPalette.Brand.neonPink)
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(AppPalette.Brand.neonPink.opacity(0.14))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(AppPalette.Brand.neonPink.opacity(0.55), lineWidth: 1)
-                    )
-                    .contentShape(RoundedRectangle(cornerRadius: 16))
-                    .frame(height: 48)                // keep height
-                    .fixedSize(horizontal: true, vertical: false) // let width grow to fit "Meets"
-                    .lineLimit(1)
-
-                }
-                .accessibilityLabel("Meets Inbox")
+                
+                // My Meets button - now using the actual MyMeetsView component
+                MyMeetsView(
+                    baseURL: baseURL,
+                    authToken: token,
+                    onMeetSelected: onMeetSelected
+                )
+                
                 // Create meet button with migraine aura effect
                 Button(action: onCreateMeet) {
                     ZStack {
@@ -154,6 +123,7 @@ public struct DockView: View {
                 .onAppear {
                     isAnimating = true
                 }
+                
                 // Search button
                 Button(action: { showSearch = true }) {
                     Image(systemName: "magnifyingglass")
@@ -204,3 +174,4 @@ public struct DockView: View {
         }
     }
 }
+
