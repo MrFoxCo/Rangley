@@ -61,68 +61,72 @@ BEGIN
         RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='[ERRO] p_cognito_sub is required (non-empty)';
     END IF;
 
+	-- Keep ONLY this invite guard (with SQLSTATE)
 	IF p_initial_invitee_uuids IS NULL OR array_length(p_initial_invitee_uuids,1) = 0 THEN
-	    RAISE EXCEPTION 'p_initial_invitee_uuids must be a non-empty array';
+	  RAISE EXCEPTION USING ERRCODE='22023',
+	    MESSAGE='[ERRO] p_initial_invitee_uuids must be a non-empty array';
 	END IF;
 
-
-    -- Resolve creator (id + uuid)
-    SELECT u.user_id, u.uuid
-      INTO v_creator_user_id, v_creator_user_uuid
-      FROM rangley.vw_users u
-     WHERE u.cognito_sub = v_sub;
-
-    IF v_creator_user_id IS NULL THEN
-        RAISE EXCEPTION USING ERRCODE='22023',
-          MESSAGE='[ERRO] Could not resolve user from cognito_sub',
-          DETAIL=format('cognito_sub=%s', v_sub);
-    END IF;
+    -- Guard creator resolution
+	SELECT u.user_id, u.uuid
+	  INTO v_creator_user_id, v_creator_user_uuid
+	FROM rangley.vw_users u
+	WHERE u.cognito_sub = v_sub;
+	
+	IF v_creator_user_id IS NULL THEN
+	  RAISE EXCEPTION USING ERRCODE='22023',
+	    MESSAGE='[ERRO] Could not resolve user from cognito_sub',
+	    DETAIL=format('cognito_sub=%s', v_sub);
+	END IF;
 
     -- Create meet via existing proc
-    CALL rangley.rangley_s_insert_meet(
-        v_rows,                    -- OUT num_inserted (local)
-        new_meet_id,               -- OUT new_meet_id (propagated)
-        v_sub,                     -- IN  p_cognito_sub
-        p_latitude, p_longitude,
-        p_region_latitude, p_region_longitude, p_region_radius,
-        p_name, p_dttm_start_utc, p_dttm_end_utc,
-        p_description, p_meet_category_id, p_max_capacity
+    CALL rangley.rangley_s_insert_meet
+	(
+         v_rows				,new_meet_id_uuid	    ,v_sub                    
+        ,p_latitude			,p_longitude
+        ,p_region_latitude	,p_region_longitude		,p_region_radius
+        ,p_name				,p_dttm_start_utc		,p_dttm_end_utc
+        ,p_description		,p_meet_category_id		,p_max_capacity
     );
     num_inserted := v_rows;
 
-    -- Fetch stable meet UUID
-    SELECT mi.uuid
-      INTO new_meet_id_uuid
-      FROM rangley.vw_meet_ids mi
-     WHERE mi.meet_id = new_meet_id;
+	IF v_rows <> 1 THEN
+	  RAISE EXCEPTION USING ERRCODE='P0004',
+	    MESSAGE='[ERRO] Unexpected insert count from s_insert_meet',
+	    DETAIL=format('rows=%s', v_rows);
+	END IF;
 
-    -- Seed owner participant (status = 7 Owner)
-    INSERT INTO rangley.tb_meet_participants
-	(
-        meet_id, user_id, participant_status_id, dttm_invited_utc, dttm_accepted_utc
-    )
-    VALUES (new_meet_id, v_creator_user_id, 7, now(), now())
-    ON CONFLICT (meet_id, user_id) DO NOTHING;
 
-    -- Normalize invitees: dedupe, drop NULLs, remove creator if present
-    SELECT COALESCE(array_agg(x.uuid), ARRAY[]::uuid[])
-      INTO v_invitee_uuids
-      FROM (
-            SELECT DISTINCT u
-            FROM unnest(p_initial_invitee_uuids) AS u
-            WHERE u IS NOT NULL AND u <> v_creator_user_uuid
-      ) AS x(uuid);
+	SELECT mi.meet_id
+	  INTO new_meet_id
+	FROM rangley.vw_meet_ids mi
+	WHERE mi.uuid = new_meet_id_uuid;
 
-    -- Call invite wrapper (it also creates notifications) if any remain
-    IF array_length(v_invitee_uuids, 1) > 0 THEN
-        PERFORM 1
-          FROM rangley.rangley_fn_invite_users_to_meet_by_meet_id_uuid(
-                new_meet_id_uuid,
-                v_creator_user_uuid,
-                v_invitee_uuids,
-                p_invitation_message
-          );
-    END IF;
+	IF new_meet_id IS NULL THEN
+	  RAISE EXCEPTION USING ERRCODE='P0004',
+	    MESSAGE='[ERRO] Could not resolve meet_id from new_meet_id_uuid',
+	    DETAIL=format('uuid=%s', new_meet_id_uuid);
+	END IF;
+
+	-- restore normalization before the invite
+	WITH norm AS (
+	  SELECT DISTINCT u AS uuid
+	  FROM unnest(p_initial_invitee_uuids) AS u
+	  WHERE u IS NOT NULL AND u <> v_creator_user_uuid
+	)
+	SELECT COALESCE(array_agg(uuid), ARRAY[]::uuid[])
+	  INTO v_invitee_uuids
+	FROM norm;
+	
+	-- invite if any remain
+	IF array_length(v_invitee_uuids, 1) > 0 THEN
+	  PERFORM rangley.rangley_fn_invite_users_to_meet_by_meet_id_uuid(
+	    new_meet_id_uuid,
+	    v_creator_user_uuid,
+	    v_invitee_uuids,
+	    p_invitation_message
+	  );
+	END IF;
 
     RETURN;
 EXCEPTION

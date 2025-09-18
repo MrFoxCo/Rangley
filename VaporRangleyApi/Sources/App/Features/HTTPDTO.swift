@@ -54,7 +54,7 @@ enum HTTPDTO
         struct InsertUpdatedBody: Content, Sendable
         {
             // Required - must know which meet to update
-            let meet_id_uuid    : String
+            let meet_id_uuid    : UUID
             
             // ALL OPTIONAL - only send fields that are changing
             let latitude        : Double?
@@ -75,10 +75,21 @@ enum HTTPDTO
         struct InsertDeletedBody: Content, Sendable
         {
             // Required - must know which meet to update
-            let meet_id_uuid    : String
+            let meet_id_uuid    : UUID
         }
         
-        struct InsertResponse: Content, Sendable
+        struct InsertMeetResponse: Content, Sendable
+        {
+            let meet_id_uuid    : UUID
+            let num_inserted    : Int32
+        }
+        
+        struct InsertDeleteResponse: Content, Sendable
+        {
+            let num_inserted: Int32
+        }
+        
+        struct InsertUpdateResponse: Content, Sendable
         {
             let num_inserted: Int32
         }
@@ -96,11 +107,11 @@ enum HTTPDTO
 
         struct SearchItem: Content, Sendable
         {
-            let user_uuid: String
-            let username: String
-            let display_name: String
-            let matched_by: [String]
-            let can_invite: Bool
+            let user_uuid       : UUID
+            let username        : String
+            let display_name    : String
+            let matched_by      : [String]
+            let can_invite  : Bool
         }
 
         struct SearchResponse: Content, Sendable
@@ -109,6 +120,8 @@ enum HTTPDTO
         }
     }
 }
+
+
 /*
  ADd this later
  

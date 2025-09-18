@@ -2,7 +2,7 @@ CREATE OR REPLACE PROCEDURE rangley.rangley_s_insert_meet
 (
     -- OUTs
      OUT num_inserted            INT4
-	,OUT new_meet_id_uuid        UUID
+	,OUT meet_id_uuid        UUID
     -- INs
     ,IN  p_cognito_sub           text
 
@@ -29,9 +29,9 @@ AS $procedure$
 DECLARE
     _state  text; _msg text; _detail text; _hint text; _ctx text;
     v_sub                text;
-    created_by_user_id   	bigint;
-	new_meet_id          	bigint;
-	new_meet_coordinate_id 	bigint;          
+    created_by_user_id   	INT8;
+	new_meet_id          	INT8;
+	new_meet_coordinate_id 	INT8;          
 BEGIN
     -- OUT sentinel
     num_inserted           := 0;
@@ -77,7 +77,7 @@ BEGIN
     -- 1) create meet_id
     CALL rangley.rangley_i_meet_id(new_meet_id, created_by_user_id);
 
-	SELECT uuid INTO new_meet_id_uuid
+	SELECT uuid INTO meet_id_uuid
 	FROM rangley.tb_meet_ids
 	WHERE meet_id = new_meet_id;
 

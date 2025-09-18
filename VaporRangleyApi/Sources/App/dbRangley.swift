@@ -173,15 +173,18 @@ enum Proc
             let max_capacity    : Int32?          // p_max_capacity
         }
 
-        struct Result: Content, Sendable {
-            let num_inserted: Int32
+        struct Result: Content, Sendable
+        {
+            let meet_id_uuid    : UUID?
+            let num_inserted    : Int32
         }
 
         static func query(_ i: Params, _ o: Result) -> SQLQueryString {
             """
             CALL \(unsafeRaw: procName.rawValue)
             (
-                 NULL::int4  -- OUT parameter placeholder
+                 NULL::UUID
+                ,NULL::int4  -- OUT parameter placeholder
                 ,\(bind: i.cognito_sub              )::text
                 ,\(bind: i.latitude                 )::float8
                 ,\(bind: i.longitude                )::float8
@@ -191,16 +194,18 @@ enum Proc
                 ,\(bind: i.name                     )::varchar(50)
                 ,\(bind: i.dttm_start_utc           )::timestamptz
                 ,\(bind: i.dttm_end_utc             )::timestamptz
-                ,COALESCE(\(bind: i.description     )::varchar(50), ''::varchar(50))
-                ,COALESCE(\(bind: i.meet_category_id)::int2, 1::int2)
-                ,COALESCE(\(bind: i.max_capacity    )::int4, 2::int4)
+                ,COALESCE(\(bind: i.description     ), ''::varchar(50))::varchar(50)
+                ,COALESCE(\(bind: i.meet_category_id), 1::int2)::int2
+                ,COALESCE(\(bind: i.max_capacity    ), 2::int4)::int4
             );
             """
         }
 
-        static func decode(_ row: any SQLRow) throws -> Result
-        {
-            try .init(num_inserted: row.decode(column: "num_inserted", as: Int32.self))
+        static func decode(_ row: any SQLRow) throws -> Result {
+            try .init(
+                meet_id_uuid: row.decode(column: "meet_id_uuid", as: UUID?.self),
+                num_inserted: row.decode(column: "num_inserted", as: Int32.self)
+            )
         }
     }
 
@@ -212,7 +217,7 @@ enum Proc
         {
             // Required
             let cognito_sub         : String
-            let meet_id_uuid        : String  // This is required for updates
+            let meet_id_uuid        : UUID  // This is required for updates
             
             // Optional fields - only pass what's changing
             let latitude            : Double?
@@ -273,7 +278,7 @@ enum Proc
         {
             // Required
             let cognito_sub         : String
-            let meet_id_uuid        : String  // This is required for updates
+            let meet_id_uuid        : UUID  // This is required for updates
             
         }
 
@@ -302,245 +307,44 @@ enum Proc
     // MARK: - END Transaction Level Meet Inserts
     // =========================================================
 
-    
     // =========================================================
-    // MARK: - Deprecated or not Integrated into UI
-    // =========================================================
-    /// Contains Insert Params and Results
-    enum InsertMeetId: PgCallableRow
-    {
-        static let procName: RangleyProcName = .i_meet_id
-        
-        struct Params: Content, Sendable // WORKING
-        {
-            let created_by_user_id  : Int64
-        }
-        
-        struct Result: Content, Sendable
-        {
-            let new_meet_id: Int64?
-        }
-        
-        static func query(_ i: Params, _ o : Result) -> SQLQueryString
-        {
-            """
-            CALL \(unsafeRaw: procName.rawValue)(
-                 \(bind: o.new_meet_id)
-                ,\(bind: i.created_by_user_id)
-
-            );
-            """
-        }
-        
-        static func decode(_ row: any SQLRow) throws -> Result {
-            try .init(
-                new_meet_id: row.decode(column: "new_meet_id", as: Int64?.self)
-            )
-        }
-    }
-    
-    /// Contains Insert Params and Results
-    enum InsertMeetCoordinate: PgCallableRow
-    {
-        static let procName: RangleyProcName = .i_meet_coordinate
-        
-        struct Params: Content, Sendable
-        {
-            let latitude            : Double
-            let longitude           : Double
-            let region_latitude     : Double
-            let region_longitude    : Double
-            let region_radius       : Double
-        }
-        
-        struct Result: Content, Sendable
-        {
-            let new_meet_coordinate_id: Int64?
-        }
-        
-        static func query(_ i: Params, _ o : Result) -> SQLQueryString
-        {
-            """
-            CALL \(unsafeRaw: procName.rawValue)
-            (
-                -- OUT
-                 \(bind: o.new_meet_coordinate_id)
-            
-                -- REQUIRED
-                ,\(bind: i.latitude)
-                ,\(bind: i.longitude)
-                ,\(bind: i.region_latitude)
-                ,\(bind: i.region_longitude)
-                ,\(bind: i.region_radius)
-
-            );
-            """
-        }
-        
-        static func decode(_ row: any SQLRow) throws -> Result
-        {
-            try .init(
-                new_meet_coordinate_id: row.decode(column: "new_meet_coordinate_id", as: Int64?.self)
-            )
-        }
-    }
-    
-    /// Contains Insert Params and Results
-    enum InsertMeet: PgCallableRow
-    {
-        static let procName: RangleyProcName = .i_meet
-
-        struct Params: Content, Sendable
-        {
-            // required
-            let meet_id             : Int64   // p_meet_id
-            let meet_coordinate_id  : Int64
-            let name                : String   // p_name
-            let dttm_start_utc      : Date
-            let dttm_end_utc        : Date
-            
-            // optional
-            let description         : String?   // p_description
-            let change_reason       : String?   // p_change_reason
-            let meet_category_id    : Int16?    // p_meet_category_id
-            let max_capacity        : Int32?
-
-        }
-        
-        struct Result: Content, Sendable
-        {
-            let num_inserted: Int32?
-        }
-        
-        static func query(_ i: Params, _ o: Result) -> SQLQueryString
-        {
-            """
-            CALL \(unsafeRaw: procName.rawValue)
-            (
-                 \(bind: o.num_inserted)::int4
-            
-                -- Required
-                ,\(bind: i.meet_id)::int8
-                ,\(bind: i.meet_coordinate_id)::int8
-                ,\(bind: i.name)::varchar(50)
-                ,\(bind: i.dttm_start_utc)::timestamptz
-                ,\(bind: i.dttm_end_utc)::timestamptz
-                
-                -- Optional Params Must Coalesce because they are included in parameter
-                ,COALESCE(\(bind: i.description)::varchar(50), ''::varchar(50))
-                ,COALESCE(\(bind: i.change_reason)::varchar(50), ''::varchar(50))
-                ,COALESCE(\(bind: i.meet_category_id)::int2, 1::int2)   -- <- avoids NULL + matches int2
-                ,COALESCE(\(bind: i.max_capacity)::int4, 2::int4)
-            );
-            """
-        }
-
-        static func decode(_ row: any SQLRow) throws -> Result {
-            try .init(num_inserted: row.decode(column: "num_inserted", as: Int32?.self))
-        }
-    }
-    /// Contains Insert Params and Results
-    enum InsertChangeStamp: PgCallableRow
-    {
-        struct Params: Content, Sendable
-        {
-            let meet_id         : Int64
-        }
-        
-        struct Result: Content, Sendable
-        {
-            let new_change_stamp: Int64?
-        }
-        
-        static let procName: RangleyProcName = .i_change_stamp
-        
-        static func query(_ i: Params, _ o : Result) -> SQLQueryString
-        {
-            // OUT params are NOT passed
-            """
-            CALL \(unsafeRaw: procName.rawValue)
-            (
-                -- OUT
-                 \(bind: o.new_change_stamp)
-            
-                -- REQUIRED
-                ,\(bind: i.meet_id)
-            );
-            """
-        }
-        
-        static func decode(_ row: any SQLRow) throws -> Result
-        {
-            try .init(
-                new_change_stamp: row.decode(column: "new_change_stamp", as: Int64?.self)
-            )
-        }
-    }
-    
-    /// Contains Insert Params and Results
-    enum InsertUpdatedMeet: PgCallableRow // deprecated
-    {
-        static let procName: RangleyProcName = .i_updated_meet
-        
-        struct Params: Content, Sendable
-        {
-            // required
-            let meet_id             : Int64
-            let change_stamp        : Int64
-            let meet_coordinate_id  : Int64
-            let name                : String
-            let dttm_start_utc      : Date
-            let dttm_end_utc        : Date
-
-            // optional
-            let meet_status_id      : Int16?
-            let description         : String?
-            let change_reason       : String?
-            let meet_category_id    : Int16?
-            let max_capacity        : Int32? // PG default 2 if nil
-
-        }
-        
-        struct Result: Content, Sendable
-        {
-            let num_inserted: Int32?
-        }
-        
-        static func query(_ i: Params, _ o : Result ) -> SQLQueryString
-        {
-            """
-            CALL \(unsafeRaw: procName.rawValue)
-            (
-                -- Out
-                 \(bind: o.num_inserted)::int4
-            
-                -- Required
-                ,\(bind: i.meet_id)::int8
-                ,\(bind: i.change_stamp)::int8
-                ,\(bind: i.meet_coordinate_id)::int8
-                ,\(bind: i.name)::varchar(50)
-                ,\(bind: i.dttm_start_utc)::timestamptz
-                ,\(bind: i.dttm_end_utc)::timestamptz
-
-                -- Optional Params Must Coalesce because they are included in parameter
-                ,COALESCE(\(bind: i.meet_status_id)::int2, 0::int2)
-                ,COALESCE(\(bind: i.description)::varchar(50), ''::varchar(50))
-                ,COALESCE(\(bind: i.change_reason)::varchar(50), ''::varchar(50))
-                ,COALESCE(\(bind: i.meet_category_id)::int2, 1::int2)   -- <- avoids NULL + matches int2
-                ,COALESCE(\(bind: i.max_capacity)::int4, 2::int4)
-            );
-            """
-        }
-        static func decode(_ row: any SQLRow) throws -> Result
-        {
-            try .init(num_inserted: row.decode(column: "num_inserted", as: Int32?.self))
-        }
-    }
-    
-    // =========================================================
-    // MARK: - END Deprecated or not Integrated into UI
+    // MARK: - Transaction Level Meet Inserts w/ Invites
     // =========================================================
     
+    /*
+     
+     struct MeetInsertWithInvitesBody: Codable
+     {
+         // Required
+         let initial_invitee_uuids   : [UUID]
+         let latitude                : Double
+         let longitude               : Double
+         let region_latitude         : Double
+         let region_longitude        : Double
+         let region_radius           : Double
+         let name                    : String
+         let dttm_start_utc          : Date
+         let dttm_end_utc            : Date
+         
+         // Optional
+         let description             : String?
+         let meet_category_id        : Int16?
+         let max_capacity            : Int32?
+         let invitation_message      : String?
+     }
+
+     /// USED FOR BOTH
+     struct MeetInsertResponse: Codable
+     {
+         let meet_id_uuid    : UUID // not used
+         let num_inserted    : Int32
+     }
+
+     */
+    
+    // =========================================================
+    // MARK: - END Transaction Level Meet Inserts w/ Invites
+    // =========================================================
     
     
     // MARK: - END INSERT
@@ -780,7 +584,8 @@ enum Func
         static let funcName: RangleyFunc = .v_users_by_cognito_sub
 
         // Inputs (server injects cognito_sub; arrays are optional)
-        struct In: Sendable {
+        struct In: Sendable
+        {
             let cognito_sub: String
             let usernames: [String]?
             let emails: [String]?
@@ -788,15 +593,19 @@ enum Func
         }
 
         // Row shape returned by the function
-        struct Results: Content, Sendable {
-            let user_uuid: String
-            let username: String
+        // In ViewUsers enum
+        struct Results: Content, Sendable
+        {
+            let user_uuid   : UUID        // Changed from String to UUID
+            let username    : String
             let display_name: String
-            let matched_by: [String]   // e.g. ["username","phone"]
-            let can_invite: Bool
+            let matched_by  : [String]
+            let can_invite  : Bool
         }
 
-        static func query(_ input: In) -> SQLQueryString {
+
+        static func query(_ input: In) -> SQLQueryString
+        {
             // SELECT * FROM rangley_fn_v_users_by_cognito_sub($1,$2,$3,$4)
             "SELECT * FROM \(unsafeRaw: funcName.rawValue)(" +
                 "\(bind: input.cognito_sub)," +
@@ -808,7 +617,7 @@ enum Func
 
         static func decode(_ r: any SQLRow) throws -> Results {
             try .init(
-                user_uuid   : r.decode(column: "user_uuid",   as: String.self),
+                user_uuid   : r.decode(column: "user_uuid",   as: UUID.self),  // Changed to UUID.self
                 username    : r.decode(column: "username",    as: String.self),
                 display_name: r.decode(column: "display_name",as: String.self),
                 matched_by  : r.decode(column: "matched_by",  as: [String].self),
@@ -817,8 +626,6 @@ enum Func
         }
     }
 
-
-    
     
     enum ViewMeetCategories: PgFunctionRows
     {

@@ -67,7 +67,6 @@ public func routes(_ app: Application) throws
     
     let auth = api.grouped("auth")
     let v    = api.grouped("v")                  // protected reads
-    let i    = api.grouped("i")            // protected inserts
     let m    = api.grouped("m")            // protected modifies
     let s    = api.grouped("s")           // transactional inserts contain multiple proc calls
     //let p = api.grouped("p")            // protected modifies
@@ -149,10 +148,6 @@ public func routes(_ app: Application) throws
         })
     }
 
-
-    
-    
-    
     // GET /v/meet-categories -> all categories
     v.get("meet-categories")
     {
@@ -215,93 +210,7 @@ public func routes(_ app: Application) throws
 //        
 //    }
 
-    // i/meet-coordinate -> (new_meet_coordinate_id)
-    i.post("meet-coordinate")
-    {
-        req async throws -> Proc.InsertMeetCoordinate.Result in
-        
-        let body = try req.content.decode(Proc.InsertMeetCoordinate.Params.self)
-        
-        guard body.region_radius > 0 else { throw Abort(.badRequest, reason: "region_radius must be > 0") }
-        
-        guard let sql = req.db as? (any SQLDatabase)
-        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
-        
-        return try await Proc.InsertMeetCoordinate.call(on: sql, body, .init(new_meet_coordinate_id: nil))
-    }
-
-    // i/meet-id -> (new_meet_id)
-    i.post("meet-id") { req async throws -> Proc.InsertMeetId.Result in
-        let userId = try await req.userIdOrFail()
-
-        guard let sql = req.db as? any SQLDatabase
-        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
-
-        let params = Proc.InsertMeetId.Params(created_by_user_id: userId)
-        return try await Proc.InsertMeetId.call(on: sql, params, .init(new_meet_id: nil))
-    }
-
-    // i/meet -> returns (num_inserted)
-    i.post("meet")
-    {
-        req async throws -> Proc.InsertMeet.Result in
-        
-        let body = try req.content.decode(Proc.InsertMeet.Params.self)
-        guard !body.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw Abort(.badRequest, reason: "name is required")
-        }
-        guard body.meet_id > 0
-        else { throw Abort(.badRequest, reason: "meet id invalid or null") }
-        
-        guard body.dttm_start_utc <= body.dttm_end_utc else {
-            throw Abort(.badRequest, reason: "dttm_start_utc must be before dttm_end_utc")
-        }
-        
-        guard let sql = req.db as? (any SQLDatabase)
-        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
-        
-        return try await Proc.InsertMeet.call(on: sql, body, .init(num_inserted: nil))
-    }
     
-    // WORKS BUT SAYS PERMISSION DENIED FOR SOME REASON???
-    // i/meet-change-stamp -> (new_change_stamp)
-    i.post("meet-change-stamp")
-    {
-        req async throws -> Proc.InsertChangeStamp.Result in
-        
-        let body = try req.content.decode(Proc.InsertChangeStamp.Params.self)
-        
-        guard body.meet_id > 0
-        else { throw Abort(.badRequest, reason: "Meet ID is invalid or not provided") }
-        
-        guard let sql = req.db as? (any SQLDatabase)
-        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
-        
-        return try await Proc.InsertChangeStamp.call(on: sql, body, .init(new_change_stamp: nil))
-    }
-
-    // i/meet -> returns (num_inserted)
-    i.post("updated-meet")
-    {
-        req async throws -> Proc.InsertUpdatedMeet.Result in
-        
-        let body = try req.content.decode(Proc.InsertUpdatedMeet.Params.self)
-        guard !body.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw Abort(.badRequest, reason: "name is required")
-        }
-        guard body.meet_id > 0
-        else { throw Abort(.badRequest, reason: "meet id invalid or null") }
-        
-        guard body.dttm_start_utc < body.dttm_end_utc else {
-            throw Abort(.badRequest, reason: "dttm_start_utc must be before dttm_end_utc")
-        }
-        
-        guard let sql = req.db as? (any SQLDatabase)
-        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
-        
-        return try await Proc.InsertUpdatedMeet.call(on: sql, body, .init(num_inserted: nil))
-    }
-
 
     // MARK: - END INSERTS (i_*) or POST ROUTES
     
@@ -312,7 +221,7 @@ public func routes(_ app: Application) throws
 
     s.post("meet")
     {
-        req async throws -> HTTPDTO.Meets.InsertResponse in
+        req async throws -> HTTPDTO.Meets.InsertMeetResponse in
         
         let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
@@ -346,15 +255,16 @@ public func routes(_ app: Application) throws
             let dbResult = try await Proc.SystemInsertMeet.call(
                 on: sql,
                 params,
-                .init(num_inserted: 0)  // Sentinel values to match your procedure
+                .init(meet_id_uuid: nil, num_inserted: 0)
             )
             
             // Validate the result
-            guard dbResult.num_inserted == 1
+            guard dbResult.num_inserted == 1,
+                  let meetId = dbResult.meet_id_uuid
             else { throw Abort(.internalServerError, reason: "Failed to create meet") }
 
-            return .init(num_inserted : dbResult.num_inserted)
-                        
+            return .init(meet_id_uuid: meetId, num_inserted: dbResult.num_inserted)
+            
         } catch let error as PSQLError {
             // Handle specific PostgreSQL errors from your procedure
             if error.serverInfo?[.sqlState] == "22023" {  // Invalid parameter value
@@ -370,7 +280,7 @@ public func routes(_ app: Application) throws
     
     s.post("updated-meet")
     {
-        req async throws -> HTTPDTO.Meets.InsertResponse in
+        req async throws -> HTTPDTO.Meets.InsertUpdateResponse in
         
         let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
@@ -436,7 +346,7 @@ public func routes(_ app: Application) throws
     
     s.post("deleted-meet")
     {
-        req async throws -> HTTPDTO.Meets.InsertResponse in
+        req async throws -> HTTPDTO.Meets.InsertDeleteResponse in
         
         let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
@@ -477,7 +387,6 @@ public func routes(_ app: Application) throws
         }
     }
     
-    // POST /users/search — filtered search (keeps PII out of URL)
     s.post("users", "search")
     {
         req async throws -> HTTPDTO.Users.SearchResponse in

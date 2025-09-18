@@ -10,7 +10,8 @@
 import SwiftUI
 import Foundation
 
-struct MeetInsertBody: Codable {
+struct MeetInsertBody: Codable
+{
     // Required
     let latitude: Double
     let longitude: Double
@@ -26,6 +27,29 @@ struct MeetInsertBody: Codable {
     let max_capacity: Int32?
 }
 
-struct MeetInsertResponse: Codable {
-    let num_inserted: Int32
+struct MeetInsertWithInvitesBody: Codable
+{
+    // Required
+    let initial_invitee_uuids   : [UUID]
+    let latitude                : Double
+    let longitude               : Double
+    let region_latitude         : Double
+    let region_longitude        : Double
+    let region_radius           : Double
+    let name                    : String
+    let dttm_start_utc          : Date
+    let dttm_end_utc            : Date
+    
+    // Optional
+    let description             : String?
+    let meet_category_id        : Int16?
+    let max_capacity            : Int32?
+    let invitation_message      : String?
+}
+
+/// USED FOR BOTH
+struct MeetInsertResponse: Codable
+{
+    let meet_id_uuid    : UUID // not used
+    let num_inserted    : Int32
 }
