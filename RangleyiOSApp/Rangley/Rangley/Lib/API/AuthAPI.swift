@@ -7,7 +7,8 @@
 
 import Foundation
 
-enum AuthAPIError: Error, LocalizedError {
+enum AuthAPIError: Error, LocalizedError
+{
     case http(Int, String?)
     case decode
     case encode
@@ -36,6 +37,7 @@ enum AuthAPIError: Error, LocalizedError {
         }
     }
 }
+
 extension AuthAPIError
 {
     static func map(_ error: Error) -> AuthAPIError {
@@ -43,15 +45,14 @@ extension AuthAPIError
         return .transport(error)
     }
 }
+
 extension AuthAPI
 {
     /// GET /v/users — browse all discoverable (no filters). Server should allow no filters here.
     static func browseAllUsers(
-        baseURL: URL,
-        token: String,
-        limit: Int? = nil,
-        offset: Int? = nil
-    ) async throws -> [ViewUsersModel] {
+        baseURL: URL,token: String,limit: Int? = nil,offset: Int? = nil
+    ) async throws -> [ViewUsersModel]
+    {
         var url = makeURL(baseURL, ["v", "users"])
         if let limit, let offset {
             var comps = URLComponents(url: url, resolvingAgainstBaseURL: false)!
@@ -80,7 +81,8 @@ extension AuthAPI
 }
 
 
-struct AuthAPI {
+struct AuthAPI
+{
     
     // JSON enc/dec with ISO-8601 dates
     private static var isoEncoder: JSONEncoder {
@@ -187,6 +189,24 @@ struct AuthAPI {
         catch { throw AuthAPIError.decode }
     }
     
+    // THE VERY FIRST MEET corresponds to SystemInsertMeet
+    static func createMeetWithInvites(baseURL: URL, token: String, body: MeetWithInvitesInsertBody) async throws -> MeetInsertResponse
+    {
+        var req = URLRequest(url: makeURL(baseURL, ["s", "meet-with-invites"]))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.httpBody = try isoEncoder.encode(body)        // ISO-8601 dates
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
+        guard (200..<300).contains(http.statusCode) else {
+            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        }
+        do { return try JSONDecoder().decode(MeetInsertResponse.self, from: data) }
+        catch { throw AuthAPIError.decode }
+    }
     // Corresponds to SystemInsertUpdatedMeet in VAPOR
     static func updateMeet(baseURL: URL,
                            token: String, body: UpdatedMeetInsertBody) async throws -> UpdatedMeetInsertResponse

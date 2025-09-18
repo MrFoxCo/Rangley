@@ -2,7 +2,6 @@ CREATE OR REPLACE PROCEDURE rangley.rangley_s_insert_meet_w_user_invites
 (
     -- OUTs
      OUT num_inserted            INT4
-    ,OUT new_meet_id             INT8
     ,OUT new_meet_id_uuid        UUID
 
     -- INs
@@ -52,7 +51,6 @@ DECLARE
 BEGIN
     -- OUT sentinels
     num_inserted := 0;
-    new_meet_id := NULL;
     new_meet_id_uuid := NULL;
 
     -- Guards
@@ -94,18 +92,6 @@ BEGIN
 	  RAISE EXCEPTION USING ERRCODE='P0004',
 	    MESSAGE='[ERRO] Unexpected insert count from s_insert_meet',
 	    DETAIL=format('rows=%s', v_rows);
-	END IF;
-
-
-	SELECT mi.meet_id
-	  INTO new_meet_id
-	FROM rangley.vw_meet_ids mi
-	WHERE mi.uuid = new_meet_id_uuid;
-
-	IF new_meet_id IS NULL THEN
-	  RAISE EXCEPTION USING ERRCODE='P0004',
-	    MESSAGE='[ERRO] Could not resolve meet_id from new_meet_id_uuid',
-	    DETAIL=format('uuid=%s', new_meet_id_uuid);
 	END IF;
 
 	-- restore normalization before the invite

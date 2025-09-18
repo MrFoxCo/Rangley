@@ -95,6 +95,73 @@ enum HTTPDTO
         }
     }
     
+    enum MeetsWithInvites
+    {
+        struct InsertBody: Content, Sendable
+        {
+            // Required
+            let initial_invitee_uuids   : [UUID]
+            let latitude                : Double
+            let longitude               : Double
+            let region_latitude         : Double
+            let region_longitude        : Double
+            let region_radius           : Double
+            let name                    : String
+            let dttm_start_utc          : Date
+            let dttm_end_utc            : Date
+            // Optional
+            let description             : String?
+            let meet_category_id        : Int16?
+            let max_capacity            : Int32?
+            let invitation_message      : String? 
+        }
+        
+
+        
+        struct InsertUpdatedBody: Content, Sendable
+        {
+            // Required - must know which meet to update
+            let meet_id_uuid    : UUID
+            
+            // ALL OPTIONAL - only send fields that are changing
+            let latitude        : Double?
+            let longitude       : Double?
+            let region_latitude : Double?
+            let region_longitude: Double?
+            let region_radius   : Double?
+            let meet_status_id  : Int16?
+            let name            : String?
+            let dttm_start_utc  : Date?
+            let dttm_end_utc    : Date?
+            let description     : String?
+            let change_reason   : String?
+            let meet_category_id: Int16?
+            let max_capacity    : Int32?
+        }
+        
+        struct InsertDeletedBody: Content, Sendable
+        {
+            // Required - must know which meet to update
+            let meet_id_uuid    : UUID
+        }
+        
+        struct InsertMeetResponse: Content, Sendable
+        {
+            let meet_id_uuid    : UUID
+            let num_inserted    : Int32
+        }
+        
+        struct InsertDeleteResponse: Content, Sendable
+        {
+            let num_inserted: Int32
+        }
+        
+        struct InsertUpdateResponse: Content, Sendable
+        {
+            let num_inserted: Int32
+        }
+    }
+    
     enum Users
     {
         // Client request payload (server reads cognito_sub from auth, not from body)

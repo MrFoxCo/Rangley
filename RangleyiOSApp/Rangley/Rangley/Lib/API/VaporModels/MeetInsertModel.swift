@@ -27,7 +27,7 @@ struct MeetInsertBody: Codable
     let max_capacity: Int32?
 }
 
-struct MeetInsertWithInvitesBody: Codable
+struct MeetWithInvitesInsertBody: Codable
 {
     // Required
     let initial_invitee_uuids   : [UUID]

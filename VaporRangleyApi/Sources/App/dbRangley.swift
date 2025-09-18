@@ -16,16 +16,17 @@ import JWT
 
 enum RangleyProcName: String
 {
-    case i_user_by_auth_register = "rangley.rangley_i_user_by_auth_register"
-    case i_meet_id               = "rangley.rangley_i_meet_id"
-    case i_meet_coordinate       = "rangley.rangley_i_meet_coordinate"
-    case i_meet                  = "rangley.rangley_i_meet"
-    case s_insert_meet           = "rangley.rangley_s_insert_meet"
-    case s_insert_updated_meet   = "rangley.rangley_s_insert_updated_meet"
-    case s_insert_deleted_meet   = "rangley.rangley_s_insert_deleted_meet"
-    case i_change_stamp          = "rangley.rangley_i_change_stamp"
-    case i_updated_meet          = "rangley.rangley_i_updated_meet"
-    case m_user                  = "rangley.rangley_m_user"
+    case i_user_by_auth_register        = "rangley.rangley_i_user_by_auth_register"
+    case i_meet_id                      = "rangley.rangley_i_meet_id"
+    case i_meet_coordinate              = "rangley.rangley_i_meet_coordinate"
+    case i_meet                         = "rangley.rangley_i_meet"
+    case s_insert_meet                  = "rangley.rangley_s_insert_meet"
+    case s_insert_meet_w_user_invites   = "rangley.rangley_s_insert_meet_w_user_invites"
+    case s_insert_updated_meet          = "rangley.rangley_s_insert_updated_meet"
+    case s_insert_deleted_meet          = "rangley.rangley_s_insert_deleted_meet"
+    case i_change_stamp                 = "rangley.rangley_i_change_stamp"
+    case i_updated_meet                 = "rangley.rangley_i_updated_meet"
+    case m_user                         = "rangley.rangley_m_user"
 }
 
 // Essentially these are views because postgres doesn't allow procedural views in an easy way
@@ -310,6 +311,70 @@ enum Proc
     // =========================================================
     // MARK: - Transaction Level Meet Inserts w/ Invites
     // =========================================================
+    
+    enum SystemInsertMeetWithInvites: PgCallableRow
+    {
+        static let procName: RangleyProcName = .s_insert_meet_w_user_invites  // ensure this resolves to schema-qualified "rangley.rangley_s_insert_meet" or your search_path includes 'rangley'
+        
+        struct Params: Content, Sendable
+        {
+            // Required
+            let cognito_sub             : String
+            let initial_invitee_uuids   : [UUID]
+            let latitude                : Double
+            let longitude               : Double
+            let region_latitude         : Double
+            let region_longitude        : Double
+            let region_radius           : Double
+            let name                    : String          // p_name
+            let dttm_start_utc          : Date
+            let dttm_end_utc            : Date
+
+            // Optional
+            let description             : String?         // p_description
+            let meet_category_id        : Int16?          // p_meet_category_id
+            let max_capacity            : Int32?          // p_max_capacity
+            let invitation_message      : String?         // p_description
+        }
+
+        struct Result: Content, Sendable
+        {
+            let meet_id_uuid    : UUID?
+            let num_inserted    : Int32
+        }
+
+        static func query(_ i: Params, _ o: Result) -> SQLQueryString {
+            """
+            CALL \(unsafeRaw: procName.rawValue)
+            (
+                 NULL::UUID
+                ,NULL::int4  -- OUT parameter placeholder
+                ,\(bind: i.cognito_sub                )::text
+                ,\(bind: i.initial_invitee_uuids      )::UUID[]
+                ,\(bind: i.latitude                   )::float8
+                ,\(bind: i.longitude                  )::float8
+                ,\(bind: i.region_latitude            )::float8
+                ,\(bind: i.region_longitude           )::float8
+                ,\(bind: i.region_radius              )::float8
+                ,\(bind: i.name                       )::varchar(50)
+                ,\(bind: i.dttm_start_utc             )::timestamptz
+                ,\(bind: i.dttm_end_utc               )::timestamptz
+                -- OPTIONAL
+                ,COALESCE(\(bind: i.description       ), ''::varchar(50))::varchar(50)
+                ,COALESCE(\(bind: i.meet_category_id  ), 1::int2)::int2
+                ,COALESCE(\(bind: i.max_capacity      ), 2::int4)::int4
+                ,COALESCE(\(bind: i.invitation_message), ''::text)::text
+            );
+            """
+        }
+
+        static func decode(_ row: any SQLRow) throws -> Result {
+            try .init(
+                meet_id_uuid: row.decode(column: "meet_id_uuid", as: UUID?.self),
+                num_inserted: row.decode(column: "num_inserted", as: Int32.self)
+            )
+        }
+    }
     
     /*
      
