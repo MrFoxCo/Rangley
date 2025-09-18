@@ -1,9 +1,9 @@
 CREATE OR REPLACE FUNCTION rangley.rangley_fn_i_invite_users_to_meet_by_meet_id_uuid
 (
-     p_meet_id_uuid UUID
-    ,p_inviter_user_uuid UUID
-    ,p_invitee_user_uuids UUID[]
-    ,p_invitation_message TEXT DEFAULT NULL
+     p_meet_id_uuid 		UUID
+    ,p_inviter_user_uuid 	UUID
+    ,p_invitee_user_uuids 	UUID[]
+    ,p_invitation_message 	TEXT DEFAULT NULL
 )
 RETURNS TABLE (
     user_uuid UUID,
@@ -18,9 +18,12 @@ DECLARE
     v_inviter_user_id INT8;
     r RECORD;
 BEGIN
-    SELECT mi.meet_id INTO v_meet_id
+    SELECT
+		mi.meet_id
+	INTO 
+		v_meet_id
     FROM rangley.vw_meet_ids mi
-    WHERE mi.uuid = p_meet_id_uuid;
+	WHERE mi.uuid = p_meet_id_uuid;
 
     IF NOT FOUND THEN
         RAISE EXCEPTION 'Meet with UUID % not found', p_meet_id_uuid;
@@ -53,19 +56,19 @@ BEGIN
             notification_id := NULL;
             RETURN NEXT;
         ELSE
-            RETURN QUERY
-            SELECT
-            	r.user_uuid
-            	,x.username
-            	,x.invitation_status
-            	,x.notification_id
-            FROM rangley.rangley_fn_invite_users_to_meet
-            (
-                 v_meet_id
-                ,v_inviter_user_id
-                ,ARRAY[r.user_id]
-                ,p_invitation_message
-            ) AS x;
+			RETURN QUERY
+			SELECT
+				 r.user_uuid
+				,x.username
+				,x.invitation_status
+				,x.notification_id
+			FROM rangley.rangley_fn_i_invite_users_to_meet
+			(
+				 v_meet_id
+				,v_inviter_user_id
+				,ARRAY[r.user_id]
+				,p_invitation_message
+			) AS x;
         END IF;
     END LOOP;
 

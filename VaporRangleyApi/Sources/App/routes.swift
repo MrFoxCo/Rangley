@@ -255,7 +255,7 @@ public func routes(_ app: Application) throws
             let dbResult = try await Proc.SystemInsertMeet.call(
                 on: sql,
                 params,
-                .init(meet_id_uuid: nil, num_inserted: 0)
+                .init(num_inserted: 0,meet_id_uuid: nil)
             )
             
             // Validate the result
@@ -313,8 +313,8 @@ public func routes(_ app: Application) throws
         )
         
         let output = Proc.SystemInsertMeetWithInvites.Output(
-            meet_id_uuid: nil,
-            num_inserted: 0
+            num_inserted: 0,
+            meet_id_uuid: nil
         )
 
         do {

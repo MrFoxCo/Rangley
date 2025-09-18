@@ -6,10 +6,10 @@ CREATE OR REPLACE FUNCTION rangley.rangley_fn_i_invite_users_to_meet
     ,p_invitation_message   TEXT DEFAULT NULL
 )
 RETURNS TABLE (
-    user_id BIGINT,
+    returned_user_id BIGINT,  -- Renamed to avoid conflict
     username VARCHAR(50),
     invitation_status TEXT,
-    notification_id BIGINT
+    returned_notification_id BIGINT  -- Renamed to avoid conflict
 )
 LANGUAGE plpgsql
 AS $$
@@ -78,11 +78,11 @@ BEGIN
         RAISE EXCEPTION 'User % lacks permission to invite for meet %', p_inviter_user_id, p_meet_id;
     END IF;
 
-    -- Current accepted+owner count (capacity signal; doesn’t block)
+    -- Current accepted+owner count (capacity signal; doesn't block)
     SELECT COUNT(*) INTO v_current_participants
-    FROM rangley.vw_meet_participants
-    WHERE meet_id = p_meet_id
-      AND participant_status_id IN (v_accepted_status_id, v_owner_status_id);
+    FROM rangley.vw_meet_participants mp
+    WHERE mp.meet_id = p_meet_id
+      AND mp.participant_status_id IN (v_accepted_status_id, v_owner_status_id);
 
     -- Notification type id by name (fallback to 1 if not seeded yet)
     SELECT nt.notification_type_id
@@ -128,10 +128,10 @@ BEGIN
         END IF;
 
         -- existing participant state
-        SELECT participant_status_id
+        SELECT mp.participant_status_id
         INTO v_existing_status
-        FROM rangley.vw_meet_participants
-        WHERE meet_id = p_meet_id AND user_id = v_user_id;
+        FROM rangley.vw_meet_participants mp
+        WHERE mp.meet_id = p_meet_id AND mp.user_id = v_user_id;
 
         IF v_existing_status = v_invited_status_id THEN
             RETURN QUERY SELECT v_user_id, v_username, 'already_invited'::TEXT, NULL::BIGINT;

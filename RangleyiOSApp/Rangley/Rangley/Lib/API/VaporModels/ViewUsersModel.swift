@@ -9,13 +9,13 @@ import SwiftUI
 
 public struct ViewUsersModel: Codable, Identifiable, Hashable, Sendable
 {
-    public let user_uuid    : String
+    public let user_uuid    : UUID
     public let username     : String
     public let display_name : String
     public let matched_by   : [String]
     public let can_invite   : Bool
 
-    public var id: String { user_uuid }
+    public var id: UUID { user_uuid }
 
     // Convenience flags for UI badges/toggles
     public var matchedByUsername: Bool { matched_by.contains("username") }

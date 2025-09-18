@@ -6,7 +6,8 @@
 //
 import MapKit
 
-public struct LocationInfo: Sendable, Codable, Hashable {
+public struct LocationInfo: Sendable, Codable, Hashable
+{
     public let Coordinate           : Coordinate              // required
     public let RegionCoordinate     : Coordinate             // geofencing center (optional)
     public let RegionRadius         : Double                 // meters (optional)

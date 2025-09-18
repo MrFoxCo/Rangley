@@ -106,7 +106,7 @@ BEGIN
 	
 	-- invite if any remain
 	IF array_length(v_invitee_uuids, 1) > 0 THEN
-	  PERFORM rangley.rangley_fn_invite_users_to_meet_by_meet_id_uuid(
+	  PERFORM rangley.rangley_fn_i_invite_users_to_meet_by_meet_id_uuid(
 	    new_meet_id_uuid,
 	    v_creator_user_uuid,
 	    v_invitee_uuids,

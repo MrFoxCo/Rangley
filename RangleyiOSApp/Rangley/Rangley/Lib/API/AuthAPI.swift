@@ -207,11 +207,13 @@ struct AuthAPI
         do { return try JSONDecoder().decode(MeetInsertResponse.self, from: data) }
         catch { throw AuthAPIError.decode }
     }
+    
     // Corresponds to SystemInsertUpdatedMeet in VAPOR
     static func updateMeet(baseURL: URL,
                            token: String, body: UpdatedMeetInsertBody) async throws -> UpdatedMeetInsertResponse
     {
-        guard body.isCoordinateSetValid else {
+        guard body.isCoordinateSetValid else
+        {
             throw AuthAPIError.http(400, "Provide all 5 coordinate fields or none")
         }
 

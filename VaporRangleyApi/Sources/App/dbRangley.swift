@@ -176,16 +176,16 @@ enum Proc
 
         struct Result: Content, Sendable
         {
-            let meet_id_uuid    : UUID?
             let num_inserted    : Int32
+            let meet_id_uuid    : UUID?
         }
 
         static func query(_ i: Params, _ o: Result) -> SQLQueryString {
             """
             CALL \(unsafeRaw: procName.rawValue)
             (
-                 NULL::UUID
-                ,NULL::int4  -- OUT parameter placeholder
+                 NULL::int4  -- OUT parameter placeholder
+                ,NULL::UUID -- OUT
                 ,\(bind: i.cognito_sub              )::text
                 ,\(bind: i.latitude                 )::float8
                 ,\(bind: i.longitude                )::float8
@@ -204,8 +204,9 @@ enum Proc
 
         static func decode(_ row: any SQLRow) throws -> Result {
             try .init(
-                meet_id_uuid: row.decode(column: "meet_id_uuid", as: UUID?.self),
-                num_inserted: row.decode(column: "num_inserted", as: Int32.self)
+                num_inserted: row.decode(column: "num_inserted", as: Int32.self),
+                meet_id_uuid: row.decode(column: "meet_id_uuid", as: UUID?.self)
+
             )
         }
     }
@@ -339,16 +340,18 @@ enum Proc
 
         struct Result: Content, Sendable
         {
-            let meet_id_uuid    : UUID?
             let num_inserted    : Int32
+            let meet_id_uuid    : UUID?
         }
 
-        static func query(_ i: Params, _ o: Result) -> SQLQueryString {
+        static func query(_ i: Params, _ o: Result) -> SQLQueryString
+        {
             """
             CALL \(unsafeRaw: procName.rawValue)
             (
-                 NULL::UUID
-                ,NULL::int4  -- OUT parameter placeholder
+
+                 NULL::int4  -- OUT parameter placeholder
+                ,NULL::UUID -- OUT
                 ,\(bind: i.cognito_sub                )::text
                 ,\(bind: i.initial_invitee_uuids      )::UUID[]
                 ,\(bind: i.latitude                   )::float8
@@ -370,42 +373,12 @@ enum Proc
 
         static func decode(_ row: any SQLRow) throws -> Result {
             try .init(
-                meet_id_uuid: row.decode(column: "meet_id_uuid", as: UUID?.self),
-                num_inserted: row.decode(column: "num_inserted", as: Int32.self)
+                num_inserted: row.decode(column: "num_inserted", as: Int32.self),
+                meet_id_uuid: row.decode(column: "meet_id_uuid", as: UUID?.self)
+
             )
         }
     }
-    
-    /*
-     
-     struct MeetInsertWithInvitesBody: Codable
-     {
-         // Required
-         let initial_invitee_uuids   : [UUID]
-         let latitude                : Double
-         let longitude               : Double
-         let region_latitude         : Double
-         let region_longitude        : Double
-         let region_radius           : Double
-         let name                    : String
-         let dttm_start_utc          : Date
-         let dttm_end_utc            : Date
-         
-         // Optional
-         let description             : String?
-         let meet_category_id        : Int16?
-         let max_capacity            : Int32?
-         let invitation_message      : String?
-     }
-
-     /// USED FOR BOTH
-     struct MeetInsertResponse: Codable
-     {
-         let meet_id_uuid    : UUID // not used
-         let num_inserted    : Int32
-     }
-
-     */
     
     // =========================================================
     // MARK: - END Transaction Level Meet Inserts w/ Invites

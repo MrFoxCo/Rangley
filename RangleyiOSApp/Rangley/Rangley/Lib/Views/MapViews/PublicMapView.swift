@@ -24,6 +24,8 @@ import AWSPluginsCore
 // TODO: - return to user tap
 // TODO: - Remeber User when Login Option and for Create New Account
 // TODO: - NEED TO ADD categories and max capacties as options
+// TODO: - Figure out why the forms are slightly lagging between continues
+// TODO: - MASSIVE ISSUE THE REFRESH TOKEN ISN'T REFRESHING THE SESSION BASICALLY EXPIRES AND CAN'T TALK TO SERVER
 // MARK: - IGNORE THE ABOVE TODOs FOR NOW
 // =========================================================
 // =========================================================
@@ -114,40 +116,71 @@ public struct PublicMapView: View
     @State private var selectedLocation: LocationInfo?
     @State private var showLocationPopup = false
     
-    // PublicMapView.swift
-    private func submitMeet(
-        locationInfo: LocationInfo,name: String,
-        startTime: Date,endTime: Date, invitedUsers: [ViewUsersModel]) async throws
+
+    private func createMeetOnly(
+        locationInfo: LocationInfo,name: String,startTime: Date,endTime:Date) async throws
     {
-        // Derive required fields (non-optionals)
-        let lat  = locationInfo.Coordinate.latitude
-        let lon  = locationInfo.Coordinate.longitude
+        
+        let body = buildMeetBody(
+            locationInfo: locationInfo,
+            name: name,
+            startTime: startTime,
+            endTime: endTime
+        )
+        
+        let idToken = try await fetchIdToken()
+        
+        let res = try await AuthAPI.createMeet(
+            baseURL: Env.apiBaseURL,
+            token: idToken,
+            body: body
+        )
+        
+        print("Meet created: \(res.num_inserted)")
+    }
+
+    private func createMeetWithInvites(
+        locationInfo: LocationInfo, name: String,
+        startTime: Date,endTime: Date,invitedUsers: [UUID]
+    ) async throws
+    {
+        
+        let body = buildMeetWithInvitesBody(
+            locationInfo: locationInfo,
+            name: name,
+            startTime: startTime,
+            endTime: endTime,
+            invitedUsers: invitedUsers
+        )
+        
+        let idToken = try await fetchIdToken()
+        
+        let res = try await AuthAPI.createMeetWithInvites(
+            baseURL: Env.apiBaseURL,
+            token: idToken,
+            body: body
+        )
+        
+        print("Meet with invites created: \(res.num_inserted)")
+    }
+
+    // MARK: - Helper Functions
+
+    private func buildMeetBody(
+        locationInfo: LocationInfo,
+        name: String,
+        startTime: Date,
+        endTime: Date
+    ) -> MeetInsertBody
+    {
+        
+        let lat = locationInfo.Coordinate.latitude
+        let lon = locationInfo.Coordinate.longitude
         let rLat = locationInfo.RegionCoordinate.latitude
         let rLon = locationInfo.RegionCoordinate.longitude
-        let rRad = (locationInfo.RegionRadius).rounded()
+        let rRad = locationInfo.RegionRadius.rounded()
         
-        // Optional placeholders
-        let description   = ""
-        let meetCategoryId: Int16 = 1
-        let maxCapacity  : Int32 = 8
-        
-        // (Optional) print sanity
-        print("""
-        Creating meet (print-test):
-          Name            : \(name)
-          Location Name   : \(locationInfo.Name ?? "Unknown")
-          Start (UTC)     : \(startTime)
-          End (UTC)       : \(endTime)
-          lat/lon         : \(lat), \(lon)
-          region lat/lon  : \(rLat), \(rLon)
-          region radius   : \(Int(rRad)) m
-          description     : \(description.isEmpty ? "(empty)" : description)
-          category_id     : \(meetCategoryId)
-          max_capacity    : \(maxCapacity)
-        """)
-        
-        // Build body
-        let body = MeetInsertBody(
+        return MeetInsertBody(
             latitude: lat,
             longitude: lon,
             region_latitude: rLat,
@@ -156,22 +189,73 @@ public struct PublicMapView: View
             name: name,
             dttm_start_utc: startTime,
             dttm_end_utc: endTime,
-            description: description,
-            meet_category_id: meetCategoryId,
-            max_capacity: maxCapacity
+            description: "", // TODO: Add logic to incorporate these
+            meet_category_id: 1,
+            max_capacity: 8
         )
-        
-        // Token + API
-        let session = try await Amplify.Auth.fetchAuthSession()
-        guard let provider = session as? AuthCognitoTokensProvider else {
-            throw AuthAPIError.http(-1, "No Cognito token provider")
-        }
-        let tokens = try provider.getCognitoTokens().get()
-        let idToken = tokens.idToken
+    }
 
-        // or
-        let res = try await AuthAPI.createMeet(baseURL: Env.apiBaseURL, token: idToken, body: body)
-        print("inserted: \(res.num_inserted)")
+    private func buildMeetWithInvitesBody(
+        locationInfo: LocationInfo,
+        name: String,
+        startTime: Date,
+        endTime: Date,
+        invitedUsers: [UUID]
+    ) -> MeetWithInvitesInsertBody
+    {
+        
+        let lat = locationInfo.Coordinate.latitude
+        let lon = locationInfo.Coordinate.longitude
+        let rLat = locationInfo.RegionCoordinate.latitude
+        let rLon = locationInfo.RegionCoordinate.longitude
+        let rRad = locationInfo.RegionRadius.rounded()
+        
+        return MeetWithInvitesInsertBody(
+            initial_invitee_uuids: invitedUsers,
+            latitude: lat,
+            longitude: lon,
+            region_latitude: rLat,
+            region_longitude: rLon,
+            region_radius: rRad,
+            name: name,
+            dttm_start_utc: startTime,
+            dttm_end_utc: endTime,
+            description: "",
+            meet_category_id: 1,
+            max_capacity: 8,
+            invitation_message: ""
+        )
+    }
+
+    // MARK: - Form Handler
+
+    private func handleMeetSubmission(
+        locationInfo: LocationInfo,name: String,
+        startTime: Date,endTime: Date,invitedUsers: [ViewUsersModel] // Or however you get the selected users
+    ) async throws
+    {
+        
+        // Convert users to UUIDs at the form level
+        let invitedUserUUIDs = invitedUsers.map(\.user_uuid)
+        
+        // Decision logic at the form level
+        if invitedUserUUIDs.isEmpty {
+            try await createMeetOnly(
+                locationInfo: locationInfo,
+                name: name,
+                startTime: startTime,
+                endTime: endTime
+            )
+        } else {
+            try await createMeetWithInvites(
+                locationInfo: locationInfo,
+                name: name,
+                startTime: startTime,
+                endTime: endTime,
+                invitedUsers: invitedUserUUIDs
+            )
+            try? await Task.sleep(nanoseconds: 500_000_000)
+        }
     }
     
     // Add this after your @State variables and before submitMeet
@@ -225,6 +309,7 @@ public struct PublicMapView: View
     // =========================================================
     // MARK: - Meet Creation No Tap Flow
     // =========================================================
+    
     @State private var showCreateForm = false
     
     private func seedForCreate() -> LocationInfo?
@@ -251,8 +336,8 @@ public struct PublicMapView: View
     // MARK: - Edit Meet FLow
     // =========================================================
     
-    @State private var showEditSheet = false
     // Add these state variables to PublicMapView
+    @State private var showEditSheet = false
     @State private var isDeletingMeet = false
     @State private var deleteError: String?
     
@@ -485,12 +570,12 @@ public struct PublicMapView: View
                 onCreateMeet: { location, name, start, end, invitedUsers in
                     Task {
                         do {
-                            try await submitMeet(
+                            try await handleMeetSubmission(
                                 locationInfo: location,
                                 name: name,
                                 startTime: start,
                                 endTime: end,
-                                invitedUsers: invitedUsers // New parameter
+                                invitedUsers: invitedUsers
                             )
                             await loadMeets()
                         }

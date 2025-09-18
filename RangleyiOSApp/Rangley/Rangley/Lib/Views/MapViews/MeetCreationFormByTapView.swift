@@ -26,13 +26,22 @@ import QuartzCore // for confetti supports the CA_* stuff
 
 struct MeetCreationFormByTapView: View
 {
+    //================================================
+    // MARK: - PARAMS
+    //================================================
+    
+    let baseURL: URL
+    let token: String
     let locationInfo: LocationInfo
     let onConfirm: (String, Date, Date, [ViewUsersModel]) -> Void // Updated to include invited users
     let onBack: () -> Void
     
+    //================================================
+    // MARK: - END PARAMS
+    //================================================
+    
     // API dependencies for user search
-    let baseURL: URL
-    let token: String
+
     
     init(
         locationInfo: LocationInfo,
@@ -642,27 +651,34 @@ private struct FullScreenUserCard: View
 
 struct MeetCreationOverlayByTap: View
 {
+    //================================================
+    // MARK: - PARAMS
+    //================================================
+    
     @Binding var selectedLocation: LocationInfo?
     @Binding var showPopup: Bool
-    @State private var isSoftDismissing = false
-    
-    // API dependencies (NEW - needed for user search)
-    let baseURL: URL
-    let token: String
-    
-    // Updated callback to include invited users (NEW)
+    let baseURL : URL
+    let token   : String
     let onCreateMeet: (LocationInfo, String, Date, Date, [ViewUsersModel]) async throws -> Void
-
-    @State private var currentStep: Step = .locationConfirm
-    @State private var isSubmitting = false
-    @State private var submitError: String?
+    
+    //================================================
+    // MARK: - END PARAMS
+    //================================================
     
     //================================================
     // MARK: - MeetCreation Effect Flow
     //================================================
-    @State private var isExploding = false
-    @State private var showConfetti = false
     
+    @State private var isSubmitting     = false
+    @State private var submitError: String?
+    @State private var isSoftDismissing = false
+    @State private var isExploding      = false
+    @State private var showConfetti     = false
+    @State private var currentStep: Step = .locationConfirm
+    
+    //================================================
+    // MARK: - END MeetCreation Effect Flow
+    //================================================
     private func explodeThenDismiss() // TODO: - consolidate duplicates ... not now though
     {
         guard !isExploding else { return }
@@ -678,9 +694,6 @@ struct MeetCreationOverlayByTap: View
         }
         UINotificationFeedbackGenerator().notificationOccurred(.success)
     }
-    //================================================
-    // MARK: - END MeetCreation Effect Flow
-    //================================================
     
     enum Step { case locationConfirm, meetDetails }
 
