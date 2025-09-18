@@ -341,7 +341,7 @@ enum Proc
         struct Result: Content, Sendable
         {
             let num_inserted    : Int32
-            let meet_id_uuid    : UUID?
+            let new_meet_id_uuid    : UUID?
         }
 
         static func query(_ i: Params, _ o: Result) -> SQLQueryString
@@ -374,7 +374,7 @@ enum Proc
         static func decode(_ row: any SQLRow) throws -> Result {
             try .init(
                 num_inserted: row.decode(column: "num_inserted", as: Int32.self),
-                meet_id_uuid: row.decode(column: "meet_id_uuid", as: UUID?.self)
+                new_meet_id_uuid: row.decode(column: "new_meet_id_uuid", as: UUID?.self)
 
             )
         }

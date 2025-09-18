@@ -147,8 +147,8 @@ enum HTTPDTO
         
         struct InsertMeetResponse: Content, Sendable
         {
-            let meet_id_uuid    : UUID
-            let num_inserted    : Int32
+            let num_inserted        : Int32
+            let new_meet_id_uuid    : UUID
         }
         
         struct InsertDeleteResponse: Content, Sendable

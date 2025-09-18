@@ -314,7 +314,7 @@ public func routes(_ app: Application) throws
         
         let output = Proc.SystemInsertMeetWithInvites.Output(
             num_inserted: 0,
-            meet_id_uuid: nil
+            new_meet_id_uuid: nil
         )
 
         do {
@@ -326,10 +326,10 @@ public func routes(_ app: Application) throws
             
             // Validate the result
             guard dbResult.num_inserted == 1,
-                  let meetId = dbResult.meet_id_uuid
+                  let meetId = dbResult.new_meet_id_uuid
             else { throw Abort(.internalServerError, reason: "Failed to create meet") }
 
-            return .init(meet_id_uuid: meetId, num_inserted: dbResult.num_inserted)
+            return .init(num_inserted: dbResult.num_inserted, new_meet_id_uuid: meetId)
             
         } catch let error as PSQLError {
             // Handle specific PostgreSQL errors from your procedure

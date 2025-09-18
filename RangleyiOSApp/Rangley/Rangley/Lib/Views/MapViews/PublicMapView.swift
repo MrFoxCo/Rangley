@@ -230,23 +230,31 @@ public struct PublicMapView: View
     // MARK: - Form Handler
 
     private func handleMeetSubmission(
-        locationInfo: LocationInfo,name: String,
-        startTime: Date,endTime: Date,invitedUsers: [ViewUsersModel] // Or however you get the selected users
-    ) async throws
-    {
+        locationInfo: LocationInfo, name: String,
+        startTime: Date, endTime: Date, invitedUsers: [ViewUsersModel]
+    ) async throws {
         
-        // Convert users to UUIDs at the form level
         let invitedUserUUIDs = invitedUsers.map(\.user_uuid)
         
+        print("=== Meet Submission Debug ===")
+        print("Invited users count: \(invitedUsers.count)")
+        print("Invited UUIDs count: \(invitedUserUUIDs.count)")
+        print("UUIDs isEmpty: \(invitedUserUUIDs.isEmpty)")
+        print("Will use createMeetOnly: \(invitedUserUUIDs.isEmpty)")
+
         // Decision logic at the form level
-        if invitedUserUUIDs.isEmpty {
+        if invitedUserUUIDs.isEmpty
+        {
+            print("→ Calling createMeetOnly")
             try await createMeetOnly(
                 locationInfo: locationInfo,
                 name: name,
                 startTime: startTime,
                 endTime: endTime
             )
-        } else {
+        } else
+        {
+            print("→ Calling createMeetWithInvites")
             try await createMeetWithInvites(
                 locationInfo: locationInfo,
                 name: name,
@@ -254,7 +262,7 @@ public struct PublicMapView: View
                 endTime: endTime,
                 invitedUsers: invitedUserUUIDs
             )
-            try? await Task.sleep(nanoseconds: 500_000_000)
+            //try? await Task.sleep(nanoseconds: 500_000_000)
         }
     }
     
