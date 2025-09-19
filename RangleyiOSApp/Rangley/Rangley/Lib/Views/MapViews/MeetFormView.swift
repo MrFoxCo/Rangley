@@ -72,6 +72,7 @@ struct MeetFormView: View
     let onClose: () -> Void
     /// Optional async location picker; return a full LocationInfo (all 5 fields).
     let onPickLocation: (() async -> LocationInfo?)?
+    let onLoadMeets: (() async -> Void)?
 
     // MARK: VM
     @StateObject private var vm: MeetFormModel
@@ -87,12 +88,14 @@ struct MeetFormView: View
         mode: MeetFormMode,
         onUpdate: @escaping (UpdatedMeetInsertBody) async throws -> Void,
         onClose: @escaping () -> Void,
-        onPickLocation: (() async -> LocationInfo?)? = nil
+        onPickLocation: (() async -> LocationInfo?)? = nil,
+        onLoadMeets: (() async -> Void)? = nil
     ) {
         self.mode = mode
         self.onUpdate = onUpdate
         self.onClose = onClose
         self.onPickLocation = onPickLocation
+        self.onLoadMeets = onLoadMeets
         _vm = StateObject(wrappedValue: MeetFormModel(mode: mode))
     }
 
@@ -659,6 +662,7 @@ struct MeetFormView: View
             do {
                 if let body = vm.makeUpdateBody() {
                     try await onUpdate(body)
+                    await onLoadMeets?()
                     await MainActor.run { onClose() }
                 } else {
                     await MainActor.run { submitError = "No changes to save." }

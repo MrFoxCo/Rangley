@@ -32,6 +32,7 @@ DECLARE
     created_by_user_id   	INT8;
 	new_meet_id          	INT8;
 	new_meet_coordinate_id 	INT8;          
+	v_new_meet_id_uuid        UUID;
 BEGIN
     -- OUT sentinel
     num_inserted           := 0;

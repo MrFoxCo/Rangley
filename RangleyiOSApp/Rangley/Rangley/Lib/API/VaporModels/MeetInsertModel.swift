@@ -54,3 +54,9 @@ struct MeetInsertResponse: Codable
     let meet_id_uuid    : UUID // not used
 }
 
+struct MeetWithInvitesInsertResponse: Codable
+{
+    let num_inserted        : Int32
+    let new_meet_id_uuid    : UUID // not used
+}
+

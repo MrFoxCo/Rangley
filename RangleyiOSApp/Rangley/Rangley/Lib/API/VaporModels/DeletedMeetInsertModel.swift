@@ -10,7 +10,7 @@ import Foundation
 
 struct DeletedMeetInsertBody: Codable {
     // Required
-    let meet_id_uuid: String
+    let meet_id_uuid: UUID
 }
 
 struct DeletedMeetInsertResponse: Codable {

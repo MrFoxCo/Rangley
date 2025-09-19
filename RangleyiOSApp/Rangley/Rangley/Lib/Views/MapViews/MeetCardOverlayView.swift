@@ -70,12 +70,6 @@ struct MeetBubbleButton: View
         .buttonStyle(.plain)
         .frame(width: 120, height: 120)
         .contentShape(Rectangle())
-        .simultaneousGesture(
-            TapGesture().onEnded { _ in
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { onTap() }
-            }
-        )
         .onReceive(timer) { now = $0 }
         .onAppear { pulse = true }
         .accessibilityHint(isActive ? "Active now" : "Not active")

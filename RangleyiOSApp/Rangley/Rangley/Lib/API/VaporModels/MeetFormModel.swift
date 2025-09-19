@@ -18,7 +18,7 @@ final class MeetFormModel: ObservableObject
 {
     // Inputs (originals for update)
     private let mode: MeetFormMode
-    private let meetIDUUID: String? // present in update mode
+    private let meetIDUUID: UUID? // present in update mode
 
     // Editable fields (bind these to your view)
     @Published var name: String

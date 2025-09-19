@@ -11,7 +11,7 @@ import Foundation
 /// probably fix that
 public struct ViewMeetsModel: Codable, Identifiable, Sendable
 {
-    public let meet_id_uuid         : String
+    public let meet_id_uuid         : UUID
     public let meet_status_id       : Int16
     public let latitude             : Double
     public let longitude            : Double
@@ -25,11 +25,11 @@ public struct ViewMeetsModel: Codable, Identifiable, Sendable
     public let meet_category_id     : Int16 // might not need this?
     public let description          : String
     public let max_capacity         : Int32
-    public let created_by_user_uuid : String
+    public let created_by_user_uuid : UUID
     public let display_name         : String
     public let is_owner             : Bool
 
-    public var id: String { meet_id_uuid }
+    public var id: UUID { meet_id_uuid }
 }
 
 extension ViewMeetsModel: Equatable {

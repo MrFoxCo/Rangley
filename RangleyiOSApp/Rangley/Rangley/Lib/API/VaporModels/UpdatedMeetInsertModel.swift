@@ -8,9 +8,10 @@
 import SwiftUI
 import Foundation
 
-struct UpdatedMeetInsertBody: Codable {
+struct UpdatedMeetInsertBody: Codable
+{
     // Required
-    let meet_id_uuid: String
+    let meet_id_uuid: UUID
 
     // Optional: send only what changed
     let latitude: Double?

@@ -296,20 +296,20 @@ public func routes(_ app: Application) throws
         else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
 
         let input = Proc.SystemInsertMeetWithInvites.Input(
-            cognito_sub: sub,
-            initial_invitee_uuids: body.initial_invitee_uuids,
-            latitude: body.latitude,
-            longitude: body.longitude,
-            region_latitude: body.region_latitude,
-            region_longitude: body.region_longitude,
-            region_radius: body.region_radius,
-            name: body.name,
-            dttm_start_utc: body.dttm_start_utc,
-            dttm_end_utc: body.dttm_end_utc,
-            description: body.description,
-            meet_category_id: body.meet_category_id,
-            max_capacity: body.max_capacity,
-            invitation_message: body.invitation_message
+            cognito_sub             : sub,
+            initial_invitee_uuids   : body.initial_invitee_uuids,
+            latitude                : body.latitude,
+            longitude               : body.longitude,
+            region_latitude         : body.region_latitude,
+            region_longitude        : body.region_longitude,
+            region_radius           : body.region_radius,
+            name                    : body.name,
+            dttm_start_utc          : body.dttm_start_utc,
+            dttm_end_utc            : body.dttm_end_utc,
+            description             : body.description,
+            meet_category_id        : body.meet_category_id,
+            max_capacity            : body.max_capacity,
+            invitation_message      : body.invitation_message
         )
         
         let output = Proc.SystemInsertMeetWithInvites.Output(
@@ -516,284 +516,13 @@ public func routes(_ app: Application) throws
 
 }
 
-/**
- ROUTE TESTING
- curl -sS -X POST "{$BASE}/i/meet-id" \
-   -H "Content-Type: application/json" \
-   -H "Authorization: Bearer $AUTH_TOKEN" \
-   -d '{
-     "created_by_user_id": 2
-   }'
- 
- curl -sS -X POST "{$BASE}/i/meet-coordinate" \
-   -H "Content-Type: application/json" \
-   -H "Authorization: Bearer $AUTH_TOKEN" \
-    -d '{
-     "latitude": 40.9484,
-     "longitude": -86.6553,
-     "region_latitude": 40.9484,
-     "region_longitude": -86.6553,
-     "region_radius": 2
-   }'
+/*
 
  
- curl -sS -X POST "{$BASE}/i/meet" \
-  -H "Content-Type: application/json" \
- -H "Authorization: Bearer $AUTH_TOKEN" \
-  -d '{
-     "meet_id": 6,
-     "meet_coordinate_id": 2,
-     "name": "Other Cubs Rooftop Meetup",
-     "dttm_start_utc": "2025-09-29T18:00:00Z",
-     "dttm_end_utc": "2025-09-29T21:00:00Z"
-     }'
  
- // with legal meet_status_id
- curl -sS -X POST "{$BASE}/i/meet-change-stamp" \
-   -H "Content-Type: application/json" \
- -H "Authorization: Bearer $AUTH_TOKEN" \
-   -d '{
-     "meet_id": 2,
-   }'
- curl -sS -X POST "{$BASE}/meet-coordinate" \
-   -H "Content-Type: application/json" \
- -H "Authorization: Bearer $AUTH_TOKEN" \
-   -d '{
-     "latitude": 41.830017,
-     "longitude": -87.634598,
-     "region_latitude": 41.830017,
-     "region_longitude": -87.634598,
-     "region_radius": 2
-   }'
- 
- 
- curl -sS -X POST "{$BASE}/i/updated-meet" \
-   -H "Content-Type: application/json" \
- -H "Authorization: Bearer $AUTH_TOKEN" \
-   -d '{
-     "meet_id": 5,
-     "change_stamp": 3,
-     "meet_coordinate_id": 6,
-     "name": "Anthony'\''s Rooftop Party",
-     "dttm_start_utc": "2025-09-05T09:00:00Z",
-     "dttm_end_utc": "2025-09-05T12:00:00Z"
-   }'
-
-
- 
- // with legal meet_status_id
- curl -sS -X POST "{$BASE}/i/meet-change-stamp" \
-   -H "Content-Type: application/json" \
- -H "Authorization: Bearer $AUTH_TOKEN" \
-   -d '{
-     "meet_id": 1
-   }'
- 
- 
- 
- curl -sS -X POST "{$BASE}/i/meet" \
-   -H "Content-Type: application/json" \
-   -H "Authorization: Bearer $AUTH_TOKEN" \
-   -d '{
-     "meet_id": 1,
-     "name": "Cubs Rooftop Meetup",
-    "dttm_start_utc": "2025-09-29T18:00:00Z",
-    "dttm_end_utc": "2025-09-29T21:00:00Z",
-     "description": "Hangout and watch the game from the rooftops",
-     "change_reason": "initial insert",
-     "meet_category_id": 1,
-     "max_capacity" : 2
-   }'
- 
- 
- 
- // no defaults
-
- curl -sS -X POST "{$BASE}/i/user" \
-   -H "Content-Type: application/json" \
-   -H "Authorization: Bearer $AUTH_TOKEN" \
-   -d '{
-     "cognito_sub": "us-east-2_abc123:deadbeef-dead-beef-dead-beefdeadbeef",
-     "username": "xcoder",
-     "display_name": "X Code",
-     "cellphone": "+13125550123",
-     "email": "x@code.com",
-     "dob": "1993-05-14",
-     "first_name": "X",
-     "last_name": "Code"
-   }'
-
  In PostgreSQL you must supply an argument for every parameter without a default, including OUT.
  The OUT placeholders aren’t evaluated (typical is NULL), and the procedure returns a single row containing the OUT/INOUT values.
-
- # single user
- 
-curl -sS -X GET "{$BASE}/v/user/4" \
-    -H "Authorization: Bearer $AUTH_TOKEN" \
-    -H "Accept: application/json"
-
-curl -sS -X GET "{$BASE}/v/meets" \
-    -H "Authorization: Bearer $AUTH_TOKEN" \
-    -H "Accept: application/json"
-
-curl -sS -X GET "{$BASE}/v/meet-categories" \
-    -H "Authorization: Bearer $AUTH_TOKEN" \
-    -H "Accept: application/json"
- 
- 
- curl -sS -X POST "{$BASE}/m/user/4" \
-   -H "Content-Type: application/json" \
-   -H "Authorization: Bearer $AUTH_TOKEN" \
-   -d '{
-     "user_id": 4,
-     "display_name": "Jonathan"
-   }'
- 
- curl -sS -X POST "{$BASE}/i/auth-register" \
-   -H "Authorization: Bearer $AUTH_TOKEN" \
-   -H "Content-Type: application/json" \
-   -d '{
-     "username": "elvis",
-     "display_name": "elvis p",
-     "cellphone": "+17731232222",
-     "email": "",
-     "dob": "1999-01-01",
-     "first_name": "",
-     "last_name": ""
-   }'
- curl -sS -X POST "{$BASE}/i/auth-register-test" \
-   -H "Authorization: Bearer $AUTH_TOKEN" \
-   -H "Content-Type: application/json" \
-   -d '{
-     "username": "ricksanchez",
-     "display_name": "rick s",
-     "cellphone": "+13121238888",
-     "email": "rick@g.com",
-     "dob": "1999-01-01",
-     "first_name": "",
-     "last_name": ""
-   }'
- 
- 
- curl -sS -X POST "{$BASE}/i/user" \
-   -H "Authorization: Bearer $AUTH_TOKEN" \
-   -H "Content-Type: application/json" \
-   -d '{
-     "username": "stevek",
-     "display_name": "Steve K",
-     "cellphone": "+14321902222",
-     "email": null,
-     "dob": "1999-01-01",
-     "first_name": null,
-     "last_name": null
-    }'
-     
- curl -sS -X POST "{$BASE}/i/user" \
-   -H "Authorization: Bearer $AUTH_TOKEN" \
-   -H "Content-Type: application/json" \
-   -d '{
-     "username": "[upiyouyt]",
-     "display_name": "p[iouiyuty",
-     "cellphone": "+10011112222",
-     "email": "",
-     "dob": "1999-01-01",
-     "first_name": "",
-     "last_name": ""
-   }'
- 
- curl -sS -X POST "$BASE/user" \
-   -H "Content-Type: application/json" \
-   -d '{
-     "username": "sdfgsdfg",
-     "display_name": "ffsdfgs ",
-     "cellphone": "+1888999220",
-     "email": "asd@f.com",
-     "dob": "1999-01-01",
-     "first_name": "",
-     "last_name": ""
-   }'
- 
- 
- curl -sS -X POST "$BASE/auth/register" -H "Content-Type: application/json" -d '{
-   "username":"elvis",
-   "password":"StrongPw123!",
-   "display_name":"Elvis P",
-   "cellphone":"+16865550123",
-   "email":"elvis@example.com",
-   "dob":"1999-01-01",
-   "first_name":"Elvis",
-   "last_name":"Presley"
- }'
- curl -sS -X POST "https://api.mrfoxco.com/auth/register" -H "Content-Type: application/json" -d '{
-   "username":"",
-   "password":"!",
-   "display_name":"",
-   "cellphone":"+",
-   "email":"",
-   "dob":"",
-   "first_name":"",
-   "last_name":""
- }'
- // WINDOWS
- curl.exe -sS -X POST "https://api.mrfoxco.com/auth/register" `
-   -H "Content-Type: application/json" `
-   -d '{"username":"",
-        "password":"!",
-        "display_name":"",
-        "cellphone":"+",
-        "email":"",
-        "dob":"yyyy-mm-dd",
-        "first_name":"",
-        "last_name":""
- }'
-
- curl -sS -X POST POST "$BASE/auth/login" `
- -H "Content-Type: application/json" `
- -d
- '{
- "username":"mrman",
- "password":"14PincheTuMadre!"
- }'
- 
- curl -sS -X POST "$BASE/auth/login" \
-   -H "Content-Type: application/json" \
-   -d '{"username":"21abe5c0-d071-70b3-e3c1-876a9457ea6c","password":"d!DNF9AKJ"}'
- 
- curl -sS -X POST "$BASE/auth/login" \
-   -H "Content-Type: application/json" \
-   -d '{"username":"<email-or-+1phone>","password":"<password>"}'
- 
- 
- Password minimum length
- 8 character(s)
- Password requirements
- Contains at least 1 number
- Contains at least 1 special character
- Contains at least 1 uppercase letter
- Contains at least 1 lowercase letter
- // password  must satisfy regular expression pattern: ^[\S]+.*[\S]+$
- 
- curl -sS -X POST "$BASE/auth/register" \
- -H "Content-Type: application/json"\
- -d '{
-   "username":"testu",
-   "password":"d!DNF9AKJ",
-   "display_name":"testd",
-   "cellphone":"+17731110101",
-   "email":"1@gmail.com",
-   "dob":"1988-01-01",
-   "first_name":"not",
-   "last_name":"important"
- }'
- 
- 
- DNF9AKJ#
  
  
  
- 
- 
- 
- 
- 
- */
+*/

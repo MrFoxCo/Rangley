@@ -43,11 +43,12 @@ AS $procedure$
 */
 DECLARE
     _state  text; _msg text; _detail text; _hint text; _ctx text;
-    v_sub                   text;
-    v_creator_user_id       BIGINT;
-    v_creator_user_uuid     UUID;
-    v_rows                  INT4;
-    v_invitee_uuids         UUID[];
+    v_sub                   	text;
+    v_creator_user_id       	BIGINT;
+    v_creator_user_uuid     	UUID;
+    v_new_meet_id_uuid        	UUID;
+    v_rows                  	INT4;
+    v_invitee_uuids         	UUID[];
 BEGIN
     -- OUT sentinels
     num_inserted := 0;
@@ -80,19 +81,28 @@ BEGIN
     -- Create meet via existing proc
     CALL rangley.rangley_s_insert_meet
 	(
-         v_rows				,new_meet_id_uuid	    ,v_sub                    
+         v_rows				,v_new_meet_id_uuid	    ,v_sub                    
         ,p_latitude			,p_longitude
         ,p_region_latitude	,p_region_longitude		,p_region_radius
         ,p_name				,p_dttm_start_utc		,p_dttm_end_utc
         ,p_description		,p_meet_category_id		,p_max_capacity
     );
-    num_inserted := v_rows;
+    num_inserted 		:= v_rows;
 
 	IF v_rows <> 1 THEN
 	  RAISE EXCEPTION USING ERRCODE='P0004',
 	    MESSAGE='[ERRO] Unexpected insert count from s_insert_meet',
 	    DETAIL=format('rows=%s', v_rows);
 	END IF;
+
+
+    -- Verify we got a UUID back and assign it to the OUT parameter
+    IF v_new_meet_id_uuid IS NULL THEN
+        RAISE EXCEPTION USING ERRCODE='P0004',
+            MESSAGE='[ERRO] Failed to get meet_id_uuid from s_insert_meet';
+    END IF;
+    
+    new_meet_id_uuid := v_new_meet_id_uuid;
 
 	-- restore normalization before the invite
 	WITH norm AS (
