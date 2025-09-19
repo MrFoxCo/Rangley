@@ -1,15 +1,16 @@
 CREATE OR REPLACE FUNCTION rangley.rangley_fn_i_invite_users_to_meet_by_meet_id_uuid
 (
-    p_meet_id_uuid UUID
+     p_meet_id_uuid UUID
     ,p_inviter_user_uuid UUID
     ,p_invitee_user_uuids UUID[]
     ,p_invitation_message TEXT DEFAULT NULL
 )
-RETURNS TABLE (
-    user_uuid UUID,
-    username VARCHAR(50),
-    invitation_status TEXT,
-    returned_notification_id BIGINT  -- ← Change this to match what you're selecting
+RETURNS TABLE 
+(
+    user_uuid 					UUID,
+    username 					VARCHAR(50),
+    invitation_status 			TEXT,
+    returned_notification_id 	BIGINT  -- ← Change this to match what you're selecting
 )
 LANGUAGE plpgsql
 AS $$

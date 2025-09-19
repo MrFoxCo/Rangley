@@ -26,23 +26,23 @@ DECLARE
     v_removed_status_id       INT2 := 9;
 
     -- meet facts from view (already latest & not ended/cancelled/postponed)
-    v_meet_uuid UUID;
-    v_meet_name VARCHAR(50);
-    v_meet_start TIMESTAMPTZ;
-    v_meet_end   TIMESTAMPTZ;
-    v_category_name TEXT;
-    v_meet_category_id INT2;
-    v_lat FLOAT8; v_lon FLOAT8;
-    v_max_capacity INT4;
+    v_meet_uuid 			UUID;
+    v_meet_name 			VARCHAR(50);
+    v_meet_start 			TIMESTAMPTZ;
+    v_meet_end   			TIMESTAMPTZ;
+    v_category_name 		TEXT;
+    v_meet_category_id 		INT2;
+    v_lat FLOAT8; v_lon 	FLOAT8;
+    v_max_capacity 			INT4;
 
-    v_current_participants INT;
-    v_notification_type_id INT2;
-    v_notification_id BIGINT;
+    v_current_participants 	INT;
+    v_notification_type_id 	INT2;
+    v_notification_id 		BIGINT;
 
-    v_user_id BIGINT;
-    v_username VARCHAR(50);
-    v_existing_status INT2;
-    v_allow_invites BOOLEAN;
+    v_user_id 				BIGINT;
+    v_username 				VARCHAR(50);
+    v_existing_status 		INT2;
+    v_allow_invites 		BOOLEAN;
 BEGIN
     -- Latest active/up-to-date meet row
     SELECT
@@ -84,16 +84,8 @@ BEGIN
     WHERE mp.meet_id = p_meet_id
       AND mp.participant_status_id IN (v_accepted_status_id, v_owner_status_id);
 
-    -- Notification type id by name (fallback to 1 if not seeded yet)
-    SELECT nt.notification_type_id
-    INTO v_notification_type_id
-    FROM rangley.vw_notification_type nt
-    WHERE lower(nt.name) = 'meet_invitation'
-    LIMIT 1;
 
-    IF v_notification_type_id IS NULL THEN
-        v_notification_type_id := 1;
-    END IF;
+ 	v_notification_type_id := 8;
 
     FOREACH v_user_id IN ARRAY p_invitee_user_ids LOOP
         IF v_user_id IS NULL THEN

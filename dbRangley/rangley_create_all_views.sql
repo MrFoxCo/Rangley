@@ -10,6 +10,7 @@ DROP VIEW IF EXISTS rangley.vw_sub_category CASCADE;
 
 DROP VIEW IF EXISTS rangley.vw_meet_icon CASCADE;
 DROP VIEW IF EXISTS rangley.vw_notification_type CASCADE;
+
 DROP VIEW IF EXISTS rangley.vw_notifications CASCADE;
 DROP VIEW IF EXISTS rangley.vw_user_inboxes CASCADE;
 DROP VIEW IF EXISTS rangley.vw_meet_participants CASCADE;

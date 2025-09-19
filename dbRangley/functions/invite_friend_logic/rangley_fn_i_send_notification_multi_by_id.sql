@@ -63,7 +63,7 @@ BEGIN
         INSERT INTO rangley.tb_notifications
 		(
 			 notification_type_id	,meet_id
-			,created_by_user_id		,payload_jso
+			,created_by_user_id		,payload_json
 		)
         VALUES
 		(
