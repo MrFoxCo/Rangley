@@ -33,6 +33,8 @@ import AWSPluginsCore
 /// =========================================================
 
 
+
+
 @MainActor
 class MapDataStore: ObservableObject
 {
@@ -538,18 +540,21 @@ public struct PublicMapView: View
         }
     }
     
-    private func handleMapTap(_ proxy: MapProxy, _ value: SpatialTapGesture.Value) {
+    private func handleMapTap(_ proxy: MapProxy, _ value: SpatialTapGesture.Value)
+    {
         guard !uiState.showLocationPopup && !uiState.showMeetOverlay else { return }
-        
+
+        // If the tap is on/near any MeetBubble, do nothing (let the button handle it)
+        if tapHitsAnnotation(proxy, value.location, meets: mapData.meets) {
+            return
+        }
+
         tapTask?.cancel()
         tapTask = Task {
-            try? await Task.sleep(nanoseconds: 300_000_000)
-            
-            if let coordinate = proxy.convert(value.location, from: .local) {
-                if let locationInfo = await locationData.reverseGeocode(coordinate: coordinate) {
-                    uiState.selectedLocation = locationInfo
-                    uiState.showLocationPopup = true
-                }
+            if let coordinate = proxy.convert(value.location, from: .local),
+               let locationInfo = await locationData.reverseGeocode(coordinate: coordinate) {
+                uiState.selectedLocation = locationInfo
+                uiState.showLocationPopup = true
             }
         }
     }
@@ -599,12 +604,13 @@ struct MapView: View
                 .onMapCameraChange(frequency: .onEnd) { context in
                     locationData.updateRegion(context.region)
                 }
-                .gesture(
+                .simultaneousGesture(
                     SpatialTapGesture().onEnded { value in
-                        onMapTap(proxy, value)  // Your existing function that works
+                        onMapTap(proxy, value)
                     }
                 )
-                .ignoresSafeArea()            }
+                .ignoresSafeArea()
+            }
         }
     }
 }
@@ -851,23 +857,17 @@ struct LoadingOverlay: View
     }
 }
 
-struct RefreshableScrollView<Content: View>: View
+private func tapHitsAnnotation(_ proxy: MapProxy, _ pt: CGPoint, meets: [ViewMeetsModel]) -> Bool
 {
-    let content: Content
-    let onRefresh: () async -> Void
-    
-    init(@ViewBuilder content: () -> Content, onRefresh: @escaping () async -> Void) {
-        self.content = content()
-        self.onRefresh = onRefresh
-    }
-    
-    var body: some View {
-        ScrollView {
-            content
-                .frame(minHeight: UIScreen.main.bounds.height)
-        }
-        .refreshable {
-            await onRefresh()
+    // ~50–60pt radius ≈ your 80pt bubble + padding
+    let r: CGFloat = 50
+    for m in meets {
+        let coord = CLLocationCoordinate2D(latitude: m.latitude, longitude: m.longitude)
+        if let p = proxy.convert(coord, to: .local) {
+            let dx = p.x - pt.x
+            let dy = p.y - pt.y
+            if (dx*dx + dy*dy) <= r*r { return true }
         }
     }
+    return false
 }

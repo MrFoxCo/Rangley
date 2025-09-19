@@ -11,6 +11,7 @@
 // MARK: - IGNORE THE BELOW TODOs FOR NOW
 
 // TODO: - Might be some unreachable code you need to remove
+// TODO: - Consider removing Opacity from here
 
 // MARK: - IGNORE THE ABOVE TODOs FOR NOW
 // =========================================================

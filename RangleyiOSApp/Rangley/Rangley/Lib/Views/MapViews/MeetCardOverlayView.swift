@@ -11,68 +11,53 @@ import SwiftUI
 import Amplify
 import AWSPluginsCore
 
-struct MeetBubbleButton: View
-{
+// MARK: - Fixed Meet Bubble Button (Key Fix!)
+struct MeetBubbleButton: View {
     let meet: ViewMeetsModel
     let ns: Namespace.ID
     let onTap: () -> Void
-
-    // Time awareness (for the live halo only)
+    
     @State private var now: Date = .init()
     private let timer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
     private var isActive: Bool { now >= meet.dttm_start_utc && now < meet.dttm_end_utc }
-
-    // Pulse
+    
     @State private var pulse = false
-
-    // Green palette for rings/glow
-    private let g1 = Color(hex: "#39FF14")  // neon green
-    private let g2 = Color(hex: "#00E676")  // spring green
-    private let g3 = Color(hex: "#00C853")  // deep green
-    private let g4 = Color(hex: "#B9F6CA")  // mint highlight
-
-    private var initials: String {
-        let n = meet.display_name.trimmingCharacters(in: .whitespaces)
-        let parts = n.split(separator: " ")
-        let chars = parts.prefix(2).compactMap { $0.first }
-        return String(chars).uppercased()
-    }
-
-    var body: some View
-    {
-        Button {
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { onTap() }
-        } label: {
-            ZStack {
-                // ACTIVE: pulsing green halo (outside the rings)
-                if isActive {
-                    Circle()
-                        .fill(g1.opacity(0.22))
-                        .frame(width: 89, height: 89)
-                        .blur(radius: 7)
-                        .scaleEffect(pulse ? 1.06 : 0.98)
-                        .animation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true), value: pulse)
-
-                    Circle()
-                        .stroke(g1.opacity(0.9), lineWidth: 3)
-                        .frame(width: 89, height: 89)
-                        .blur(radius: 0.5)
+    
+    private let g1 = Color(hex: "#39FF14")
+    
+    var body: some View {
+        ZStack {
+            // Active pulse
+            if isActive {
+                Circle()
+                    .fill(g1.opacity(0.22))
+                    .frame(width: 89, height: 89)
+                    .blur(radius: 7)
+                    .scaleEffect(pulse ? 1.06 : 0.98)
+                    .animation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true), value: pulse)
+                
+                Circle()
+                    .stroke(g1.opacity(0.9), lineWidth: 3)
+                    .frame(width: 89, height: 89)
+                    .blur(radius: 0.5)
+            }
+            Button {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                    onTap()
                 }
-
-                // Sticker
+            } label: {
                 Image("RangleySticker")
                     .resizable()
                     .scaledToFit()
                     .frame(width: 80, height: 80)
             }
+            .buttonStyle(.plain)
+            .contentShape(Rectangle())   // <- ensures the whole frame is tappable
         }
-        .buttonStyle(.plain)
         .frame(width: 120, height: 120)
-        .contentShape(Rectangle())
         .onReceive(timer) { now = $0 }
         .onAppear { pulse = true }
-        .accessibilityHint(isActive ? "Active now" : "Not active")
     }
 }
 
