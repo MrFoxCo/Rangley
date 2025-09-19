@@ -27,6 +27,7 @@ import AWSPluginsCore
 /// TODO: - return to user tap
 /// TODO: - Remeber User when Login Option and for Create New Account
 /// TODO: - NEED TO ADD categories and max capacties as options
+/// TODO: - DOCKVIEW REFUSES TO Dissapear when a keyboard comes onto the screen.
 /// MARK: - IGNORE THE ABOVE TODOs FOR NOW
 /// =========================================================
 /// =========================================================
