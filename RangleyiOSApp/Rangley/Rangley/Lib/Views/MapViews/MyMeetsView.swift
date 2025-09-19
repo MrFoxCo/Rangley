@@ -10,7 +10,7 @@
 // =========================================================
 // MARK: - IGNORE THE BELOW TODOs FOR NOW
 
-// TODO: - Top of this is a little clunk
+// TODO: - Top of this is a little compacted with the top
 
 // MARK: - IGNORE THE ABOVE TODOs FOR NOW
 // =========================================================
@@ -48,11 +48,6 @@ struct MyMeetsView: View
             }
         }) {
             VStack(spacing: 2) {
-        //                        Image(systemName: "tray")
-        //                            .font(.system(size: 14, weight: .semibold))
-        //                            .imageScale(.medium)
-        //                            .foregroundStyle(AppPalette.Brand.neonPink)
-                
                 Text("My Meets")
                     .font(.system(size: 25, weight: .medium))
                     .foregroundStyle(AppPalette.Brand.neonPink)
@@ -68,8 +63,8 @@ struct MyMeetsView: View
                     .stroke(AppPalette.Brand.neonPink.opacity(0.55), lineWidth: 1)
             )
             .contentShape(RoundedRectangle(cornerRadius: 16))
-            .frame(height: 48)                // keep height
-            .fixedSize(horizontal: true, vertical: false) // let width grow to fit "Meets"
+            .frame(height: 48)
+            .fixedSize(horizontal: true, vertical: false)
             .lineLimit(1)
             .foregroundColor(.white)
         }
@@ -84,8 +79,8 @@ struct MyMeetsView: View
                     }
                 },
                 onMeetSelected: { meet in
-                    isPresented = false  // Close the sheet
-                    onMeetSelected?(meet)  // Call the callback
+                    isPresented = false
+                    onMeetSelected?(meet)
                 }
             )
         }
@@ -110,6 +105,8 @@ struct MyMeetsView: View
     }
 }
 
+
+// MARK: - MyMeetsOverlay
 struct MyMeetsOverlay: View
 {
     let meets: [ViewMeetsModel]
@@ -120,23 +117,11 @@ struct MyMeetsOverlay: View
     
     @Environment(\.dismiss) private var dismiss
     
-    private var ownedMeets: [ViewMeetsModel] {
-        meets.filter { $0.is_owner }
-    }
-    
-    private var invitedMeets: [ViewMeetsModel] {
-        // Placeholder logic - will be implemented later
-        // For now, return meets where we're not the owner
-        meets.filter { !$0.is_owner }
-    }
-    
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
-                // Header with close button
                 headerView
                 
-                // Main content
                 ZStack {
                     AppPalette.Brand.russianViolet.opacity(0.05)
                         .ignoresSafeArea()
@@ -148,16 +133,23 @@ struct MyMeetsOverlay: View
                     } else if meets.isEmpty {
                         emptyStateView
                     } else {
-                        meetsListView
+                        MyMeetsContentView(
+                            meets: meets,
+                            onMeetSelected: onMeetSelected
+                        )
                     }
                 }
             }
             .navigationBarHidden(true)
         }
     }
-    
-    // MARK: - Header
-    private var headerView: some View {
+}
+
+
+// MARK: - Content Views
+private extension MyMeetsOverlay
+{
+    var headerView: some View {
         HStack {
             Button(action: { dismiss() }) {
                 Image(systemName: "xmark")
@@ -178,7 +170,6 @@ struct MyMeetsOverlay: View
             
             Spacer()
             
-            // Invisible spacer for balance
             Color.clear
                 .frame(width: 32, height: 32)
         }
@@ -187,8 +178,7 @@ struct MyMeetsOverlay: View
         .padding(.bottom, 16)
     }
     
-    // MARK: - Loading View
-    private var loadingView: some View {
+    var loadingView: some View {
         VStack(spacing: 16) {
             ProgressView()
                 .scaleEffect(1.2)
@@ -201,8 +191,7 @@ struct MyMeetsOverlay: View
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     
-    // MARK: - Error View
-    private func errorView(_ message: String) -> some View {
+    func errorView(_ message: String) -> some View {
         VStack(spacing: 20) {
             Image(systemName: "exclamationmark.triangle")
                 .font(.system(size: 48, weight: .light))
@@ -235,8 +224,7 @@ struct MyMeetsOverlay: View
         .padding(.horizontal, 40)
     }
     
-    // MARK: - Empty State
-    private var emptyStateView: some View {
+    var emptyStateView: some View {
         VStack(spacing: 20) {
             Image(systemName: "calendar.badge.plus")
                 .font(.system(size: 48, weight: .light))
@@ -256,83 +244,176 @@ struct MyMeetsOverlay: View
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 40)
     }
+}
+
+
+// MARK: - Content View
+struct MyMeetsContentView: View
+{
+    let meets: [ViewMeetsModel]
+    let onMeetSelected: ((ViewMeetsModel) -> Void)?
     
-    // MARK: - Meets List
-    private var meetsListView: some View {
+    private var ownedMeets: [ViewMeetsModel] {
+        meets.filter { $0.is_owner }
+    }
+    
+    // TODO: Replace with actual invitation logic from backend
+    private var invitedMeets: [ViewMeetsModel] {
+        // Placeholder - will be populated when invitation system is implemented
+        []
+    }
+    
+    var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
-            LazyVStack(spacing: 16) {
-                // Owned Meets Section
-                if !ownedMeets.isEmpty {
-                    meetsSection(
-                        title: "My Meets",
-                        icon: "crown.fill",
-                        count: ownedMeets.count,
-                        meets: ownedMeets
-                    )
-                }
+            LazyVStack(spacing: 24) {
+                OwnedMeetsSection(
+                    meets: ownedMeets,
+                    onMeetSelected: onMeetSelected
+                )
                 
-                // Invited Meets Section (Placeholder)
-                meetsSection(
-                    title: "Invitations",
-                    icon: "envelope",
-                    count: 0,
-                    meets: [],
-                    isPlaceholder: true
+                InvitationsMeetsSection(
+                    meets: invitedMeets,
+                    onMeetSelected: onMeetSelected
                 )
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 20)
         }
     }
+}
+
+
+// MARK: - Owned Meets Section
+struct OwnedMeetsSection: View
+{
+    let meets: [ViewMeetsModel]
+    let onMeetSelected: ((ViewMeetsModel) -> Void)?
     
-    private func meetsSection(
+    var body: some View {
+        MeetsSectionView(
+            title: "My Meets",
+            icon: "crown.fill",
+            meets: meets,
+            emptyMessage: "You haven't created any meets yet",
+            emptyIcon: "calendar.badge.plus",
+            onMeetSelected: onMeetSelected
+        )
+    }
+}
+
+
+// MARK: - Invitations Section
+struct InvitationsMeetsSection: View
+{
+    let meets: [ViewMeetsModel]
+    let onMeetSelected: ((ViewMeetsModel) -> Void)?
+    
+    var body: some View {
+        MeetsSectionView(
+            title: "Invitations",
+            icon: "envelope",
+            meets: meets,
+            emptyMessage: "Your invitations will appear here",
+            emptyIcon: "clock",
+            onMeetSelected: onMeetSelected,
+            isPlaceholder: true
+        )
+    }
+}
+
+
+// MARK: - Generic Meets Section
+struct MeetsSectionView: View
+{
+    let title: String
+    let icon: String
+    let meets: [ViewMeetsModel]
+    let emptyMessage: String
+    let emptyIcon: String
+    let onMeetSelected: ((ViewMeetsModel) -> Void)?
+    let isPlaceholder: Bool
+    
+    init(
         title: String,
         icon: String,
-        count: Int,
         meets: [ViewMeetsModel],
+        emptyMessage: String,
+        emptyIcon: String,
+        onMeetSelected: ((ViewMeetsModel) -> Void)?,
         isPlaceholder: Bool = false
-    ) -> some View {
+    ) {
+        self.title = title
+        self.icon = icon
+        self.meets = meets
+        self.emptyMessage = emptyMessage
+        self.emptyIcon = emptyIcon
+        self.onMeetSelected = onMeetSelected
+        self.isPlaceholder = isPlaceholder
+    }
+    
+    var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(isPlaceholder ? Color.secondary : AppPalette.Brand.neonPink)
-                
-                Text(title)
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(Color.primary)
-                
-                if isPlaceholder {
-                    Text("(Coming soon)")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundStyle(Color.secondary)
-                } else {
-                    Text("(\(count))")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundStyle(Color.secondary)
-                }
-                
-                Spacer()
-            }
-            .padding(.horizontal, 4)
+            sectionHeader
             
             if meets.isEmpty {
-                emptyMeetsSectionView(isPlaceholder: isPlaceholder)
+                EmptyMeetsSectionView(
+                    message: emptyMessage,
+                    icon: emptyIcon,
+                    isPlaceholder: isPlaceholder
+                )
             } else {
-                ForEach(meets) { meet in
-                    MeetCard(meet: meet, onTap: { onMeetSelected?(meet) })
-                }
+                meetsContent
             }
         }
     }
     
-    private func emptyMeetsSectionView(isPlaceholder: Bool) -> some View {
+    private var sectionHeader: some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(isPlaceholder ? Color.secondary : AppPalette.Brand.neonPink)
+            
+            Text(title)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(Color.primary)
+            
+            if isPlaceholder {
+                Text("(Coming soon)")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(Color.secondary)
+            } else {
+                Text("(\(meets.count))")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(Color.secondary)
+            }
+            
+            Spacer()
+        }
+        .padding(.horizontal, 4)
+    }
+    
+    private var meetsContent: some View {
+        ForEach(meets) { meet in
+            MeetCard(meet: meet, onTap: { onMeetSelected?(meet) })
+        }
+    }
+}
+
+
+// MARK: - Empty Section View
+struct EmptyMeetsSectionView: View
+{
+    let message: String
+    let icon: String
+    let isPlaceholder: Bool
+    
+    var body: some View {
         VStack(spacing: 12) {
-            Image(systemName: isPlaceholder ? "clock" : "calendar.badge.plus")
+            Image(systemName: icon)
                 .font(.system(size: 32, weight: .light))
                 .foregroundStyle(Color.secondary.opacity(0.6))
             
-            Text(isPlaceholder ? "Your invitations will appear here" : "You haven't created any meets yet")
+            Text(message)
                 .font(.system(size: 16))
                 .foregroundStyle(Color.secondary)
                 .multilineTextAlignment(.center)
@@ -351,6 +432,8 @@ struct MyMeetsOverlay: View
     }
 }
 
+
+// MARK: - Meet Card
 struct MeetCard: View
 {
     let meet: ViewMeetsModel
@@ -366,55 +449,13 @@ struct MeetCard: View
     var body: some View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 12) {
-                // Header row
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(meet.name)
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(Color.primary)
-                            .lineLimit(2)
-                        
-                        Text(meet.category_name)
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(AppPalette.Brand.neonPink)
-                    }
-                    
-                    Spacer()
-                    
-                    VStack(alignment: .trailing, spacing: 4) {
-                        if meet.is_owner {
-                            Image(systemName: "crown.fill")
-                                .font(.system(size: 12))
-                                .foregroundStyle(Color.orange)
-                        }
-                        
-                        // Category icon
-                        Image(systemName: categoryIcon(for: meet.category_name))
-                            .font(.system(size: 16))
-                            .foregroundStyle(AppPalette.Brand.neonPink.opacity(0.7))
-                    }
-                }
+                headerRow
                 
-                // Description
                 if !meet.description.isEmpty {
-                    Text(meet.description)
-                        .font(.system(size: 14))
-                        .foregroundStyle(Color.secondary)
-                        .lineLimit(2)
+                    descriptionText
                 }
                 
-                // Meta info row
-                HStack {
-                    Label(dateFormatter.string(from: meet.dttm_start_utc), systemImage: "calendar")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Color.secondary)
-                    
-                    Spacer()
-                    
-                    Label("\(meet.max_capacity)", systemImage: "person.3")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Color.secondary)
-                }
+                metaInfoRow
             }
             .padding(16)
             .background(
@@ -427,6 +468,56 @@ struct MeetCard: View
             )
         }
         .buttonStyle(PlainButtonStyle())
+    }
+    
+    private var headerRow: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(meet.name)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Color.primary)
+                    .lineLimit(2)
+                
+                Text(meet.category_name)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(AppPalette.Brand.neonPink)
+            }
+            
+            Spacer()
+            
+            VStack(alignment: .trailing, spacing: 4) {
+                if meet.is_owner {
+                    Image(systemName: "crown.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.orange)
+                }
+                
+                Image(systemName: categoryIcon(for: meet.category_name))
+                    .font(.system(size: 16))
+                    .foregroundStyle(AppPalette.Brand.neonPink.opacity(0.7))
+            }
+        }
+    }
+    
+    private var descriptionText: some View {
+        Text(meet.description)
+            .font(.system(size: 14))
+            .foregroundStyle(Color.secondary)
+            .lineLimit(2)
+    }
+    
+    private var metaInfoRow: some View {
+        HStack {
+            Label(dateFormatter.string(from: meet.dttm_start_utc), systemImage: "calendar")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Color.secondary)
+            
+            Spacer()
+            
+            Label("\(meet.max_capacity)", systemImage: "person.3")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Color.secondary)
+        }
     }
     
     private func categoryIcon(for category: String) -> String {
