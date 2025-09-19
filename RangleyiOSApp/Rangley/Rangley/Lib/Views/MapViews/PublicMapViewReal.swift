@@ -1,9 +1,9 @@
-////
-////  PublicMapView 2.swift
-////  Rangley
-////
-////  Created by Anthony Guzzardo on 9/18/25.
-////
+//
+//  PublicMapView 2.swift
+//  Rangley
+//
+//  Created by Anthony Guzzardo on 9/18/25.
+//
 //
 //
 ////

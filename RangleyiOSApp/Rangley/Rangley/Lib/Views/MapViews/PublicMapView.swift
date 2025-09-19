@@ -1,3 +1,10 @@
+//
+//  PublicMapView 2.swift
+//  Rangley
+//
+//  Created by Anthony Guzzardo on 9/18/25.
+//
+
 import CoreLocation
 import Combine
 import MapKit
@@ -7,32 +14,64 @@ import Amplify
 import UIKit
 import AWSPluginsCore
 
-// MARK: - Data Store (Single Source of Truth)
+
+/// =========================================================
+/// =========================================================
+/// =========================================================
+/// MARK: - IGNORE THE BELOW TODOs FOR NOW
+/// TODO: - FIGURE OUT A WAY TO TRIGER UPDATES ON OTHER PHONES WHEN MEETS ARE CREATED OR UPDATED
+/// TODO: - Fix the rotating screen view -- probably should look to be vertical
+/// TODO: - Create UNDO for deletes and updates
+/// TODO: - Create UNDO for deletes and updates
+/// TODO: - Fix recenter compass top right
+/// TODO: - return to user tap
+/// TODO: - Remeber User when Login Option and for Create New Account
+/// TODO: - NEED TO ADD categories and max capacties as options
+/// MARK: - IGNORE THE ABOVE TODOs FOR NOW
+/// =========================================================
+/// =========================================================
+/// =========================================================
+
+
 @MainActor
-class MapDataStore: ObservableObject {
+class MapDataStore: ObservableObject
+{
     @Published var meets: [ViewMeetsModel] = []
     @Published var selectedMeet: ViewMeetsModel?
     @Published var isLoading = false
     @Published var error: String?
     
     private let apiService: APIServiceProtocol
+    private var lastRefreshTime: Date?
+    private var refreshTimer: Timer?
+    
+    // Smart refresh configuration
+    private let autoRefreshInterval: TimeInterval = 180 // 3 minutes
+    private let minimumRefreshInterval: TimeInterval = 30 // Prevent spam refreshing
     
     init(apiService: APIServiceProtocol = APIService()) {
         self.apiService = apiService
+        startAutoRefreshTimer()
+    }
+    
+    deinit {
+        refreshTimer?.invalidate()
     }
     
     func loadMeets() async {
         guard !isLoading else { return }
+        guard shouldRefresh() else { return }
         
         isLoading = true
         error = nil
         
-        defer { isLoading = false }
+        defer {
+            isLoading = false
+            lastRefreshTime = Date()
+        }
         
         do {
             let newMeets = try await apiService.fetchMeets()
-            
-            // Update meets array
             meets = newMeets
             
             // Re-hydrate selected meet if it exists
@@ -45,35 +84,55 @@ class MapDataStore: ObservableObject {
         }
     }
     
+    private func shouldRefresh() -> Bool {
+        guard let lastRefresh = lastRefreshTime else { return true }
+        return Date().timeIntervalSince(lastRefresh) >= minimumRefreshInterval
+    }
+    
+    private func startAutoRefreshTimer() {
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: autoRefreshInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                await self?.loadMeets()
+            }
+        }
+    }
+    
+    func forceRefresh() async {
+        lastRefreshTime = nil // Reset to force refresh
+        await loadMeets()
+    }
+    
+    // Existing methods remain unchanged...
     func createMeet(_ body: MeetInsertBody) async throws {
         try await apiService.createMeet(body)
-        await loadMeets()
+        await forceRefresh() // Force refresh after creation
     }
     
     func createMeetWithInvites(_ body: MeetWithInvitesInsertBody) async throws {
         try await apiService.createMeetWithInvites(body)
-        await loadMeets()
+        await forceRefresh()
     }
     
     func updateMeet(_ body: UpdatedMeetInsertBody) async throws {
         try await apiService.updateMeet(body)
-        await loadMeets()
+        await forceRefresh()
     }
     
     func deleteMeet(_ meetId: UUID) async throws {
         let deleteBody = DeletedMeetInsertBody(meet_id_uuid: meetId)
         try await apiService.deleteMeet(deleteBody)
-        await loadMeets()
+        await forceRefresh()
         
-        // Clear selection if deleted meet was selected
         if selectedMeet?.meet_id_uuid == meetId {
             selectedMeet = nil
         }
     }
 }
 
+
 // MARK: - API Service Protocol
-protocol APIServiceProtocol {
+protocol APIServiceProtocol
+{
     func fetchMeets() async throws -> [ViewMeetsModel]
     func createMeet(_ body: MeetInsertBody) async throws
     func createMeetWithInvites(_ body: MeetWithInvitesInsertBody) async throws
@@ -82,7 +141,8 @@ protocol APIServiceProtocol {
 }
 
 // MARK: - API Service Implementation
-class APIService: APIServiceProtocol {
+class APIService: APIServiceProtocol
+{
     private func getAuthToken() async throws -> String {
         let session = try await Amplify.Auth.fetchAuthSession()
         guard let provider = session as? AuthCognitoTokensProvider else {
@@ -117,15 +177,21 @@ class APIService: APIServiceProtocol {
     }
 }
 
-// MARK: - Location Manager
+// MARK: - Enhanced LocationDataStore with Location-Based Refresh
 @MainActor
-class LocationDataStore: ObservableObject {
+class LocationDataStore: ObservableObject
+{
     @Published var userLocation: CLLocation?
     @Published var cameraPosition: MapCameraPosition
     @Published var currentRegion: MKCoordinateRegion
     
     private let locationManager = LocationManager()
     private var geocodeCache: [String: LocationInfo] = [:]
+    private var lastRefreshLocation: CLLocation?
+    private let significantLocationChangeDistance: CLLocationDistance = 100 // 100 meters
+    
+    // Callback for location-based refresh
+    var onSignificantLocationChange: (() async -> Void)?
     
     init() {
         let defaultRegion = MKCoordinateRegion(
@@ -136,15 +202,37 @@ class LocationDataStore: ObservableObject {
         self.cameraPosition = .region(defaultRegion)
         self.currentRegion = defaultRegion
         
-        // Set up location tracking
         locationManager.requestWhenInUse()
         
-        // Observe location changes
+        // Observe location changes with smart refresh logic
         locationManager.$userLocation
             .compactMap { $0 }
-            .assign(to: &$userLocation)
+            .sink { [weak self] newLocation in
+                self?.handleLocationUpdate(newLocation)
+            }
+            .store(in: &cancellables)
     }
     
+    private var cancellables = Set<AnyCancellable>()
+    
+    private func handleLocationUpdate(_ newLocation: CLLocation) {
+        userLocation = newLocation
+        
+        // Check for significant location change
+        if let lastLocation = lastRefreshLocation {
+            let distance = newLocation.distance(from: lastLocation)
+            if distance >= significantLocationChangeDistance {
+                lastRefreshLocation = newLocation
+                Task {
+                    await onSignificantLocationChange?()
+                }
+            }
+        } else {
+            lastRefreshLocation = newLocation
+        }
+    }
+    
+    // Existing methods remain unchanged...
     func updateRegion(_ region: MKCoordinateRegion) {
         currentRegion = region
     }
@@ -204,7 +292,6 @@ class LocationDataStore: ObservableObject {
                 Ocean: placemark.ocean
             )
             
-            // Cache with size limit
             if geocodeCache.count > 100 {
                 let keysToRemove = Array(geocodeCache.keys.prefix(20))
                 keysToRemove.forEach { geocodeCache.removeValue(forKey: $0) }
@@ -220,9 +307,11 @@ class LocationDataStore: ObservableObject {
     }
 }
 
+
 // MARK: - Authentication State Manager
 @MainActor
-class AuthStateStore: ObservableObject {
+class AuthStateStore: ObservableObject
+{
     @Published var isAuthenticated = false
     @Published var currentToken = ""
     @Published var isCheckingAuth = true
@@ -281,7 +370,8 @@ class AuthStateStore: ObservableObject {
 
 // MARK: - UI State Manager
 @MainActor
-class UIStateStore: ObservableObject {
+class UIStateStore: ObservableObject
+{
     @Published var showLocationPopup = false
     @Published var showMeetOverlay = false
     @Published var showCreateForm = false
@@ -320,7 +410,8 @@ class UIStateStore: ObservableObject {
 }
 
 // MARK: - Meet Creation Service
-class MeetCreationService {
+class MeetCreationService
+{
     static func buildMeetBody(
         locationInfo: LocationInfo,
         name: String,
@@ -367,9 +458,10 @@ class MeetCreationService {
     }
 }
 
-// MARK: - Main View (Significantly Simplified)
+// MARK: - Updated PublicMapView with Smart Refresh Integration
 @MainActor
-public struct PublicMapView: View {
+public struct PublicMapView: View
+{
     @StateObject private var authState = AuthStateStore()
     @StateObject private var mapData = MapDataStore()
     @StateObject private var locationData = LocationDataStore()
@@ -381,7 +473,6 @@ public struct PublicMapView: View {
     public var body: some View {
         Group {
             if authState.isCheckingAuth {
-                // Loading screen while checking auth
                 VStack {
                     ProgressView()
                         .scaleEffect(1.5)
@@ -392,7 +483,6 @@ public struct PublicMapView: View {
                 .background(Color.black)
                 .foregroundColor(.white)
             } else if authState.isAuthenticated {
-                // Main map view
                 ZStack {
                     MapView(
                         mapData: mapData,
@@ -419,11 +509,21 @@ public struct PublicMapView: View {
                 }
                 .environment(\.colorScheme, uiState.isDaylight ? .light : .dark)
                 .task {
+                    // Set up location-based refresh callback
+                    locationData.onSignificantLocationChange = {
+                        await mapData.loadMeets()
+                    }
+                    
                     await mapData.loadMeets()
                     uiState.startDayNightTimer()
                 }
+                .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+                    // Refresh when app becomes active
+                    Task {
+                        await mapData.loadMeets()
+                    }
+                }
             } else {
-                // Show login screen
                 StartScreenView(onAuthenticated: {
                     authState.checkAuthenticationStatus()
                 })
@@ -455,8 +555,10 @@ public struct PublicMapView: View {
     }
 }
 
+
 // MARK: - Map View Component
-struct MapView: View {
+struct MapView: View
+{
     @ObservedObject var mapData: MapDataStore
     @ObservedObject var locationData: LocationDataStore
     @ObservedObject var uiState: UIStateStore
@@ -474,7 +576,8 @@ struct MapView: View {
                meet.longitude >= lonMin && meet.longitude <= lonMax
     }
     
-    var body: some View {
+    var body: some View
+    {
         GeometryReader { geo in
             MapReader { proxy in
                 Map(position: $locationData.cameraPosition)
@@ -507,7 +610,8 @@ struct MapView: View {
 }
 
 // MARK: - Overlays View Component
-struct OverlaysView: View {
+struct OverlaysView: View
+{
     @ObservedObject var mapData: MapDataStore
     @ObservedObject var locationData: LocationDataStore
     @ObservedObject var uiState: UIStateStore
@@ -660,7 +764,8 @@ struct OverlaysView: View {
 }
 
 // MARK: - Controls View Component
-struct ControlsView: View {
+struct ControlsView: View
+{
     @ObservedObject var mapData: MapDataStore
     @ObservedObject var locationData: LocationDataStore
     @ObservedObject var uiState: UIStateStore
@@ -670,22 +775,12 @@ struct ControlsView: View {
     @State private var isBadgeExpanded = false
     @State private var showBadgeRadiusSelector = false
     
-    var body: some View {
+    var body: some View
+    {
         VStack {
             // Top Controls
-            HStack {
-                // Reload button
-                if !uiState.showMeetOverlay && !uiState.showLocationPopup && !isBadgeExpanded && !showBadgeRadiusSelector {
-                    NeonReloadButton(isLoading: mapData.isLoading) {
-                        Task { await mapData.loadMeets() }
-                    }
-                    .padding(.leading, 16)
-                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
-                    .animation(.spring(response: 0.3, dampingFraction: 0.8), value: uiState.showMeetOverlay)
-                }
-                
-                Spacer()
-                
+            HStack
+            {
                 // Nearby Meets Badge
                 NearbyMeetsBadgeView(
                     meets: mapData.meets,
@@ -738,8 +833,10 @@ struct ControlsView: View {
 }
 
 // MARK: - Loading Overlay
-struct LoadingOverlay: View {
-    var body: some View {
+struct LoadingOverlay: View
+{
+    var body: some View
+    {
         Color.black.opacity(0.3)
             .ignoresSafeArea()
         
@@ -750,6 +847,27 @@ struct LoadingOverlay: View {
             Text("Loading meets...")
                 .foregroundColor(.white)
                 .padding(.top, 8)
+        }
+    }
+}
+
+struct RefreshableScrollView<Content: View>: View
+{
+    let content: Content
+    let onRefresh: () async -> Void
+    
+    init(@ViewBuilder content: () -> Content, onRefresh: @escaping () async -> Void) {
+        self.content = content()
+        self.onRefresh = onRefresh
+    }
+    
+    var body: some View {
+        ScrollView {
+            content
+                .frame(minHeight: UIScreen.main.bounds.height)
+        }
+        .refreshable {
+            await onRefresh()
         }
     }
 }
