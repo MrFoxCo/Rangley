@@ -1,11 +1,3 @@
-//
-//  PublicMapView 2.swift
-//  Rangley
-//
-//  Created by Anthony Guzzardo on 9/18/25.
-//
-//
-//
 ////
 ////  ContentView.swift
 ////  Rangley

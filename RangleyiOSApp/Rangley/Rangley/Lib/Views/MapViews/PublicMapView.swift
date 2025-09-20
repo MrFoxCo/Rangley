@@ -1,5 +1,5 @@
 //
-//  PublicMapView 2.swift
+//  PublicMapView.swift
 //  Rangley
 //
 //  Created by Anthony Guzzardo on 9/18/25.
@@ -184,10 +184,12 @@ class APIService: APIServiceProtocol
 @MainActor
 class LocationDataStore: ObservableObject
 {
-    @Published var userLocation: CLLocation?
-    @Published var cameraPosition: MapCameraPosition
-    @Published var currentRegion: MKCoordinateRegion
-    
+    @Published var userLocation     : CLLocation?
+    @Published var cameraPosition   : MapCameraPosition
+    @Published var currentRegion    : MKCoordinateRegion
+
+
+    private var hasInitiallyPositioned = false
     private let locationManager = LocationManager()
     private var geocodeCache: [String: LocationInfo] = [:]
     private var lastRefreshLocation: CLLocation?
@@ -218,10 +220,24 @@ class LocationDataStore: ObservableObject
     
     private var cancellables = Set<AnyCancellable>()
     
+
+    // Then update your handleLocationUpdate method:
     private func handleLocationUpdate(_ newLocation: CLLocation) {
         userLocation = newLocation
         
-        // Check for significant location change
+        // Center on user location the first time we get it
+        if !hasInitiallyPositioned {
+            hasInitiallyPositioned = true
+            print("📍 Centering camera on user location: \(newLocation.coordinate)")
+            withAnimation(.easeInOut(duration: 1.0)) {
+                cameraPosition = .region(MKCoordinateRegion(
+                    center: newLocation.coordinate,
+                    span: MKCoordinateSpan(latitudeDelta: 0.04, longitudeDelta: 0.04)
+                ))
+            }
+        }
+        
+        // Check for significant location change (existing code)
         if let lastLocation = lastRefreshLocation {
             let distance = newLocation.distance(from: lastLocation)
             if distance >= significantLocationChangeDistance {
@@ -465,10 +481,10 @@ class MeetCreationService
 @MainActor
 public struct PublicMapView: View
 {
-    @StateObject private var authState = AuthStateStore()
-    @StateObject private var mapData = MapDataStore()
-    @StateObject private var locationData = LocationDataStore()
-    @StateObject private var uiState = UIStateStore()
+    @StateObject private var locationData   = LocationDataStore()
+    @StateObject private var authState      = AuthStateStore()
+    @StateObject private var mapData        = MapDataStore()
+    @StateObject private var uiState        = UIStateStore()
     
     @Namespace private var meetNS
     @State private var tapTask: Task<Void, Never>?
@@ -615,6 +631,8 @@ struct MapView: View
         }
     }
 }
+
+
 
 // MARK: - Overlays View Component
 struct OverlaysView: View
@@ -770,13 +788,14 @@ struct OverlaysView: View
     }
 }
 
+
 // MARK: - Controls View Component
 struct ControlsView: View
 {
-    @ObservedObject var mapData: MapDataStore
+    @ObservedObject var mapData     : MapDataStore
     @ObservedObject var locationData: LocationDataStore
-    @ObservedObject var uiState: UIStateStore
-    @ObservedObject var authState: AuthStateStore
+    @ObservedObject var uiState     : UIStateStore
+    @ObservedObject var authState   : AuthStateStore
     
     @State private var selectedRadius: Double = 2.0
     @State private var isBadgeExpanded = false
@@ -839,6 +858,8 @@ struct ControlsView: View
     }
 }
 
+
+
 // MARK: - Loading Overlay
 struct LoadingOverlay: View
 {
@@ -857,6 +878,8 @@ struct LoadingOverlay: View
         }
     }
 }
+
+
 
 private func tapHitsAnnotation(_ proxy: MapProxy, _ pt: CGPoint, meets: [ViewMeetsModel]) -> Bool
 {

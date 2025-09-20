@@ -22,21 +22,23 @@ import Foundation
 
 struct MyMeetsView: View
 {
-    @State private var isPresented = false
-    @State private var meets: [ViewMeetsModel] = []
-    @State private var isLoading = false
-    @State private var errorMessage: String?
+    @State private var meets        : [ViewMeetsModel] = []
+    @State private var errorMessage : String?
+    @State private var isLoading    = false
+    @State private var isPresented  = false
+
     
     // These would come from your app's environment/state management
-    let baseURL: URL
-    let authToken: String
+    let baseURL     : URL
+    let authToken   : String
     
     // Callback for when a meet is selected
     let onMeetSelected: ((ViewMeetsModel) -> Void)?
     
-    init(baseURL: URL, authToken: String, onMeetSelected: ((ViewMeetsModel) -> Void)? = nil) {
-        self.baseURL = baseURL
-        self.authToken = authToken
+    init(baseURL: URL, authToken: String, onMeetSelected: ((ViewMeetsModel) -> Void)? = nil)
+    {
+        self.baseURL        = baseURL
+        self.authToken      = authToken
         self.onMeetSelected = onMeetSelected
     }
     
@@ -109,15 +111,16 @@ struct MyMeetsView: View
 // MARK: - MyMeetsOverlay
 struct MyMeetsOverlay: View
 {
-    let meets: [ViewMeetsModel]
-    let isLoading: Bool
-    let errorMessage: String?
-    let onRetry: () -> Void
-    let onMeetSelected: ((ViewMeetsModel) -> Void)?
+    let meets           : [ViewMeetsModel]
+    let isLoading       : Bool
+    let errorMessage    : String?
+    let onRetry         : () -> Void
+    let onMeetSelected  : ((ViewMeetsModel) -> Void)?
     
     @Environment(\.dismiss) private var dismiss
     
-    var body: some View {
+    var body: some View
+    {
         NavigationView {
             VStack(spacing: 0) {
                 headerView
@@ -248,7 +251,7 @@ private extension MyMeetsOverlay
 
 
 // MARK: - Content View
-struct MyMeetsContentView: View
+struct MyMeetsContentView     : View
 {
     let meets: [ViewMeetsModel]
     let onMeetSelected: ((ViewMeetsModel) -> Void)?
@@ -284,7 +287,7 @@ struct MyMeetsContentView: View
 
 
 // MARK: - Owned Meets Section
-struct OwnedMeetsSection: View
+struct OwnedMeetsSection      : View
 {
     let meets: [ViewMeetsModel]
     let onMeetSelected: ((ViewMeetsModel) -> Void)?
@@ -323,7 +326,7 @@ struct InvitationsMeetsSection: View
 
 
 // MARK: - Generic Meets Section
-struct MeetsSectionView: View
+struct MeetsSectionView       : View
 {
     let title: String
     let icon: String
@@ -401,7 +404,7 @@ struct MeetsSectionView: View
 
 
 // MARK: - Empty Section View
-struct EmptyMeetsSectionView: View
+struct EmptyMeetsSectionView  : View
 {
     let message: String
     let icon: String
