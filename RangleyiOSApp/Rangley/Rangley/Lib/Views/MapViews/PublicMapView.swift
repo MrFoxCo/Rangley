@@ -143,6 +143,7 @@ protocol APIServiceProtocol
     func deleteMeet(_ body: DeletedMeetInsertBody) async throws
 }
 
+
 // MARK: - API Service Implementation
 class APIService: APIServiceProtocol
 {
@@ -179,6 +180,7 @@ class APIService: APIServiceProtocol
         _ = try await AuthAPI.deleteMeet(baseURL: Env.apiBaseURL, token: token, body: body)
     }
 }
+
 
 // MARK: - Enhanced LocationDataStore with Location-Based Refresh
 @MainActor
@@ -278,7 +280,8 @@ class LocationDataStore: ObservableObject
         }
     }
     
-    func reverseGeocode(coordinate: CLLocationCoordinate2D) async -> LocationInfo? {
+    func reverseGeocode(coordinate: CLLocationCoordinate2D) async -> LocationInfo?
+    {
         let cacheKey = "\(coordinate.latitude),\(coordinate.longitude)"
         
         if let cached = geocodeCache[cacheKey] {
@@ -293,22 +296,22 @@ class LocationDataStore: ObservableObject
             guard let placemark = placemarks.first else { return nil }
             
             let locationInfo = LocationInfo(
-                Coordinate: Coordinate(coordinate.latitude, coordinate.longitude),
-                RegionCoordinate: Coordinate(coordinate.latitude, coordinate.longitude),
-                RegionRadius: (placemark.region as? CLCircularRegion)?.radius ?? 500.0,
-                Name: placemark.name,
-                ThoroughFare: placemark.thoroughfare,
-                SubThoroughFare: placemark.subThoroughfare,
-                Locality: placemark.locality,
-                SubLocality: placemark.subLocality,
-                AdministrativeArea: placemark.administrativeArea,
-                SubAdministrativeArea: placemark.subAdministrativeArea,
-                PostalCode: placemark.postalCode,
-                Country: placemark.country,
-                IsoCountryCode: placemark.isoCountryCode,
-                TimeZone: placemark.timeZone?.identifier,
-                InlandWater: placemark.inlandWater,
-                Ocean: placemark.ocean
+                Coordinate              : Coordinate(coordinate.latitude, coordinate.longitude),
+                RegionCoordinate        : Coordinate(coordinate.latitude, coordinate.longitude),
+                RegionRadius            : (placemark.region as? CLCircularRegion)?.radius ?? 500.0,
+                Name                    : placemark.name,
+                ThoroughFare            : placemark.thoroughfare,
+                SubThoroughFare         : placemark.subThoroughfare,
+                Locality                : placemark.locality,
+                SubLocality             : placemark.subLocality,
+                AdministrativeArea      : placemark.administrativeArea,
+                SubAdministrativeArea   : placemark.subAdministrativeArea,
+                PostalCode              : placemark.postalCode,
+                Country                 : placemark.country,
+                IsoCountryCode          : placemark.isoCountryCode,
+                TimeZone                : placemark.timeZone?.identifier,
+                InlandWater             : placemark.inlandWater,
+                Ocean                   : placemark.ocean
             )
             
             if geocodeCache.count > 100 {
@@ -387,6 +390,7 @@ class AuthStateStore: ObservableObject
     }
 }
 
+
 // MARK: - UI State Manager
 @MainActor
 class UIStateStore: ObservableObject
@@ -427,6 +431,7 @@ class UIStateStore: ObservableObject
         showEditSheet = false
     }
 }
+
 
 // MARK: - Meet Creation Service
 class MeetCreationService
@@ -476,6 +481,7 @@ class MeetCreationService
         )
     }
 }
+
 
 // MARK: - Updated PublicMapView with Smart Refresh Integration
 @MainActor
@@ -631,7 +637,6 @@ struct MapView: View
         }
     }
 }
-
 
 
 // MARK: - Overlays View Component
@@ -859,7 +864,6 @@ struct ControlsView: View
 }
 
 
-
 // MARK: - Loading Overlay
 struct LoadingOverlay: View
 {
@@ -880,7 +884,6 @@ struct LoadingOverlay: View
 }
 
 
-
 private func tapHitsAnnotation(_ proxy: MapProxy, _ pt: CGPoint, meets: [ViewMeetsModel]) -> Bool
 {
     // ~50–60pt radius ≈ your 80pt bubble + padding
@@ -895,3 +898,4 @@ private func tapHitsAnnotation(_ proxy: MapProxy, _ pt: CGPoint, meets: [ViewMee
     }
     return false
 }
+

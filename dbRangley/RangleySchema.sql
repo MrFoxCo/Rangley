@@ -7,8 +7,9 @@ DROP TABLE IF EXISTS rangley.td_sub_category;
 DROP TABLE IF EXISTS rangley.td_meet_icon;
 
 DROP TABLE IF EXISTS rangley.td_participant_status;
-DROP TABLE IF EXISTS rangley.tb_meet_participants;
 DROP TABLE IF EXISTS rangley.td_notification_type;
+
+DROP TABLE IF EXISTS rangley.tb_meet_participants;
 DROP TABLE IF EXISTS rangley.tb_user_inboxes;
 DROP TABLE IF EXISTS rangley.tb_notifications;
 
