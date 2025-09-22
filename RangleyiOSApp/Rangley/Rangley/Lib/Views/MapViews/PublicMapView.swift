@@ -491,6 +491,7 @@ public struct PublicMapView: View
     @StateObject private var authState      = AuthStateStore()
     @StateObject private var mapData        = MapDataStore()
     @StateObject private var uiState        = UIStateStore()
+    @StateObject private var inbox = InboxStore(baseURL: Env.apiBaseURL)
     
     @Namespace private var meetNS
     @State private var tapTask: Task<Void, Never>?
@@ -547,6 +548,13 @@ public struct PublicMapView: View
                     Task {
                         await mapData.loadMeets()
                     }
+                }
+                .environmentObject(inbox)
+                .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+                    Task { await inbox.refresh() } // optional: foreground refresh
+                }
+                .task(id: authState.currentToken) {            // 🔑 single trigger
+                    await inbox.setToken(authState.currentToken)
                 }
             } else {
                 StartScreenView(onAuthenticated: {

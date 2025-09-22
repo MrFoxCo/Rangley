@@ -23,12 +23,13 @@ import Foundation
 
 struct MyMeetsView: View
 {
+    @EnvironmentObject var inbox: InboxStore
+    
     @State private var meets        : [ViewMeetsModel] = []
     @State private var notifications: [ViewNotificationsModel] = []
     @State private var errorMessage : String?
     @State private var isLoading    = false
     @State private var isPresented  = false
-    @State private var inviteCount  = 0
     
     // These would come from your app's environment/state management
     let baseURL     : URL
@@ -44,66 +45,37 @@ struct MyMeetsView: View
         self.onMeetSelected = onMeetSelected
     }
     
-    var body: some View
-    {
-        Button(action: {
-            isPresented = true
-            Task {
-                await loadMeets()
-            }
-        }) {
+    var body: some View {
+        Button(action: { isPresented = true; Task { await loadMeets() } }) {
             VStack(spacing: 2) {
                 Text("My Meets")
                     .font(.system(size: 25, weight: .medium))
                     .foregroundStyle(AppPalette.Brand.neonPink)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(AppPalette.Brand.neonPink.opacity(0.14))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(AppPalette.Brand.neonPink.opacity(0.55), lineWidth: 1)
-            )
+            .padding(.horizontal, 8).padding(.vertical, 6)
+            .background(RoundedRectangle(cornerRadius: 16).fill(AppPalette.Brand.neonPink.opacity(0.14)))
+            .overlay(RoundedRectangle(cornerRadius: 16).stroke(AppPalette.Brand.neonPink.opacity(0.55), lineWidth: 1))
             .contentShape(RoundedRectangle(cornerRadius: 16))
             .frame(height: 48)
             .fixedSize(horizontal: true, vertical: false)
-            .lineLimit(1)
-            .foregroundColor(.white)
-            // 👇 clean, anchored badge
             .overlay(alignment: .topTrailing) {
-                if inviteCount > 0 {
-                    CountBadge(count: inviteCount)
-                        .offset(x: 8, y: -8) // tiny nudge so it kisses the corner
+                if inbox.inviteCount > 0 {
+                    CountBadge(count: inbox.inviteCount).offset(x: 8, y: -8)
                 }
             }
         }
         .sheet(isPresented: $isPresented) {
             MyMeetsOverlay(
                 meets: meets,
-                notifications: notifications,  // ADD THIS
+                notifications: inbox.notifications, // ← from store
                 isLoading: isLoading,
                 errorMessage: errorMessage,
-                onRetry: {
-                    Task {
-                        await loadMeets()
-                    }
-                },
-                onMeetSelected: { meet in
-                    isPresented = false
-                    onMeetSelected?(meet)
-                },
-                onInvitationResponse: { notification, responseStatusId in  // ADD THIS
-                    Task {
-                        await respondToInvitation(notification: notification, responseStatusId: responseStatusId)
-                    }
+                onRetry: { Task { await loadMeets(); await inbox.refresh() } },
+                onMeetSelected: { meet in isPresented = false; onMeetSelected?(meet) },
+                onInvitationResponse: { n, status in
+                    Task { try? await inbox.respondToInvitation(n, statusId: status) }
                 }
             )
-        }
-        .onAppear {
-            Task { await refreshInviteCount() }
         }
     }
     
@@ -156,19 +128,6 @@ struct MyMeetsView: View
     }
 
     
-    private func refreshInviteCount() async
-    {
-        do {
-            let allNotifications = try await AuthAPI.viewNotifications(baseURL: baseURL, token: authToken)
-            let pending = allNotifications.filter {
-                $0.notification_type_id == 8 && $0.participant_status_id == 4
-            }.count
-            await MainActor.run { self.inviteCount = pending }
-        } catch {
-            // don’t surface error UI here; badge is optional
-        }
-    }
-    
     // Update your loadMeets function to also load notifications
     private func loadMeets() async
     {
@@ -179,13 +138,12 @@ struct MyMeetsView: View
             async let notificationsTask = AuthAPI.viewNotifications(baseURL: baseURL, token: authToken)
             let allMeets = try await meetsTask
             let allNotifications = try await notificationsTask
-            let pending = allNotifications.filter {
+            _ = allNotifications.filter {
                 $0.notification_type_id == 8 && $0.participant_status_id == 4
             }.count
             await MainActor.run {
                 self.meets = allMeets
                 self.notifications = allNotifications
-                self.inviteCount = pending          // keep badge in sync
                 self.isLoading = false
             }
         } catch {
