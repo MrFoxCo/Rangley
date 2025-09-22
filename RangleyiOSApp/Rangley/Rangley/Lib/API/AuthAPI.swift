@@ -428,7 +428,8 @@ struct AuthAPI
         }
         
         do {
-            return try JSONDecoder().decode([ViewNotificationsModel].self, from: data)
+            let wrapper = try isoDecoder.decode(NotificationsResponse.self, from: data)
+            return wrapper.results
         } catch {
             #if DEBUG
             print("=== Decode Error in viewNotifications ===")
@@ -437,6 +438,12 @@ struct AuthAPI
             #endif
             throw AuthAPIError.decode(error.localizedDescription)
         }
+    }
+
+    // Add this wrapper model:
+    struct NotificationsResponse: Codable, Sendable
+    {
+        let results: [ViewNotificationsModel]
     }
         
     // MARK: - Invitations API

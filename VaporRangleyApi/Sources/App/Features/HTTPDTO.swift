@@ -188,6 +188,7 @@ enum HTTPDTO
             let notification_id                 : Int64
             let notification_type_id            : Int16
             let notification_name               : String
+            let participant_status_id           : Int16
             let meet_id_uuid                    : UUID
             let creator_display_name            : String?
             let payload_json                    : Data?

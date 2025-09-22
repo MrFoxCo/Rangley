@@ -587,12 +587,13 @@ enum Func
         static let funcName: RangleyFunc = .v_user_inbox_notifications_by_cognito_sub
 
         struct In: Sendable { let cognitoSub: String }
-
+        
         struct Results: Content, Sendable
         {
             let notification_id                 : Int64
             let notification_type_id            : Int16
             let notification_name               : String
+            let participant_status_id           : Int16
             let meet_id_uuid                    : UUID
             let creator_display_name            : String?  // Can be NULL from LEFT JOIN
             let payload_json                    : Data?  // Store as raw JSON Data (Sendable)
@@ -611,6 +612,7 @@ enum Func
                  notification_id                : r.decode(column: "notification_id", as: Int64.self)
                 ,notification_type_id           : r.decode(column: "notification_type_id", as: Int16.self)
                 ,notification_name              : r.decode(column: "notification_name", as: String.self)
+                ,participant_status_id          : r.decode(column: "participant_status_id", as: Int16.self)
                 ,meet_id_uuid                   : r.decode(column: "meet_id_uuid", as: UUID.self)
                 ,creator_display_name           : r.decode(column: "creator_display_name", as: String?.self)  // Optional
                 ,payload_json                   : r.decode(column: "payload_json", as: Data?.self)  // Raw JSON Data

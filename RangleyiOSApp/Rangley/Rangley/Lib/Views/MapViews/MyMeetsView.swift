@@ -23,6 +23,7 @@ import Foundation
 struct MyMeetsView: View
 {
     @State private var meets        : [ViewMeetsModel] = []
+    @State private var notifications: [ViewNotificationsModel] = []
     @State private var errorMessage : String?
     @State private var isLoading    = false
     @State private var isPresented  = false
@@ -73,6 +74,7 @@ struct MyMeetsView: View
         .sheet(isPresented: $isPresented) {
             MyMeetsOverlay(
                 meets: meets,
+                notifications: notifications,  // ADD THIS
                 isLoading: isLoading,
                 errorMessage: errorMessage,
                 onRetry: {
@@ -83,19 +85,33 @@ struct MyMeetsView: View
                 onMeetSelected: { meet in
                     isPresented = false
                     onMeetSelected?(meet)
+                },
+                onInvitationResponse: { notification, responseStatusId in  // ADD THIS
+                    Task {
+                        await respondToInvitation(notification: notification, responseStatusId: responseStatusId)
+                    }
                 }
             )
         }
     }
     
-    private func loadMeets() async {
+    // Update your loadMeets function to also load notifications
+    private func loadMeets() async
+    {
         isLoading = true
         errorMessage = nil
         
         do {
-            let allMeets = try await AuthAPI.viewMeets(baseURL: baseURL, token: authToken)
+            // Load both meets and notifications concurrently
+            async let meetsTask = AuthAPI.viewMeets(baseURL: baseURL, token: authToken)
+            async let notificationsTask = AuthAPI.viewNotifications(baseURL: baseURL, token: authToken)
+            
+            let allMeets = try await meetsTask
+            let allNotifications = try await notificationsTask
+            
             await MainActor.run {
                 self.meets = allMeets
+                self.notifications = allNotifications
                 self.isLoading = false
             }
         } catch {
@@ -105,6 +121,32 @@ struct MyMeetsView: View
             }
         }
     }
+    
+    // ADD THIS FUNCTION
+    private func respondToInvitation(notification: ViewNotificationsModel, responseStatusId: Int16) async
+    {
+        do {
+            let body = RespondToInviteBody(
+                meet_id_uuid: notification.meet_id_uuid,
+                response_status_id: responseStatusId
+            )
+            
+            _ = try await AuthAPI.respondToInvitation(
+                baseURL: baseURL,
+                token: authToken,
+                body: body
+            )
+            
+            // Reload data after responding
+            await loadMeets()
+            
+        } catch {
+            await MainActor.run {
+                self.errorMessage = "Failed to respond to invitation: \(error.localizedDescription)"
+            }
+        }
+    }
+    
 }
 
 
@@ -112,10 +154,12 @@ struct MyMeetsView: View
 struct MyMeetsOverlay: View
 {
     let meets           : [ViewMeetsModel]
+    let notifications   : [ViewNotificationsModel]
     let isLoading       : Bool
     let errorMessage    : String?
     let onRetry         : () -> Void
     let onMeetSelected  : ((ViewMeetsModel) -> Void)?
+    let onInvitationResponse: ((ViewNotificationsModel, Int16) -> Void)?
     
     @Environment(\.dismiss) private var dismiss
     
@@ -133,12 +177,14 @@ struct MyMeetsOverlay: View
                         loadingView
                     } else if let errorMessage = errorMessage {
                         errorView(errorMessage)
-                    } else if meets.isEmpty {
+                    } else if meets.isEmpty && notifications.isEmpty {
                         emptyStateView
                     } else {
                         MyMeetsContentView(
                             meets: meets,
-                            onMeetSelected: onMeetSelected
+                            notifications: notifications,
+                            onMeetSelected: onMeetSelected,
+                            onInvitationResponse: onInvitationResponse
                         )
                     }
                 }
@@ -251,19 +297,46 @@ private extension MyMeetsOverlay
 
 
 // MARK: - Content View
+
+
+/// Meet Notification IDS
+///0    NULL_VALUE
+///1    Meet Created
+///2    Meet Updated
+///3    Meet Cancelled
+///4    New Attendee
+///5    Attendee Left
+///6    Meet Reminder
+///7    System Alert
+///8    Meet Invitation Received
+///9    Meet Invitation Accepted
+///10    Meet Invitation Declined
+///11    Meet Invitation Expired
+///12    Meet Full
+///13    Meet Role Changed
+///14    Meet Location Changed
 struct MyMeetsContentView     : View
 {
     let meets: [ViewMeetsModel]
+    let notifications: [ViewNotificationsModel]  // ADD THIS
     let onMeetSelected: ((ViewMeetsModel) -> Void)?
+    let onInvitationResponse: ((ViewNotificationsModel, Int16) -> Void)?  // ADD THIS
+
     
     private var ownedMeets: [ViewMeetsModel] {
         meets.filter { $0.is_owner }
     }
     
-    // TODO: Replace with actual invitation logic from backend
-    private var invitedMeets: [ViewMeetsModel] {
-        // Placeholder - will be populated when invitation system is implemented
-        []
+    private var invitationNotifications: [ViewNotificationsModel] {
+        notifications.filter { notification in
+            notification.notification_type_id == 8 &&
+            notification.participant_status_id == 4 
+        }
+    }
+    
+    // For showing unread count (if needed elsewhere)
+    private var unreadCount: Int {
+        notifications.filter { !$0.is_read }.count
     }
     
     var body: some View {
@@ -274,10 +347,11 @@ struct MyMeetsContentView     : View
                     onMeetSelected: onMeetSelected
                 )
                 
-                InvitationsMeetsSection(
-                    meets: invitedMeets,
-                    onMeetSelected: onMeetSelected
-                )
+                InvitationsSection(  // UPDATE THIS
+                     notifications: invitationNotifications,
+                     meets: meets,
+                     onInvitationResponse: onInvitationResponse
+                 )
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 20)
@@ -305,22 +379,196 @@ struct OwnedMeetsSection      : View
 }
 
 
-// MARK: - Invitations Section
-struct InvitationsMeetsSection: View
+struct InvitationsSection: View
 {
+    let notifications: [ViewNotificationsModel]
     let meets: [ViewMeetsModel]
-    let onMeetSelected: ((ViewMeetsModel) -> Void)?
+    let onInvitationResponse: ((ViewNotificationsModel, Int16) -> Void)?
     
     var body: some View {
-        MeetsSectionView(
-            title: "Invitations",
-            icon: "envelope",
-            meets: meets,
-            emptyMessage: "Your invitations will appear here",
-            emptyIcon: "clock",
-            onMeetSelected: onMeetSelected,
-            isPlaceholder: true
+        VStack(alignment: .leading, spacing: 12) {
+            sectionHeader
+            
+            if notifications.isEmpty {
+                EmptyMeetsSectionView(
+                    message: "No pending invitations",
+                    icon: "envelope",
+                    isPlaceholder: false
+                )
+            } else {
+                invitationsContent
+            }
+        }
+    }
+    
+    private var sectionHeader: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "envelope")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(AppPalette.Brand.neonPink)
+            
+            Text("Invitations")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(Color.primary)
+            
+            Text("(\(notifications.count))")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(Color.secondary)
+            
+            Spacer()
+        }
+        .padding(.horizontal, 4)
+    }
+    
+    private var invitationsContent: some View {
+        ForEach(notifications) { notification in
+            if let meet = meets.first(where: { $0.meet_id_uuid == notification.meet_id_uuid }) {
+                InvitationCard(
+                    notification: notification,
+                    meet: meet,
+                    onResponse: onInvitationResponse
+                )
+            }
+        }
+    }
+}
+
+/// Invitations Section
+///0    NULL_VALUE
+///1    Attending
+///2    Not Attending
+///3    Maybe
+///4    Invited
+///5    Declined
+///6    Accepted
+///7    Owner
+///8    Left
+///9    Removed
+struct InvitationCard: View
+{
+    let notification: ViewNotificationsModel
+    let meet: ViewMeetsModel
+    let onResponse: ((ViewNotificationsModel, Int16) -> Void)?
+    
+    private var dateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            headerRow
+            
+            if !meet.description.isEmpty {
+                descriptionText
+            }
+            
+            metaInfoRow
+            
+            actionButtons
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(.systemBackground))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1.5)
+                )
         )
+    }
+    
+    private var headerRow: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(meet.name)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Color.primary)
+                    .lineLimit(2)
+                
+                HStack(spacing: 8) {
+                    Text(meet.category_name)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(AppPalette.Brand.neonPink)
+                    
+                    if let creatorName = notification.creator_display_name {
+                        Text("• by \(creatorName)")
+                            .font(.system(size: 14))
+                            .foregroundStyle(Color.secondary)
+                    }
+                }
+            }
+            
+            Spacer()
+            
+            Image(systemName: "envelope.badge")
+                .font(.system(size: 20))
+                .foregroundStyle(AppPalette.Brand.neonPink)
+        }
+    }
+    
+    private var descriptionText: some View {
+        Text(meet.description)
+            .font(.system(size: 14))
+            .foregroundStyle(Color.secondary)
+            .lineLimit(3)
+    }
+    
+    private var metaInfoRow: some View {
+        HStack {
+            Label(dateFormatter.string(from: meet.dttm_start_utc), systemImage: "calendar")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Color.secondary)
+            
+            Spacer()
+            
+            Label("\(meet.max_capacity) people", systemImage: "person.3")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Color.secondary)
+        }
+    }
+    ///0    NULL_VALUE
+    ///1    Attending
+    ///2    Not Attending
+    ///3    Maybe
+    ///4    Invited
+    ///5    Declined
+    ///6    Accepted
+    ///7    Owner
+    ///8    Left
+    ///9    Removed
+    private var actionButtons: some View {
+        HStack(spacing: 12) {
+            // Accept button
+            Button("Accept") {
+                onResponse?(notification, 6) // Assuming 1 = accepted
+            }
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.green)
+            )
+            
+            // Decline button
+            Button("Decline") {
+                onResponse?(notification, 5) // Assuming 2 = declined
+            }
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(Color.primary)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color(.systemGray5))
+            )
+            
+            Spacer()
+        }
     }
 }
 

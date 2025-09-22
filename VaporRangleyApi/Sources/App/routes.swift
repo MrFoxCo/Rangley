@@ -170,6 +170,7 @@ public func routes(_ app: Application) throws
                 notification_id: $0.notification_id,
                 notification_type_id: $0.notification_type_id,
                 notification_name: $0.notification_name,
+                participant_status_id: $0.participant_status_id,
                 meet_id_uuid: $0.meet_id_uuid,
                 creator_display_name: $0.creator_display_name,
                 payload_json: $0.payload_json,
