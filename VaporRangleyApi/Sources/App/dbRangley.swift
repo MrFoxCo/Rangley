@@ -37,6 +37,7 @@ enum RangleyFunc: String
     case v_meet_categories                         = "rangley.rangley_fn_v_meet_categories"
     case v_users_by_cognito_sub                    = "rangley.rangley_fn_v_users_by_cognito_sub"
     case v_user_inbox_notifications_by_cognito_sub = "rangley.rangley_fn_v_user_inbox_notifications_by_cognito_sub"
+    case m_respond_to_meet_invitation              = "rangley.rangley_fn_m_respond_to_meet_invitation"
 }
 
 // MARK: - Generic call shapes
@@ -212,6 +213,9 @@ enum Proc
         }
     }
 
+
+
+    
     enum SystemInsertUpdatedMeet: PgCallableRow
     {
         static let procName: RangleyProcName = .s_insert_updated_meet  // ensure this resolves to schema-qualified "rangley.rangley_s_insert_meet" or your search_path includes 'rangley'
@@ -580,86 +584,87 @@ enum Func
     
     enum ViewUserInboxNotifications: PgFunctionRows
     {
-        /*
-         -- ================================================================
-         CREATE OR REPLACE FUNCTION rangley.rangley_fn_v_user_inbox_notifications_by_cog_sub
-         (
-              p_cognito_sub text
-         )
-         RETURNS TABLE
-         (
-              notification_id BIGINT
-             ,notification_type_id INT2
-             ,notification_name VARCHAR(50)
-             ,meet_id BIGINT
-             ,created_by_user_id BIGINT
-             ,creator_display_name VARCHAR(50)
-             ,payload_json JSONB
-             ,dttm_notification_created_utc TIMESTAMPTZ
-             ,dttm_received_utc TIMESTAMPTZ
-             ,dttm_opened_utc TIMESTAMPTZ
-             ,is_read BOOLEAN
-        
-        
-        */
         static let funcName: RangleyFunc = .v_user_inbox_notifications_by_cognito_sub
 
         struct In: Sendable { let cognitoSub: String }
 
         struct Results: Content, Sendable
         {
-            let meet_id_uuid         : String
-            let meet_status_id       : Int16
-            let latitude             : Double
-            let longitude            : Double
-            let region_latitude      : Double
-            let region_longitude     : Double
-            let region_radius        : Double
-            let dttm_start_utc       : Date
-            let dttm_end_utc         : Date
-            let name                 : String
-            let category_name        : String
-            let meet_category_id     : Int16
-            let description          : String
-            let max_capacity         : Int32
-            let created_by_user_uuid : String
-            let display_name         : String
-            let is_owner             : Bool
-            // add change_stamp if you want it
-            // let change_stamp       : Int64
+            let notification_id                 : Int64
+            let notification_type_id            : Int16
+            let notification_name               : String
+            let meet_id_uuid                    : UUID
+            let creator_display_name            : String?  // Can be NULL from LEFT JOIN
+            let payload_json                    : Data?  // Store as raw JSON Data (Sendable)
+            let dttm_notification_created_utc   : Date
+            let dttm_received_utc               : Date
+            let dttm_opened_utc                 : Date?  // Can be NULL (unread notifications)
+            let is_read                         : Bool
         }
 
         static func query(_ input: In) -> SQLQueryString {
-            // if funcName.rawValue already includes schema, this is fine
             "SELECT * FROM \(unsafeRaw: funcName.rawValue)(\(bind: input.cognitoSub)::text);"
         }
 
         static func decode(_ r: any SQLRow) throws -> Results {
             try .init(
-                 meet_id_uuid         : r.decode(column: "meet_id_uuid",         as: String.self)
-                ,meet_status_id       : r.decode(column: "meet_status_id",       as: Int16.self)
-                ,latitude             : r.decode(column: "latitude",             as: Double.self)
-                ,longitude            : r.decode(column: "longitude",            as: Double.self)
-                ,region_latitude      : r.decode(column: "region_latitude",      as: Double.self)
-                ,region_longitude     : r.decode(column: "region_longitude",     as: Double.self)
-                ,region_radius        : r.decode(column: "region_radius",        as: Double.self)
-                ,dttm_start_utc       : r.decode(column: "dttm_start_utc",       as: Date.self)
-                ,dttm_end_utc         : r.decode(column: "dttm_end_utc",         as: Date.self)
-                ,name                 : r.decode(column: "name",                 as: String.self)
-                ,category_name        : r.decode(column: "category_name",        as: String.self)
-                ,meet_category_id     : r.decode(column: "meet_category_id",     as: Int16.self)
-                ,description          : r.decode(column: "description",          as: String.self)
-                ,max_capacity         : r.decode(column: "max_capacity",         as: Int32.self)
-                ,created_by_user_uuid : r.decode(column: "created_by_user_uuid", as: String.self)
-                ,display_name         : r.decode(column: "display_name",         as: String.self)
-                ,is_owner             : r.decode(column: "is_owner",             as: Bool.self)
-                // ,change_stamp       : r.decode(column: "change_stamp",         as: Int64.self)
+                 notification_id                : r.decode(column: "notification_id", as: Int64.self)
+                ,notification_type_id           : r.decode(column: "notification_type_id", as: Int16.self)
+                ,notification_name              : r.decode(column: "notification_name", as: String.self)
+                ,meet_id_uuid                   : r.decode(column: "meet_id_uuid", as: UUID.self)
+                ,creator_display_name           : r.decode(column: "creator_display_name", as: String?.self)  // Optional
+                ,payload_json                   : r.decode(column: "payload_json", as: Data?.self)  // Raw JSON Data
+                ,dttm_notification_created_utc  : r.decode(column: "dttm_notification_created_utc", as: Date.self)
+                ,dttm_received_utc              : r.decode(column: "dttm_received_utc", as: Date.self)
+                ,dttm_opened_utc                : r.decode(column: "dttm_opened_utc", as: Date?.self)  // Optional
+                ,is_read                        : r.decode(column: "is_read", as: Bool.self)
             )
         }
+
 
         static func fetchAll(on db: any SQLDatabase, sub: String) async throws -> [Results] {
             try await fetchAll(on: db, .init(cognitoSub: sub))
         }
+    }
+    
+    
+    enum SystemRespondToMeetInvitation: PgFunctionRow
+    {
+        static let funcName: RangleyFunc = .m_respond_to_meet_invitation
+
+        struct In: Sendable
+        {
+            let cognito_sub       : String
+            let meet_id_uuid      : UUID
+            let response_status_id: Int16
+        }
+
+        struct Results: Content, Sendable
+        {
+            let success             : Bool
+            let message             : String
+            let participant_id_out  : Int64?
+            let old_status_id       : Int16?
+            let new_status_id       : Int16?
+        }
+
+        static func query(_ input: In) -> SQLQueryString
+        {
+            "SELECT * FROM \(unsafeRaw: funcName.rawValue)(\(bind: input.cognito_sub)::text, \(bind: input.meet_id_uuid)::uuid, \(bind: input.response_status_id)::int2);"
+        }
+
+        static func decode(_ r: any SQLRow) throws -> Results
+        {
+            try .init(
+                success           : r.decode(column: "success"           , as: Bool.self),
+                message           : r.decode(column: "message"           , as: String.self),
+                participant_id_out: r.decode(column: "participant_id_out", as: Int64?.self),
+                old_status_id     : r.decode(column: "old_status_id"     , as: Int16?.self),
+                new_status_id     : r.decode(column: "new_status_id"     , as: Int16?.self)
+            )
+        }
+
+
     }
 
 

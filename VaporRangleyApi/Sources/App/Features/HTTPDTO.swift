@@ -95,6 +95,7 @@ enum HTTPDTO
         }
     }
     
+    
     enum MeetsWithInvites
     {
         struct InsertBody: Content, Sendable
@@ -160,7 +161,48 @@ enum HTTPDTO
         {
             let num_inserted: Int32
         }
+        
+        struct RespondToInviteBody: Content, Sendable
+        {
+            let meet_id_uuid        : UUID
+            let response_status_id  : Int16  // 3=Maybe, 5=Declined, 6=Accepted
+        }
+        
+        struct RespondToInviteResponse: Content, Sendable
+        {
+            let success      : Bool
+            let message      : String
+            let old_status_id: Int16?
+            let new_status_id: Int16?
+            // Intentionally omitting participant_id_out since client doesn't need it
+        }
+        // TODO: - ADD SHIT HERE FOR RESPOND TO MEET INVITES
     }
+    
+    enum Notifications
+    {
+        // No SearchBody needed - just getting user's inbox
+        
+        struct SearchItem: Content, Sendable  // Keep this name for consistency
+        {
+            let notification_id                 : Int64
+            let notification_type_id            : Int16
+            let notification_name               : String
+            let meet_id_uuid                    : UUID
+            let creator_display_name            : String?
+            let payload_json                    : Data?
+            let dttm_notification_created_utc   : Date
+            let dttm_received_utc               : Date
+            let dttm_opened_utc                 : Date?
+            let is_read                         : Bool
+        }
+
+        struct SearchResponse: Content, Sendable  // Keep this name for consistency
+        {
+            let results: [SearchItem]
+        }
+    }
+    
     
     enum Users
     {

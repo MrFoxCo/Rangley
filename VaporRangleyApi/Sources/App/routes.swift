@@ -147,6 +147,40 @@ public func routes(_ app: Application) throws
             )
         })
     }
+    
+    v.get("notifications")
+    {
+        req async throws -> HTTPDTO.Notifications.SearchResponse in
+        // Auth
+        let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
+
+        // DB
+        guard let sql = req.db as? any SQLDatabase
+        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+
+        // Call the function
+        let rows: [Func.ViewUserInboxNotifications.Results] = try await sql
+            .raw(Func.ViewUserInboxNotifications.query(.init(cognitoSub: sub)))
+            .all(decoding: Func.ViewUserInboxNotifications.Results.self)
+
+        // Map to HTTP payload
+        return .init(results: rows.map {
+            HTTPDTO.Notifications.SearchItem(
+                notification_id: $0.notification_id,
+                notification_type_id: $0.notification_type_id,
+                notification_name: $0.notification_name,
+                meet_id_uuid: $0.meet_id_uuid,
+                creator_display_name: $0.creator_display_name,
+                payload_json: $0.payload_json,
+                dttm_notification_created_utc: $0.dttm_notification_created_utc,
+                dttm_received_utc: $0.dttm_received_utc,
+                dttm_opened_utc: $0.dttm_opened_utc,
+                is_read: $0.is_read
+            )
+        })
+    }
+    
 
     // GET /v/meet-categories -> all categories
     v.get("meet-categories")
@@ -341,6 +375,40 @@ public func routes(_ app: Application) throws
                 req.logger.error("Database error creating meet: \(error)")
                 throw Abort(.internalServerError, reason: "Failed to create meet")
             }
+        }
+    }
+    
+    s.post("meets", "invitations", "respond")
+    {
+        req async throws -> HTTPDTO.MeetsWithInvites.RespondToInviteResponse in
+        
+        // Auth validation
+        let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
+        
+        let body = try req.content.decode(HTTPDTO.MeetsWithInvites.RespondToInviteBody.self)
+        
+        // Database check
+        guard let sql = req.db as? any SQLDatabase
+        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+        
+        do {
+            let result = try await Func.SystemRespondToMeetInvitation.call(on: sql, .init(
+                cognito_sub: sub,
+                meet_id_uuid: body.meet_id_uuid,
+                response_status_id: body.response_status_id
+            ))
+            
+            return .init(
+                success: result.success,
+                message: result.message,
+                old_status_id: result.old_status_id,
+                new_status_id: result.new_status_id
+            )
+            
+        } catch let error as PSQLError {
+            req.logger.error("Database error responding to invitation: \(error)")
+            throw Abort(.internalServerError, reason: "Failed to respond to invitation")
         }
     }
     
