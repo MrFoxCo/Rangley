@@ -108,9 +108,33 @@ struct AuthAPI
     private static var isoDecoder: JSONDecoder
     {
         let d = JSONDecoder()
-        d.dateDecodingStrategy = .iso8601
+        d.dateDecodingStrategy = .custom { dec in
+            let c = try dec.singleValueContainer()
+
+            // 1) Try string → ISO8601 (± fractional seconds) → or numeric seconds in a string
+            if let s = try? c.decode(String.self) {
+                let f1 = ISO8601DateFormatter()
+                f1.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                if let dt = f1.date(from: s) { return dt }
+
+                let f2 = ISO8601DateFormatter()
+                f2.formatOptions = [.withInternetDateTime]
+                if let dt = f2.date(from: s) { return dt }
+
+                if let secs = Double(s) { return Date(timeIntervalSince1970: secs) }
+                throw DecodingError.dataCorrupted(.init(codingPath: dec.codingPath, debugDescription: "Unparseable date string: \(s)"))
+            }
+
+            // 2) Try numeric epoch seconds
+            if let secs = try? c.decode(Double.self) {
+                return Date(timeIntervalSince1970: secs)
+            }
+
+            throw DecodingError.dataCorrupted(.init(codingPath: dec.codingPath, debugDescription: "Date was neither string nor number"))
+        }
         return d
     }
+
     
     // POST /i/auth-register  (protected; Bearer ID token)
     static func register(baseURL: URL, token: String, payload: UserRegisterModel) async throws -> UserRegisterResult
@@ -439,13 +463,7 @@ struct AuthAPI
             throw AuthAPIError.decode(error.localizedDescription)
         }
     }
-
-    // Add this wrapper model:
-    struct NotificationsResponse: Codable, Sendable
-    {
-        let results: [ViewNotificationsModel]
-    }
-        
+ 
     // MARK: - Invitations API
     
     static func respondToInvitation(baseURL: URL, token: String, body: RespondToInviteBody) async throws -> RespondToInviteResponse

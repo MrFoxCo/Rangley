@@ -330,7 +330,7 @@ struct MyMeetsContentView     : View
     private var invitationNotifications: [ViewNotificationsModel] {
         notifications.filter { notification in
             notification.notification_type_id == 8 &&
-            notification.participant_status_id == 4 
+            notification.participant_status_id == 4
         }
     }
     
@@ -420,157 +420,263 @@ struct InvitationsSection: View
         .padding(.horizontal, 4)
     }
     
-    private var invitationsContent: some View {
+    private var invitationsContent: some View
+    {
         ForEach(notifications) { notification in
-            if let meet = meets.first(where: { $0.meet_id_uuid == notification.meet_id_uuid }) {
-                InvitationCard(
-                    notification: notification,
-                    meet: meet,
-                    onResponse: onInvitationResponse
-                )
-            }
+            InvitationCard(
+                notification: notification,
+                onResponse: onInvitationResponse
+            )
         }
     }
 }
 
-/// Invitations Section
-///0    NULL_VALUE
-///1    Attending
-///2    Not Attending
-///3    Maybe
-///4    Invited
-///5    Declined
-///6    Accepted
-///7    Owner
-///8    Left
-///9    Removed
+
+private func prettyPayload(_ raw: String?) -> String {
+    guard var s = raw, !s.isEmpty else { return "(payload_json is nil/empty)" }
+
+    // unwrap one layer of quotes if server double-quoted
+    if s.first == "\"", s.last == "\"" {
+        s.removeFirst(); s.removeLast()
+    }
+
+    // try base64 → utf8 string
+    if let b64 = Data(base64Encoded: s), let str = String(data: b64, encoding: .utf8) {
+        s = str
+    }
+
+    // pretty JSON if possible
+    if let data = s.data(using: .utf8),
+       let obj = try? JSONSerialization.jsonObject(with: data),
+       let pretty = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted]),
+       let out = String(data: pretty, encoding: .utf8) {
+        return out
+    }
+    return s // fallback: show whatever we have
+}
+
 struct InvitationCard: View
 {
     let notification: ViewNotificationsModel
-    let meet: ViewMeetsModel
     let onResponse: ((ViewNotificationsModel, Int16) -> Void)?
-    
-    private var dateFormatter: DateFormatter {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter
+
+    private var meetInfo: InvitationPayload? {
+        notification.decodePayload(as: InvitationPayload.self)
     }
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            headerRow
+
+    @State private var showRaw = true // default ON so you can see it immediately
+
+    init(notification: ViewNotificationsModel, onResponse: ((ViewNotificationsModel, Int16) -> Void)?) {
+        self.notification = notification
+        self.onResponse = onResponse
+        
+        // Log the payload to terminal immediately on init
+        print("=== INVITATION CARD DEBUG ===")
+        print("Notification ID: \(notification.notification_id)")
+        print("Notification Name: \(notification.notification_name)")
+        print("Meet ID UUID: \(notification.meet_id_uuid)")
+        print("Participant Status ID: \(notification.participant_status_id)")
+        print("Is Read: \(notification.is_read)")
+        
+        if let payload = notification.payload_json {
+            print("Raw payload_json: \(payload)")
             
-            if !meet.description.isEmpty {
-                descriptionText
+            // Try to pretty print it
+            var s = payload
+            if s.first == "\"" && s.last == "\"" {
+                s.removeFirst()
+                s.removeLast()
+                print("After removing quotes: \(s)")
             }
             
-            metaInfoRow
+            if let data = Data(base64Encoded: s),
+               let decoded = String(data: data, encoding: .utf8) {
+                print("Base64 decoded: \(decoded)")
+                
+                if let jsonData = decoded.data(using: .utf8),
+                   let json = try? JSONSerialization.jsonObject(with: jsonData),
+                   let prettyData = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted]),
+                   let prettyString = String(data: prettyData, encoding: .utf8) {
+                    print("Pretty printed JSON:\n\(prettyString)")
+                }
+            } else if let jsonData = s.data(using: .utf8),
+                      let json = try? JSONSerialization.jsonObject(with: jsonData),
+                      let prettyData = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted]),
+                      let prettyString = String(data: prettyData, encoding: .utf8) {
+                print("Pretty printed JSON:\n\(prettyString)")
+            }
+        } else {
+            print("WARNING: payload_json is NIL!")
+        }
+        print("============================")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Always show the notification name first
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(notification.notification_name)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Color.primary)
+                    
+                    Text("Notification ID: \(notification.notification_id)")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.secondary)
+                }
+                
+                Spacer()
+                
+                Image(systemName: "envelope.badge")
+                    .foregroundStyle(AppPalette.Brand.neonPink)
+            }
             
-            actionButtons
+            // Show decoded info if available
+            if let info = meetInfo {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Meet: \(info.meet_name)")
+                        .font(.system(size: 14, weight: .medium))
+                    
+                    if let msg = info.invitation_message, !msg.isEmpty {
+                        Text("Message: \(msg)")
+                            .font(.system(size: 14))
+                            .foregroundStyle(.secondary)
+                    }
+                    
+                    Label(info.meet_start.formatted(date: .abbreviated, time: .shortened),
+                          systemImage: "calendar")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 4)
+            }
+            
+            // Debug section - always visible
+            VStack(alignment: .leading, spacing: 8) {
+                Toggle("Show raw JSON", isOn: $showRaw)
+                    .font(.system(size: 13, weight: .medium))
+                
+                if showRaw {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Raw payload_json:")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Color.secondary)
+                        
+                        // Show the raw string first
+                        if let rawPayload = notification.payload_json {
+                            ScrollView(.vertical) {
+                                Text(rawPayload)
+                                    .font(.system(size: 11, design: .monospaced))
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .foregroundStyle(Color.primary)
+                            }
+                            .frame(height: 120)
+                            .padding(8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(Color(.secondarySystemBackground))
+                            )
+                            
+                            // Try to pretty print it
+                            if let prettyVersion = tryPrettyPrint(rawPayload), prettyVersion != rawPayload {
+                                Text("Pretty printed:")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(Color.secondary)
+                                    .padding(.top, 8)
+                                
+                                ScrollView(.vertical) {
+                                    Text(prettyVersion)
+                                        .font(.system(size: 11, design: .monospaced))
+                                        .textSelection(.enabled)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .foregroundStyle(Color.primary)
+                                }
+                                .frame(height: 120)
+                                .padding(8)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .fill(Color(.secondarySystemBackground))
+                                )
+                            }
+                        } else {
+                            Text("payload_json is nil")
+                                .font(.system(size: 12))
+                                .foregroundStyle(Color.red)
+                                .padding(8)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .fill(Color(.secondarySystemBackground))
+                                )
+                        }
+                    }
+                }
+            }
+            
+            // Action buttons
+            HStack(spacing: 12) {
+                Button(action: {
+                    print("Accept pressed for notification: \(notification.notification_id)")
+                    onResponse?(notification, 6)
+                }) {
+                    Text("Accept")
+                        .font(.system(size: 14, weight: .semibold))
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(AppPalette.Brand.neonPink)
+                
+                Button(action: {
+                    print("Decline pressed for notification: \(notification.notification_id)")
+                    onResponse?(notification, 5)
+                }) {
+                    Text("Decline")
+                        .font(.system(size: 14, weight: .semibold))
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .tint(Color.secondary)
+            }
         }
         .padding(16)
         .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: 12)
                 .fill(Color(.systemBackground))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    RoundedRectangle(cornerRadius: 12)
                         .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1.5)
                 )
         )
     }
     
-    private var headerRow: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(meet.name)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Color.primary)
-                    .lineLimit(2)
-                
-                HStack(spacing: 8) {
-                    Text(meet.category_name)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(AppPalette.Brand.neonPink)
-                    
-                    if let creatorName = notification.creator_display_name {
-                        Text("• by \(creatorName)")
-                            .font(.system(size: 14))
-                            .foregroundStyle(Color.secondary)
-                    }
-                }
-            }
-            
-            Spacer()
-            
-            Image(systemName: "envelope.badge")
-                .font(.system(size: 20))
-                .foregroundStyle(AppPalette.Brand.neonPink)
+    private func tryPrettyPrint(_ raw: String) -> String? {
+        var s = raw
+        
+        // Remove outer quotes if present
+        if s.first == "\"" && s.last == "\"" {
+            s.removeFirst()
+            s.removeLast()
         }
-    }
-    
-    private var descriptionText: some View {
-        Text(meet.description)
-            .font(.system(size: 14))
-            .foregroundStyle(Color.secondary)
-            .lineLimit(3)
-    }
-    
-    private var metaInfoRow: some View {
-        HStack {
-            Label(dateFormatter.string(from: meet.dttm_start_utc), systemImage: "calendar")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Color.secondary)
-            
-            Spacer()
-            
-            Label("\(meet.max_capacity) people", systemImage: "person.3")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Color.secondary)
+        
+        // Try to decode as base64
+        if let data = Data(base64Encoded: s),
+           let decoded = String(data: data, encoding: .utf8) {
+            s = decoded
         }
-    }
-    ///0    NULL_VALUE
-    ///1    Attending
-    ///2    Not Attending
-    ///3    Maybe
-    ///4    Invited
-    ///5    Declined
-    ///6    Accepted
-    ///7    Owner
-    ///8    Left
-    ///9    Removed
-    private var actionButtons: some View {
-        HStack(spacing: 12) {
-            // Accept button
-            Button("Accept") {
-                onResponse?(notification, 6) // Assuming 1 = accepted
-            }
-            .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.green)
-            )
-            
-            // Decline button
-            Button("Decline") {
-                onResponse?(notification, 5) // Assuming 2 = declined
-            }
-            .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(Color.primary)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color(.systemGray5))
-            )
-            
-            Spacer()
+        
+        // Try to pretty print as JSON
+        if let data = s.data(using: .utf8),
+           let json = try? JSONSerialization.jsonObject(with: data),
+           let prettyData = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys]),
+           let prettyString = String(data: prettyData, encoding: .utf8) {
+            return prettyString
         }
+        
+        return nil
     }
 }
+
 
 
 // MARK: - Generic Meets Section

@@ -306,7 +306,7 @@ CREATE TABLE IF NOT EXISTS rangley.tb_user_privacy_settings
     ,dttm_modified_utc 			TIMESTAMPTZ
 );
 
--- CONSIDER THE JSON BLOB THING FOR NOTIFICATIONS COULD BE USEFUL???
+
 CREATE TABLE rangley.tb_user_inboxes
 (
 	 user_id   			  INT8          NOT NULL

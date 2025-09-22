@@ -89,3 +89,18 @@ BEGIN
     RETURN;
 END;
 $$;
+
+/*
+    {
+    "meet_id": 123,
+    "meet_end": "2025-09-27T15:48:04+00:00", 
+    "meet_name": "wabbit hunting",
+    "meet_start": "2025-09-22T14:48:04+00:00",
+    "meet_id_uuid": "f0b9d1d2-f47f-4277-b7de-cc0f311583cb", 
+    "category_name": "Activity", 
+    "meet_location": {"latitude": 41.984702430934014, "longitude": -87.68324789956196}, 
+    "action_required": "respond_to_invitation", "meet_category_id": 1, "invitation_message": "",
+    "invited_by_user_id": 6
+    }
+
+*/
