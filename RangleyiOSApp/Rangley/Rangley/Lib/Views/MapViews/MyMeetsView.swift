@@ -353,9 +353,8 @@ struct MyMeetsContentView: View
     let onMeetSelected: ((ViewMeetsModel) -> Void)?
     let onInvitationResponse: ((ViewNotificationsModel, Int16) -> Void)?
 
-    private var ownedMeets: [ViewMeetsModel] {
-        meets.filter { $0.is_owner }
-    }
+    private var ownedMeets: [ViewMeetsModel]   { meets.filter {  $0.is_owner } }
+    private var joinedMeets: [ViewMeetsModel]  { meets.filter { !$0.is_owner } }
 
     private var invitationNotifications: [ViewNotificationsModel] {
         notifications.filter {
@@ -379,6 +378,10 @@ struct MyMeetsContentView: View
                 // My Meets always shows (possibly empty state)
                 OwnedMeetsSection(
                     meets: ownedMeets,
+                    onMeetSelected: onMeetSelected
+                )
+                JoinedMeetsSection(
+                    meets: joinedMeets,
                     onMeetSelected: onMeetSelected
                 )
             }
@@ -408,6 +411,21 @@ struct OwnedMeetsSection      : View
     }
 }
 
+struct JoinedMeetsSection: View {
+    let meets: [ViewMeetsModel]
+    let onMeetSelected: ((ViewMeetsModel) -> Void)?
+
+    var body: some View {
+        MeetsSectionView(
+            title: "Joined Meets",
+            icon: "person.2.fill",
+            meets: meets,
+            emptyMessage: "You haven’t joined any meets yet",
+            emptyIcon: "person.2.slash",
+            onMeetSelected: onMeetSelected
+        )
+    }
+}
 
 struct InvitationsSection: View
 {
@@ -906,6 +924,12 @@ struct MeetCard: View
                 Text(meet.category_name)
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(AppPalette.Brand.neonPink)
+                if !meet.is_owner {
+                    Text("Hosted by \(meet.display_name)")
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
             
             Spacer()

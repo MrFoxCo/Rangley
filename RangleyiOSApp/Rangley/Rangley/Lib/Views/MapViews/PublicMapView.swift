@@ -487,8 +487,12 @@ class MeetCreationService
 @MainActor
 public struct PublicMapView: View
 {
+    @EnvironmentObject private var authState: AuthStateStore
+    @Environment(\.scenePhase) private var scenePhase
+    
     @StateObject private var locationData   = LocationDataStore()
-    @StateObject private var authState      = AuthStateStore()
+
+
     @StateObject private var mapData        = MapDataStore()
     @StateObject private var uiState        = UIStateStore()
     @StateObject private var inbox = InboxStore(baseURL: Env.apiBaseURL)
@@ -496,81 +500,90 @@ public struct PublicMapView: View
     @Namespace private var meetNS
     @State private var tapTask: Task<Void, Never>?
     
+
+
     public var body: some View {
-        Group {
-            if authState.isCheckingAuth {
-                VStack {
-                    ProgressView()
-                        .scaleEffect(1.5)
-                    Text("Checking authentication...")
-                        .padding(.top, 8)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.black)
-                .foregroundColor(.white)
-            } else if authState.isAuthenticated {
-                ZStack {
-                    MapView(
-                        mapData: mapData,
-                        locationData: locationData,
-                        uiState: uiState,
-                        meetNS: meetNS,
-                        onMapTap: handleMapTap
-                    )
-                    
-                    OverlaysView(
-                        mapData: mapData,
-                        locationData: locationData,
-                        uiState: uiState,
-                        meetNS: meetNS,
-                        authToken: authState.currentToken
-                    )
-                    
-                    ControlsView(
-                        mapData: mapData,
-                        locationData: locationData,
-                        uiState: uiState,
-                        authState: authState
-                    )
-                }
-                .environment(\.colorScheme, uiState.isDaylight ? .light : .dark)
-                .task {
-                    // Set up location-based refresh callback
-                    locationData.onSignificantLocationChange = {
-                        await mapData.loadMeets()
-                    }
-                    
+        content
+            .environmentObject(inbox)
+
+            .onChange(of: scenePhase) { oldPhase, phase in
+                guard phase == .active else { return }
+                Task {
                     await mapData.loadMeets()
-                    uiState.startDayNightTimer()
+                    await inbox.refresh()
                 }
-                .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
-                    // Refresh when app becomes active
-                    Task {
-                        await mapData.loadMeets()
-                    }
-                }
-                .environmentObject(inbox)
-                .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
-                    Task { await inbox.refresh() } // optional: foreground refresh
-                }
-                .task(id: authState.currentToken) {            // 🔑 single trigger
-                    await inbox.setToken(authState.currentToken)
-                }
-            } else {
-                StartScreenView(onAuthenticated: {
-                    authState.checkAuthenticationStatus()
-                })
-                .preferredColorScheme(.dark)
             }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .init("amplify.auth.signedIn"))) { _ in
-            authState.checkAuthenticationStatus()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .init("amplify.auth.signedOut"))) { _ in
-            authState.checkAuthenticationStatus()
+
+            .onChange(of: authState.isAuthenticated) { _, signedIn in
+                if !signedIn {
+                    Task { await inbox.setToken(nil) }
+                }
+            }
+
+            .onReceive(NotificationCenter.default.publisher(for: .init("amplify.auth.signedIn"))) { _ in
+                authState.checkAuthenticationStatus()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .init("amplify.auth.signedOut"))) { _ in
+                authState.checkAuthenticationStatus()
+            }
+    }
+
+    
+    @ViewBuilder
+    private var content: some View {
+        if authState.isCheckingAuth {
+            VStack {
+                ProgressView().scaleEffect(1.5)
+                Text("Checking authentication...").padding(.top, 8)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.black)
+            .foregroundColor(.white)
+
+        } else if authState.isAuthenticated {
+            ZStack {
+                MapView(
+                    mapData: mapData,
+                    locationData: locationData,
+                    uiState: uiState,
+                    meetNS: meetNS,
+                    onMapTap: handleMapTap
+                )
+
+                OverlaysView(
+                    mapData: mapData,
+                    locationData: locationData,
+                    uiState: uiState,
+                    meetNS: meetNS,
+                    authToken: authState.currentToken
+                )
+
+                ControlsView(
+                    mapData: mapData,
+                    locationData: locationData,
+                    uiState: uiState,
+                    authState: authState
+                )
+            }
+            .environment(\.colorScheme, uiState.isDaylight ? .light : .dark)
+            .task {
+                // Set up location-based refresh callback
+                locationData.onSignificantLocationChange = {
+                    await mapData.loadMeets()
+                }
+                await mapData.loadMeets()
+                uiState.startDayNightTimer()
+            }
+            .task(id: authState.currentToken) { 
+                await inbox.setToken(authState.currentToken.isEmpty ? nil : authState.currentToken)
+            }
+
+        } else {
+            // No more onAuthenticated closure
+            StartScreenView()
+                .preferredColorScheme(.dark)
         }
     }
-    
     private func handleMapTap(_ proxy: MapProxy, _ value: SpatialTapGesture.Value)
     {
         guard !uiState.showLocationPopup && !uiState.showMeetOverlay else { return }

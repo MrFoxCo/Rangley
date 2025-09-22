@@ -41,7 +41,7 @@ extension Color {
 
 struct StartScreenView: View
 {
-    let onAuthenticated: () -> Void
+    @EnvironmentObject private var auth: AuthStateStore
     @State private var isBusy = false
 
     var body: some View
@@ -88,6 +88,3 @@ struct StartScreenView: View
         .toolbarBackground(.visible, for: .navigationBar)
     }
 }
-
-
-#Preview { StartScreenView(onAuthenticated: {}) }

@@ -16,7 +16,6 @@ public struct GeocodeDisplay: Equatable {
 public final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     private let manager = CLLocationManager()
 
-    // ❌ @State not allowed here; use a plain Task reference
     private var geocodingTask: Task<GeocodeDisplay, Never>?
 
     @Published public private(set) var userLocation: CLLocation?
@@ -35,7 +34,7 @@ public final class LocationManager: NSObject, ObservableObject, CLLocationManage
 
     public func requestWhenInUse() {
         guard CLLocationManager.locationServicesEnabled() else {
-            print("⚠️ Location Services OFF at system level.")
+            print("Location Services OFF at system level.")
             return
         }
         let currentStatus = manager.authorizationStatus

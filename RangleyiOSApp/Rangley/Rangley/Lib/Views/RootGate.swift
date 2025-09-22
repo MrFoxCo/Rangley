@@ -5,33 +5,41 @@
 //  Created by Anthony Guzzardo on 9/10/25.
 //
 
+// RootGate.swift
 import SwiftUI
-import Amplify
 
 struct RootGate: View {
-    @State private var isAuthed = false
-    @State private var checking = true
+    @StateObject private var auth = AuthStateStore()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
-        Group {
-            if checking {
-                ProgressView().task { await checkSession() }
-            } else if isAuthed {
-                PublicMapView()
-            } else {
-                StartScreenView(onAuthenticated: { isAuthed = true })
+        content
+        // Refresh auth whenever the app becomes active
+        .onChange(of: scenePhase) { oldPhase, newPhase in
+            if newPhase == .active {
+                auth.checkAuthenticationStatus()
             }
         }
     }
 
-    @MainActor
-    private func checkSession() async {
-        do {
-            let s = try await Amplify.Auth.fetchAuthSession()
-            isAuthed = s.isSignedIn
-        } catch {
-            isAuthed = false
+    @ViewBuilder
+    private var content: some View {
+        if auth.isCheckingAuth {
+            ZStack {
+                Color.black.ignoresSafeArea()
+                VStack {
+                    ProgressView().scaleEffect(1.3)
+                    Text("Checking authentication…")
+                        .foregroundStyle(.white)
+                        .padding(.top, 8)
+                }
+            }
+        } else if auth.isAuthenticated {
+            PublicMapView()
+                .environmentObject(auth)
+        } else {
+            StartScreenView()
+                .environmentObject(auth)
         }
-        checking = false
     }
 }
