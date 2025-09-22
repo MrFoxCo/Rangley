@@ -10,7 +10,7 @@ RETURNS TABLE
     ,participant_status_id INT2  
     ,meet_id_uuid UUID
     ,creator_display_name VARCHAR(50)
-    ,payload_json JSONB
+    ,payload_json JSON
     ,dttm_notification_created_utc TIMESTAMPTZ
     ,dttm_received_utc TIMESTAMPTZ
     ,dttm_opened_utc TIMESTAMPTZ
@@ -27,7 +27,7 @@ BEGIN
         ,mp.participant_status_id 
         ,utdm.meet_id_uuid
         ,creator.display_name AS creator_display_name
-        ,n.payload_json
+        ,n.payload_json::JSON
         ,n.dttm_created_utc AS dttm_notification_created_utc
         ,ui.dttm_received_utc
         ,ui.dttm_opened_utc
@@ -80,6 +80,21 @@ Base64 decoded:
       "meet_category_id": 1, "invitation_message": "",
        "invited_by_user_id": 4
        }
+       
+       
+   {
+   "meet_end": "2025-09-22T19:14:19+00:00",
+    "meet_name": "Add", 
+    "meet_start": "2025-09-22T18:14:19+00:00", 
+    "meet_id_uuid": "c1796d75-f312-4d38-ab12-91c082a925d4",
+     "category_name": "Activity",
+      "meet_location": {"latitude": 41.88222967894451, "longitude": -87.62226531378168}, 
+      "action_required": "respond_to_invitation",
+       "invitation_message": "", 
+       "invited_by_username": "anthonyguzzardo",
+        "invited_by_display_name": "Anthony Guzzardo"
+        }
+       
  */
 
 

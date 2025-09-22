@@ -11,6 +11,7 @@
 // MARK: - IGNORE THE BELOW TODOs FOR NOW
 
 // TODO: - Top of this is a little compacted with the top
+// TODO: - NEED TO ADD LITTLE Meet Participants if there are other meet participants
 
 // MARK: - IGNORE THE ABOVE TODOs FOR NOW
 // =========================================================
@@ -27,7 +28,7 @@ struct MyMeetsView: View
     @State private var errorMessage : String?
     @State private var isLoading    = false
     @State private var isPresented  = false
-
+    @State private var inviteCount  = 0
     
     // These would come from your app's environment/state management
     let baseURL     : URL
@@ -43,7 +44,8 @@ struct MyMeetsView: View
         self.onMeetSelected = onMeetSelected
     }
     
-    var body: some View {
+    var body: some View
+    {
         Button(action: {
             isPresented = true
             Task {
@@ -70,6 +72,13 @@ struct MyMeetsView: View
             .fixedSize(horizontal: true, vertical: false)
             .lineLimit(1)
             .foregroundColor(.white)
+            // 👇 clean, anchored badge
+            .overlay(alignment: .topTrailing) {
+                if inviteCount > 0 {
+                    CountBadge(count: inviteCount)
+                        .offset(x: 8, y: -8) // tiny nudge so it kisses the corner
+                }
+            }
         }
         .sheet(isPresented: $isPresented) {
             MyMeetsOverlay(
@@ -93,6 +102,71 @@ struct MyMeetsView: View
                 }
             )
         }
+        .onAppear {
+            Task { await refreshInviteCount() }
+        }
+    }
+    
+    private struct CountBadge: View
+    {
+        let count: Int
+
+        private var text: String {
+            if count > 99 { return "99+" }    // safety cap
+            return "\(count)"
+        }
+
+        private var size: CGFloat {
+            // slightly larger circle for 2 digits
+            (count <= 9) ? 18 : 22
+        }
+
+        var body: some View {
+            Group {
+                if count <= 99 {
+                    Text(text)
+                        .font(.system(size: count <= 9 ? 11 : 10, weight: .bold))
+                        .foregroundColor(.white)
+                        .frame(width: size, height: size)
+                        .background(
+                            Circle().fill(AppPalette.Brand.neonPink)
+                        )
+                        .overlay(
+                            Circle().stroke(Color.white.opacity(0.85), lineWidth: 1)
+                        )
+                        .accessibilityHidden(true)
+                } else {
+                    // 100+ → tiny capsule to avoid squishing
+                    Text(text)
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 6)
+                        .frame(height: 20)
+                        .background(
+                            Capsule().fill(AppPalette.Brand.neonPink)
+                        )
+                        .overlay(
+                            Capsule().stroke(Color.white.opacity(0.85), lineWidth: 1)
+                        )
+                        .accessibilityHidden(true)
+                }
+            }
+            .shadow(color: AppPalette.Brand.neonPink.opacity(0.35), radius: 4, x: 0, y: 1)
+        }
+    }
+
+    
+    private func refreshInviteCount() async
+    {
+        do {
+            let allNotifications = try await AuthAPI.viewNotifications(baseURL: baseURL, token: authToken)
+            let pending = allNotifications.filter {
+                $0.notification_type_id == 8 && $0.participant_status_id == 4
+            }.count
+            await MainActor.run { self.inviteCount = pending }
+        } catch {
+            // don’t surface error UI here; badge is optional
+        }
     }
     
     // Update your loadMeets function to also load notifications
@@ -100,18 +174,18 @@ struct MyMeetsView: View
     {
         isLoading = true
         errorMessage = nil
-        
         do {
-            // Load both meets and notifications concurrently
             async let meetsTask = AuthAPI.viewMeets(baseURL: baseURL, token: authToken)
             async let notificationsTask = AuthAPI.viewNotifications(baseURL: baseURL, token: authToken)
-            
             let allMeets = try await meetsTask
             let allNotifications = try await notificationsTask
-            
+            let pending = allNotifications.filter {
+                $0.notification_type_id == 8 && $0.participant_status_id == 4
+            }.count
             await MainActor.run {
                 self.meets = allMeets
                 self.notifications = allNotifications
+                self.inviteCount = pending          // keep badge in sync
                 self.isLoading = false
             }
         } catch {
@@ -122,7 +196,6 @@ struct MyMeetsView: View
         }
     }
     
-    // ADD THIS FUNCTION
     private func respondToInvitation(notification: ViewNotificationsModel, responseStatusId: Int16) async
     {
         do {
@@ -315,49 +388,48 @@ private extension MyMeetsOverlay
 ///12    Meet Full
 ///13    Meet Role Changed
 ///14    Meet Location Changed
-struct MyMeetsContentView     : View
+struct MyMeetsContentView: View
 {
     let meets: [ViewMeetsModel]
-    let notifications: [ViewNotificationsModel]  // ADD THIS
+    let notifications: [ViewNotificationsModel]
     let onMeetSelected: ((ViewMeetsModel) -> Void)?
-    let onInvitationResponse: ((ViewNotificationsModel, Int16) -> Void)?  // ADD THIS
+    let onInvitationResponse: ((ViewNotificationsModel, Int16) -> Void)?
 
-    
     private var ownedMeets: [ViewMeetsModel] {
         meets.filter { $0.is_owner }
     }
-    
+
     private var invitationNotifications: [ViewNotificationsModel] {
-        notifications.filter { notification in
-            notification.notification_type_id == 8 &&
-            notification.participant_status_id == 4
+        notifications.filter {
+            $0.notification_type_id == 8 && $0.participant_status_id == 4
         }
     }
-    
-    // For showing unread count (if needed elsewhere)
-    private var unreadCount: Int {
-        notifications.filter { !$0.is_read }.count
-    }
-    
+
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
             LazyVStack(spacing: 24) {
+
+                // 👇 If there are invitations, put them first.
+                if !invitationNotifications.isEmpty {
+                    InvitationsSection(
+                        notifications: invitationNotifications,
+                        meets: meets,
+                        onInvitationResponse: onInvitationResponse
+                    )
+                }
+
+                // My Meets always shows (possibly empty state)
                 OwnedMeetsSection(
                     meets: ownedMeets,
                     onMeetSelected: onMeetSelected
                 )
-                
-                InvitationsSection(  // UPDATE THIS
-                     notifications: invitationNotifications,
-                     meets: meets,
-                     onInvitationResponse: onInvitationResponse
-                 )
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 20)
         }
     }
 }
+
 
 
 // MARK: - Owned Meets Section
@@ -423,220 +495,125 @@ struct InvitationsSection: View
     private var invitationsContent: some View
     {
         ForEach(notifications) { notification in
-            InvitationCard(
+            InvitationDisclosureCard(
                 notification: notification,
-                onResponse: onInvitationResponse
+                onAccept: { onInvitationResponse?(notification, 6) },
+                onDecline: { onInvitationResponse?(notification, 5) }
             )
         }
     }
 }
 
-
-private func prettyPayload(_ raw: String?) -> String {
-    guard var s = raw, !s.isEmpty else { return "(payload_json is nil/empty)" }
-
-    // unwrap one layer of quotes if server double-quoted
-    if s.first == "\"", s.last == "\"" {
-        s.removeFirst(); s.removeLast()
+// 3) Recursive key/value renderer
+struct JSONKeyValueView: View
+{
+    let value: Any
+    var body: some View {
+        switch value {
+        case let dict as [String: Any]:
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(dict.keys.sorted(), id: \.self) { k in
+                    HStack(alignment: .top, spacing: 8) {
+                        Text(k + ":")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 140, alignment: .leading)
+                        JSONKeyValueView(value: dict[k] as Any)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+        case let arr as [Any]:
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(Array(arr.enumerated()), id: \.offset) { idx, el in
+                    HStack(alignment: .top, spacing: 8) {
+                        Text("[\(idx)]")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 140, alignment: .leading)
+                        JSONKeyValueView(value: el)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+        case let num as NSNumber:
+            Text(num.stringValue).font(.system(size: 12, design: .monospaced))
+        case let s as String:
+            Text(s).font(.system(size: 12, design: .monospaced))
+        case _ as NSNull:
+            Text("null").italic().font(.system(size: 12, design: .monospaced)).foregroundStyle(.secondary)
+        default:
+            Text("\(value)").font(.system(size: 12, design: .monospaced))
+        }
     }
-
-    // try base64 → utf8 string
-    if let b64 = Data(base64Encoded: s), let str = String(data: b64, encoding: .utf8) {
-        s = str
-    }
-
-    // pretty JSON if possible
-    if let data = s.data(using: .utf8),
-       let obj = try? JSONSerialization.jsonObject(with: data),
-       let pretty = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted]),
-       let out = String(data: pretty, encoding: .utf8) {
-        return out
-    }
-    return s // fallback: show whatever we have
 }
 
+
+// In InvitationCard
 struct InvitationCard: View
 {
     let notification: ViewNotificationsModel
     let onResponse: ((ViewNotificationsModel, Int16) -> Void)?
 
-    private var meetInfo: InvitationPayload? {
-        notification.decodePayload(as: InvitationPayload.self)
-    }
-
-    @State private var showRaw = true // default ON so you can see it immediately
-
-    init(notification: ViewNotificationsModel, onResponse: ((ViewNotificationsModel, Int16) -> Void)?) {
-        self.notification = notification
-        self.onResponse = onResponse
-        
-        // Log the payload to terminal immediately on init
-        print("=== INVITATION CARD DEBUG ===")
-        print("Notification ID: \(notification.notification_id)")
-        print("Notification Name: \(notification.notification_name)")
-        print("Meet ID UUID: \(notification.meet_id_uuid)")
-        print("Participant Status ID: \(notification.participant_status_id)")
-        print("Is Read: \(notification.is_read)")
-        
-        if let payload = notification.payload_json {
-            print("Raw payload_json: \(payload)")
-            
-            // Try to pretty print it
-            var s = payload
-            if s.first == "\"" && s.last == "\"" {
-                s.removeFirst()
-                s.removeLast()
-                print("After removing quotes: \(s)")
-            }
-            
-            if let data = Data(base64Encoded: s),
-               let decoded = String(data: data, encoding: .utf8) {
-                print("Base64 decoded: \(decoded)")
-                
-                if let jsonData = decoded.data(using: .utf8),
-                   let json = try? JSONSerialization.jsonObject(with: jsonData),
-                   let prettyData = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted]),
-                   let prettyString = String(data: prettyData, encoding: .utf8) {
-                    print("Pretty printed JSON:\n\(prettyString)")
-                }
-            } else if let jsonData = s.data(using: .utf8),
-                      let json = try? JSONSerialization.jsonObject(with: jsonData),
-                      let prettyData = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted]),
-                      let prettyString = String(data: prettyData, encoding: .utf8) {
-                print("Pretty printed JSON:\n\(prettyString)")
-            }
-        } else {
-            print("WARNING: payload_json is NIL!")
-        }
-        print("============================")
-    }
+    @State private var showRaw = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Always show the notification name first
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(notification.notification_name)
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(Color.primary)
-                    
-                    Text("Notification ID: \(notification.notification_id)")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color.secondary)
-                }
-                
+                Text(notification.notification_name).font(.system(size: 16, weight: .semibold))
                 Spacer()
-                
-                Image(systemName: "envelope.badge")
-                    .foregroundStyle(AppPalette.Brand.neonPink)
+                Image(systemName: "envelope.badge").foregroundStyle(AppPalette.Brand.neonPink)
             }
-            
-            // Show decoded info if available
-            if let info = meetInfo {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Meet: \(info.meet_name)")
-                        .font(.system(size: 14, weight: .medium))
-                    
-                    if let msg = info.invitation_message, !msg.isEmpty {
-                        Text("Message: \(msg)")
-                            .font(.system(size: 14))
-                            .foregroundStyle(.secondary)
-                    }
-                    
-                    Label(info.meet_start.formatted(date: .abbreviated, time: .shortened),
-                          systemImage: "calendar")
-                        .font(.system(size: 13))
-                        .foregroundStyle(.secondary)
+
+            // Prefer typed payload when available:
+            if let typed: InvitationPayload = notification.payload() {
+                // Show a nice key/value or custom view using typed values:
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Meet: \(typed.meet_name)")
+                    Text("Starts: \(typed.meet_start.formatted())")
+                    Text("Ends: \(typed.meet_end.formatted())")
+                    Text("Category: \(typed.category_name)")
                 }
-                .padding(.vertical, 4)
+                .font(.system(size: 12))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(8)
+                .background(Color(.secondarySystemBackground))
+                .cornerRadius(8)
             }
-            
-            // Debug section - always visible
-            VStack(alignment: .leading, spacing: 8) {
-                Toggle("Show raw JSON", isOn: $showRaw)
-                    .font(.system(size: 13, weight: .medium))
-                
-                if showRaw {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Raw payload_json:")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(Color.secondary)
-                        
-                        // Show the raw string first
-                        if let rawPayload = notification.payload_json {
-                            ScrollView(.vertical) {
-                                Text(rawPayload)
-                                    .font(.system(size: 11, design: .monospaced))
-                                    .textSelection(.enabled)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .foregroundStyle(Color.primary)
-                            }
-                            .frame(height: 120)
-                            .padding(8)
-                            .background(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .fill(Color(.secondarySystemBackground))
-                            )
-                            
-                            // Try to pretty print it
-                            if let prettyVersion = tryPrettyPrint(rawPayload), prettyVersion != rawPayload {
-                                Text("Pretty printed:")
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .foregroundStyle(Color.secondary)
-                                    .padding(.top, 8)
-                                
-                                ScrollView(.vertical) {
-                                    Text(prettyVersion)
-                                        .font(.system(size: 11, design: .monospaced))
-                                        .textSelection(.enabled)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .foregroundStyle(Color.primary)
-                                }
-                                .frame(height: 120)
-                                .padding(8)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .fill(Color(.secondarySystemBackground))
-                                )
-                            }
-                        } else {
-                            Text("payload_json is nil")
-                                .font(.system(size: 12))
-                                .foregroundStyle(Color.red)
-                                .padding(8)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .fill(Color(.secondarySystemBackground))
-                                )
-                        }
+            // Else, fall back to generic Any renderer:
+            else if let any = notification.payloadAny() {
+                ScrollView(.vertical) {
+                    JSONKeyValueView(value: any)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
+                }
+                .frame(maxHeight: 240)
+                .background(Color(.secondarySystemBackground))
+                .cornerRadius(8)
+            } else {
+                // Loud diagnostics
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("payload_json could not be parsed").foregroundStyle(.red)
+                    if let s = notification.payload_json {
+                        Text("length=\(s.count)").font(.system(size: 12, design: .monospaced))
+                        Text("prefix=\(s.prefix(40))").font(.system(size: 12, design: .monospaced))
+                        Text("suffix=\(s.suffix(40))").font(.system(size: 12, design: .monospaced))
+                    } else {
+                        Text("payload_json = nil").font(.system(size: 12, design: .monospaced))
                     }
                 }
+                .padding(8)
+                .background(Color(.secondarySystemBackground))
+                .cornerRadius(8)
             }
-            
-            // Action buttons
             HStack(spacing: 12) {
-                Button(action: {
-                    print("Accept pressed for notification: \(notification.notification_id)")
-                    onResponse?(notification, 6)
-                }) {
-                    Text("Accept")
-                        .font(.system(size: 14, weight: .semibold))
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(AppPalette.Brand.neonPink)
-                
-                Button(action: {
-                    print("Decline pressed for notification: \(notification.notification_id)")
-                    onResponse?(notification, 5)
-                }) {
-                    Text("Decline")
-                        .font(.system(size: 14, weight: .semibold))
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .tint(Color.secondary)
+                Button("Accept") { onResponse?(notification, 6) }
+                    .buttonStyle(.borderedProminent)
+                    .tint(AppPalette.Brand.neonPink)
+                Button("Decline") { onResponse?(notification, 5) }
+                    .buttonStyle(.bordered)
+                Spacer()
             }
         }
         .padding(16)
@@ -649,34 +626,167 @@ struct InvitationCard: View
                 )
         )
     }
-    
-    private func tryPrettyPrint(_ raw: String) -> String? {
-        var s = raw
-        
-        // Remove outer quotes if present
-        if s.first == "\"" && s.last == "\"" {
-            s.removeFirst()
-            s.removeLast()
-        }
-        
-        // Try to decode as base64
-        if let data = Data(base64Encoded: s),
-           let decoded = String(data: data, encoding: .utf8) {
-            s = decoded
-        }
-        
-        // Try to pretty print as JSON
-        if let data = s.data(using: .utf8),
-           let json = try? JSONSerialization.jsonObject(with: data),
-           let prettyData = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys]),
-           let prettyString = String(data: prettyData, encoding: .utf8) {
-            return prettyString
-        }
-        
-        return nil
-    }
 }
 
+
+struct InvitationDisclosureCard: View
+{
+    let notification: ViewNotificationsModel
+    var onAccept: () -> Void
+    var onDecline: () -> Void
+
+    @State private var isExpanded = false
+
+    // prefer typed payload first; fall back to generic Any
+    private var payload: InvitationPayload? { notification.payload(InvitationPayload.self) }
+    private var payloadAny: Any? { notification.payloadAny() }
+
+    private var titleText: String {
+        // show inviter display name when we have it; else creator_display_name; else fallback
+        payload?.invited_by_display_name
+        ?? payload?.invited_by_username
+        ?? notification.creator_display_name
+        ?? "Invitation"
+    }
+
+    private var timestamp: String {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .short
+        return f.string(from: notification.dttm_notification_created_utc)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // HEADER (compact look like your top card)
+            HStack(alignment: .center, spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(AppPalette.Brand.neonPink.opacity(0.15))
+                        .frame(width: 48, height: 48)
+                    Image(systemName: "envelope.fill")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(AppPalette.Brand.neonPink)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(titleText)
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(.white)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text(timestamp)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(Color.white.opacity(0.6))
+                }
+
+                Spacer()
+
+                // disclosure chevron
+                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(AppPalette.Brand.neonPink)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.88)) {
+                    isExpanded.toggle()
+                }
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            }
+
+            // ACTIONS (always visible like your top card)
+            HStack(spacing: 12) {
+                Button("Accept", action: onAccept)
+                    .buttonStyle(.borderedProminent)
+                    .tint(AppPalette.Brand.neonPink)
+                    .font(.system(size: 16, weight: .semibold))
+                    .frame(height: 44)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                Button("Decline", action: onDecline)
+                    .buttonStyle(.bordered)
+                    .font(.system(size: 16, weight: .semibold))
+                    .frame(height: 44)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                Spacer(minLength: 0)
+            }
+
+            // EXPANDED CONTENT
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 10) {
+
+                    // elegant summary from typed payload
+                    if let p = payload {
+                        VStack(alignment: .leading, spacing: 6) {
+                            labeledRow("Meet", p.meet_name)
+                            labeledRow("When",
+                                       "\(p.meet_start.formatted(date: .abbreviated, time: .shortened)) → \(p.meet_end.formatted(date: .omitted, time: .shortened))")
+                            labeledRow("Category", p.category_name)
+                            labeledRow("Location",
+                                       String(format: "%.5f, %.5f",
+                                              p.meet_location.latitude, p.meet_location.longitude))
+                            if let msg = p.invitation_message, !msg.isEmpty {
+                                labeledRow("Message", msg)
+                            }
+                        }
+                        .padding(12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(Color(.secondarySystemBackground).opacity(0.8))
+                        )
+                    }
+                    // fallback generic renderer
+                    else if let any = payloadAny {
+                        ScrollView(.vertical) {
+                            JSONKeyValueView(value: any)
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(12)
+                        }
+                        .frame(maxHeight: 240)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(Color(.secondarySystemBackground).opacity(0.8))
+                        )
+                    } else {
+                        Text("No additional details.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(Color(.secondarySystemBackground).opacity(0.18))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(AppPalette.Brand.neonPink.opacity(0.25), lineWidth: 1)
+                )
+        )
+        .animation(.default, value: isExpanded)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(Text("Invitation from \(titleText) on \(timestamp)"))
+    }
+
+    // small helper for the summary rows
+    private func labeledRow(_ label: String, _ value: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(label + ":")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 90, alignment: .leading)
+            Text(value)
+                .font(.system(size: 12))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
 
 
 // MARK: - Generic Meets Section

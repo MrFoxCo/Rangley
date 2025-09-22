@@ -38,7 +38,9 @@ DECLARE
     v_current_participants 	INT;
     v_notification_type_id 	INT2;
     v_notification_id 		BIGINT;
-
+	
+    v_inviter_display_name  TEXT;
+    v_inviter_username		TEXT;
     v_user_id 				BIGINT;
     v_username 				VARCHAR(50);
     v_existing_status 		INT2;
@@ -86,6 +88,11 @@ BEGIN
 
 
  	v_notification_type_id := 8;
+ 	
+    SELECT u.username, u.display_name INTO v_inviter_username ,v_inviter_display_name
+    FROM rangley.vw_users u
+    WHERE u.user_id = p_inviter_user_id;
+ 	
 
     FOREACH v_user_id IN ARRAY p_invitee_user_ids LOOP
         IF v_user_id IS NULL THEN
@@ -157,15 +164,14 @@ BEGIN
             p_meet_id,
             p_inviter_user_id,
             jsonb_build_object(
-                'meet_id', p_meet_id,
                 'meet_id_uuid', v_meet_uuid,
                 'meet_name', v_meet_name,
                 'meet_start', v_meet_start,
                 'meet_end', v_meet_end,
                 'meet_location', jsonb_build_object('latitude', v_lat, 'longitude', v_lon),
                 'category_name', v_category_name,
-                'meet_category_id', v_meet_category_id,
-                'invited_by_user_id', p_inviter_user_id,
+                'invited_by_display_name', v_inviter_display_name,
+                'invited_by_username', v_inviter_username,
                 'invitation_message', p_invitation_message,
                 'action_required', 'respond_to_invitation'
             )
