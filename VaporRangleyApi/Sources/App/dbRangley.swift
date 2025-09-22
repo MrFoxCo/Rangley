@@ -32,10 +32,11 @@ enum RangleyProcName: String
 // Essentially these are views because postgres doesn't allow procedural views in an easy way
 enum RangleyFunc: String
 {
-    case v_user_by_cognito_sub       = "rangley.rangley_fn_v_user_by_cognito_sub"
-    case v_meets_by_cognito_sub      = "rangley.rangley_fn_v_meets_by_cognito_sub"
-    case v_meet_categories           = "rangley.rangley_fn_v_meet_categories"
-    case v_users_by_cognito_sub      = "rangley.rangley_fn_v_users_by_cognito_sub"
+    case v_user_by_cognito_sub                     = "rangley.rangley_fn_v_user_by_cognito_sub"
+    case v_meets_by_cognito_sub                    = "rangley.rangley_fn_v_meets_by_cognito_sub"
+    case v_meet_categories                         = "rangley.rangley_fn_v_meet_categories"
+    case v_users_by_cognito_sub                    = "rangley.rangley_fn_v_users_by_cognito_sub"
+    case v_user_inbox_notifications_by_cognito_sub = "rangley.rangley_fn_v_user_inbox_notifications_by_cognito_sub"
 }
 
 // MARK: - Generic call shapes
@@ -577,9 +578,31 @@ enum Func
         }
     }
     
-    enum ViewMeetsInvitations: PgFunctionRows
+    enum ViewUserInboxNotifications: PgFunctionRows
     {
-        static let funcName: RangleyFunc = .v_meets_by_cognito_sub
+        /*
+         -- ================================================================
+         CREATE OR REPLACE FUNCTION rangley.rangley_fn_v_user_inbox_notifications_by_cog_sub
+         (
+              p_cognito_sub text
+         )
+         RETURNS TABLE
+         (
+              notification_id BIGINT
+             ,notification_type_id INT2
+             ,notification_name VARCHAR(50)
+             ,meet_id BIGINT
+             ,created_by_user_id BIGINT
+             ,creator_display_name VARCHAR(50)
+             ,payload_json JSONB
+             ,dttm_notification_created_utc TIMESTAMPTZ
+             ,dttm_received_utc TIMESTAMPTZ
+             ,dttm_opened_utc TIMESTAMPTZ
+             ,is_read BOOLEAN
+        
+        
+        */
+        static let funcName: RangleyFunc = .v_user_inbox_notifications_by_cognito_sub
 
         struct In: Sendable { let cognitoSub: String }
 
