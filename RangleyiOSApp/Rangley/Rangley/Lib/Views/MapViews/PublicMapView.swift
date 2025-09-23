@@ -815,7 +815,7 @@ struct OverlaysView: View
 }
 
 
-// MARK: - Controls View Component
+// MARK: - Controls View Component (Updated)
 struct ControlsView: View
 {
     @ObservedObject var mapData     : MapDataStore
@@ -857,6 +857,7 @@ struct ControlsView: View
                 DockView(
                     baseURL: Env.apiBaseURL,
                     token: authState.currentToken,
+                    mapDataStore: mapData, // Pass the mapData store directly
                     onSignOut: {
                         Task {
                             await authState.signOut()

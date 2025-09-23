@@ -24,29 +24,37 @@ import Foundation
 struct MyMeetsView: View
 {
     @EnvironmentObject var inbox: InboxStore
+    @ObservedObject var mapDataStore: MapDataStore // Use global store instead of local state
     
-    @State private var meets        : [ViewMeetsModel] = []
-    @State private var notifications: [ViewNotificationsModel] = []
-    @State private var errorMessage : String?
-    @State private var isLoading    = false
-    @State private var isPresented  = false
+    @State private var isPresented = false
     
     // These would come from your app's environment/state management
-    let baseURL     : URL
-    let authToken   : String
+    let baseURL: URL
+    let authToken: String
     
     // Callback for when a meet is selected
     let onMeetSelected: ((ViewMeetsModel) -> Void)?
     
-    init(baseURL: URL, authToken: String, onMeetSelected: ((ViewMeetsModel) -> Void)? = nil)
-    {
-        self.baseURL        = baseURL
-        self.authToken      = authToken
+    init(
+        baseURL: URL,
+        authToken: String,
+        mapDataStore: MapDataStore, // Add this parameter
+        onMeetSelected: ((ViewMeetsModel) -> Void)? = nil
+    ) {
+        self.baseURL = baseURL
+        self.authToken = authToken
+        self.mapDataStore = mapDataStore
         self.onMeetSelected = onMeetSelected
     }
     
     var body: some View {
-        Button(action: { isPresented = true; Task { await loadMeets() } }) {
+        Button(action: {
+            isPresented = true
+            Task {
+                await mapDataStore.loadMeets() // Use global store
+                await inbox.refresh()
+            }
+        }) {
             VStack(spacing: 2) {
                 Text("My Meets")
                     .font(.system(size: 25, weight: .medium))
@@ -66,14 +74,25 @@ struct MyMeetsView: View
         }
         .sheet(isPresented: $isPresented) {
             MyMeetsOverlay(
-                meets: meets,
-                notifications: inbox.notifications, // ← from store
-                isLoading: isLoading,
-                errorMessage: errorMessage,
-                onRetry: { Task { await loadMeets(); await inbox.refresh() } },
-                onMeetSelected: { meet in isPresented = false; onMeetSelected?(meet) },
+                meets: mapDataStore.meets, // Use global state
+                notifications: inbox.notifications,
+                isLoading: mapDataStore.isLoading, // Use global loading state
+                errorMessage: mapDataStore.error, // Use global error state
+                onRetry: {
+                    Task {
+                        await mapDataStore.forceRefresh() // Use global refresh
+                        await inbox.refresh()
+                    }
+                },
+                onMeetSelected: { meet in
+                    isPresented = false
+                    onMeetSelected?(meet)
+                },
                 onInvitationResponse: { n, status in
-                    Task { try? await inbox.respondToInvitation(n, statusId: status) }
+                    Task {
+                        try? await inbox.respondToInvitation(n, statusId: status)
+                        await mapDataStore.forceRefresh() // This will update global state immediately
+                    }
                 }
             )
         }
@@ -84,12 +103,11 @@ struct MyMeetsView: View
         let count: Int
 
         private var text: String {
-            if count > 99 { return "99+" }    // safety cap
+            if count > 99 { return "99+" }
             return "\(count)"
         }
 
         private var size: CGFloat {
-            // slightly larger circle for 2 digits
             (count <= 9) ? 18 : 22
         }
 
@@ -108,7 +126,6 @@ struct MyMeetsView: View
                         )
                         .accessibilityHidden(true)
                 } else {
-                    // 100+ → tiny capsule to avoid squishing
                     Text(text)
                         .font(.system(size: 10, weight: .bold))
                         .foregroundColor(.white)
@@ -126,58 +143,6 @@ struct MyMeetsView: View
             .shadow(color: AppPalette.Brand.neonPink.opacity(0.35), radius: 4, x: 0, y: 1)
         }
     }
-
-    
-    // Update your loadMeets function to also load notifications
-    private func loadMeets() async
-    {
-        isLoading = true
-        errorMessage = nil
-        do {
-            async let meetsTask = AuthAPI.viewMeets(baseURL: baseURL, token: authToken)
-            async let notificationsTask = AuthAPI.viewNotifications(baseURL: baseURL, token: authToken)
-            let allMeets = try await meetsTask
-            let allNotifications = try await notificationsTask
-            _ = allNotifications.filter {
-                $0.notification_type_id == 8 && $0.participant_status_id == 4
-            }.count
-            await MainActor.run {
-                self.meets = allMeets
-                self.notifications = allNotifications
-                self.isLoading = false
-            }
-        } catch {
-            await MainActor.run {
-                self.errorMessage = error.localizedDescription
-                self.isLoading = false
-            }
-        }
-    }
-    
-    private func respondToInvitation(notification: ViewNotificationsModel, responseStatusId: Int16) async
-    {
-        do {
-            let body = RespondToInviteBody(
-                meet_id_uuid: notification.meet_id_uuid,
-                response_status_id: responseStatusId
-            )
-            
-            _ = try await AuthAPI.respondToInvitation(
-                baseURL: baseURL,
-                token: authToken,
-                body: body
-            )
-            
-            // Reload data after responding
-            await loadMeets()
-            
-        } catch {
-            await MainActor.run {
-                self.errorMessage = "Failed to respond to invitation: \(error.localizedDescription)"
-            }
-        }
-    }
-    
 }
 
 
@@ -411,7 +376,8 @@ struct OwnedMeetsSection      : View
     }
 }
 
-struct JoinedMeetsSection: View {
+struct JoinedMeetsSection: View
+{
     let meets: [ViewMeetsModel]
     let onMeetSelected: ((ViewMeetsModel) -> Void)?
 

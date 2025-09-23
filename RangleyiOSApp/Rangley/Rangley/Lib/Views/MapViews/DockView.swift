@@ -31,13 +31,15 @@ public struct DockView: View {
     // Search dependencies
     let baseURL: URL
     let token: String
+    let mapDataStore: MapDataStore
     
     @State private var isAnimating = false
     @State private var showSearch = false
     
-    public init(
+    init(
         baseURL: URL,
         token: String,
+        mapDataStore: MapDataStore, // ADD THIS PARAMETER
         onSignOut: @escaping () -> Void,
         onCreateMeet: @escaping () -> Void,
         onMeetSelected: @escaping (ViewMeetsModel) -> Void,
@@ -45,6 +47,7 @@ public struct DockView: View {
     ) {
         self.baseURL = baseURL
         self.token = token
+        self.mapDataStore = mapDataStore // ADD THIS LINE
         self.onSignOut = onSignOut
         self.onCreateMeet = onCreateMeet
         self.onMeetSelected = onMeetSelected
@@ -64,6 +67,7 @@ public struct DockView: View {
                 MyMeetsView(
                     baseURL: baseURL,
                     authToken: token,
+                    mapDataStore: mapDataStore,
                     onMeetSelected: onMeetSelected
                 )
                 
