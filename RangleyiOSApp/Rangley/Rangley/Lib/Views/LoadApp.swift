@@ -1,3 +1,10 @@
+//
+//  RangleApp.swift
+//
+//  Created by Anthony Guzzardo on 7/10/25.
+//
+
+
 import SwiftUI
 
 struct LoadApp: View {
@@ -39,9 +46,4 @@ struct LoadApp: View {
             }
         }
     }
-}
-
-// Hex Color Extension
-#Preview {
-    LoadApp()
 }
