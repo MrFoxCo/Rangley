@@ -75,7 +75,8 @@ struct MeetCreationUnifiedFormView: View
     }
     
     // MARK: Steps
-    enum UnifiedStep: CaseIterable {
+    enum UnifiedStep: CaseIterable
+    {
         case location    // Only for createButton flow
         case name
         case startTime
@@ -108,7 +109,8 @@ struct MeetCreationUnifiedFormView: View
     }
     
     // Get active steps based on entry mode
-    private var activeSteps: [UnifiedStep] {
+    private var activeSteps: [UnifiedStep]
+    {
         switch entryMode {
         case .tapOnMap:
             // Skip location step
@@ -121,13 +123,15 @@ struct MeetCreationUnifiedFormView: View
     
     private var totalSteps: Int { activeSteps.count }
     
-    private var currentStepNumber: Int {
+    private var currentStepNumber: Int
+    {
         guard let index = activeSteps.firstIndex(of: currentStep) else { return 1 }
         return index + 1
     }
     
     // MARK: Progress validation
-    private var canProceed: Bool {
+    private var canProceed: Bool
+    {
         switch currentStep {
         case .location:
             return vm.hasValidLocation
@@ -145,7 +149,8 @@ struct MeetCreationUnifiedFormView: View
     }
     
     // MARK: Body
-    var body: some View {
+    var body: some View
+    {
         VStack(spacing: 0) {
             // Header
             header
@@ -207,7 +212,8 @@ struct MeetCreationUnifiedFormView: View
     }
     
     // MARK: Components
-    private var header: some View {
+    private var header: some View
+    {
         VStack(spacing: 16) {
             HStack {
                 Button(action: previousStep) {
@@ -225,6 +231,20 @@ struct MeetCreationUnifiedFormView: View
                 Text("Step \(currentStepNumber) of \(totalSteps)")
                     .font(.system(size: 14, weight: .medium))
                     .foregroundColor(AppPalette.Text.secondary)
+                
+                Spacer()
+                
+                // Add X button on the right
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(AppPalette.Brand.neonPink)
+                        .frame(width: 28, height: 28)
+                        .background(
+                            Circle()
+                                .fill(AppPalette.Brand.neonPink.opacity(0.1))
+                        )
+                }
             }
             .padding(.horizontal, 24)
             .padding(.top, 20)
@@ -232,7 +252,8 @@ struct MeetCreationUnifiedFormView: View
         .padding(.bottom, 12)
     }
     
-    private var progressBar: some View {
+    private var progressBar: some View
+    {
         GeometryReader { geometry in
             ZStack(alignment: .leading) {
                 RoundedRectangle(cornerRadius: 2)
@@ -253,7 +274,8 @@ struct MeetCreationUnifiedFormView: View
         .padding(.bottom, 24)
     }
     
-    private var locationCard: some View {
+    private var locationCard: some View
+    {
         VStack(alignment: .leading, spacing: 8) {
             Label {
                 VStack(alignment: .leading, spacing: 4) {
@@ -307,7 +329,8 @@ struct MeetCreationUnifiedFormView: View
         .padding(.bottom, 24)
     }
     
-    private var stepContent: some View {
+    private var stepContent: some View
+    {
         VStack(spacing: 24) {
             Text(currentStep.title)
                 .font(.system(size: 24, weight: .bold))
@@ -339,7 +362,8 @@ struct MeetCreationUnifiedFormView: View
     }
     
     // MARK: Step Contents
-    private var locationStepContent: some View {
+    private var locationStepContent: some View
+    {
         VStack(spacing: 12) {
             Text("Pick a spot for your meet")
                 .font(.system(size: 14))
@@ -397,7 +421,8 @@ struct MeetCreationUnifiedFormView: View
         .padding(.horizontal, 24)
     }
     
-    private var nameStepContent: some View {
+    private var nameStepContent: some View
+    {
         VStack(alignment: .leading, spacing: 8) {
             TextField("", text: $vm.name, prompt: Text("Enter meet name").foregroundColor(AppPalette.Text.tertiary))
                 .font(.system(size: 18))
@@ -429,12 +454,14 @@ struct MeetCreationUnifiedFormView: View
         .padding(.horizontal, 24)
     }
     
-    private var startTimeStepContent: some View {
+    private var startTimeStepContent: some View
+    {
         VStack(spacing: 16) {
             DatePicker("", selection: $vm.start, displayedComponents: [.date, .hourAndMinute])
                 .datePickerStyle(.wheel)
                 .labelsHidden()
                 .tint(AppPalette.Brand.neonPink)
+                .colorScheme(.dark)
                 .frame(height: 200)
                 .padding(.horizontal, 8)
                 .background(
@@ -449,12 +476,14 @@ struct MeetCreationUnifiedFormView: View
         .padding(.horizontal, 24)
     }
     
-    private var endTimeStepContent: some View {
+    private var endTimeStepContent: some View
+    {
         VStack(spacing: 16) {
             DatePicker("", selection: $vm.end, in: vm.start..., displayedComponents: [.date, .hourAndMinute])
                 .datePickerStyle(.wheel)
                 .labelsHidden()
                 .tint(AppPalette.Brand.neonPink)
+                .colorScheme(.dark)
                 .frame(height: 200)
                 .padding(.horizontal, 8)
                 .background(
@@ -475,7 +504,8 @@ struct MeetCreationUnifiedFormView: View
         .padding(.horizontal, 24)
     }
     
-    private var inviteFriendsStepContent: some View {
+    private var inviteFriendsStepContent: some View
+    {
         InviteFriendsEmbedded(
             baseURL: baseURL,
             token: token,
@@ -483,7 +513,8 @@ struct MeetCreationUnifiedFormView: View
         )
     }
     
-    private var reviewStepContent: some View {
+    private var reviewStepContent: some View
+    {
         VStack(spacing: 20) {
             VStack(alignment: .leading, spacing: 16) {
                 DetailRow(label: "Location", value: displayLocationName)
@@ -509,7 +540,8 @@ struct MeetCreationUnifiedFormView: View
         .padding(.horizontal, 24)
     }
     
-    private var actionButton: some View {
+    private var actionButton: some View
+    {
         Button(action: nextStep) {
             Text(buttonTitle)
                 .font(.system(size: 16, weight: .bold))
@@ -534,7 +566,8 @@ struct MeetCreationUnifiedFormView: View
         }
     }
     
-    private var buttonTitle: String {
+    private var buttonTitle: String
+    {
         switch currentStep {
         case .review: return "Create Meet"
         case .inviteFriends: return invitedUsers.isEmpty ? "Skip" : "Continue"
@@ -543,11 +576,13 @@ struct MeetCreationUnifiedFormView: View
     }
     
     // MARK: Navigation
-    private var isFirstStep: Bool {
+    private var isFirstStep: Bool
+    {
         currentStep == activeSteps.first
     }
     
-    private func nextStep() {
+    private func nextStep()
+    {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
             if currentStep == .name {
                 isNameFieldFocused = false
@@ -562,7 +597,8 @@ struct MeetCreationUnifiedFormView: View
         }
     }
     
-    private func previousStep() {
+    private func previousStep()
+    {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
             if isFirstStep {
                 onClose()
@@ -574,7 +610,8 @@ struct MeetCreationUnifiedFormView: View
     }
     
     // MARK: Submit
-    private func submit() {
+    private func submit()
+    {
         guard !isSubmitting else { return }
         submitError = vm.validate()
         guard submitError == nil else { return }
@@ -607,7 +644,8 @@ struct MeetCreationUnifiedFormView: View
     }
     
     // MARK: Helpers
-    private func setupInitialState() {
+    private func setupInitialState()
+    {
         if vm.end <= vm.start {
             vm.end = vm.start.addingTimeInterval(3600)
         }
@@ -621,7 +659,8 @@ struct MeetCreationUnifiedFormView: View
         }
     }
     
-    private func loadLocationAddress(_ location: LocationInfo) {
+    private func loadLocationAddress(_ location: LocationInfo)
+    {
         geocodingTask?.cancel()
         geocodingTask = Task {
             let geocoder = CLGeocoder()
@@ -662,11 +701,13 @@ struct MeetCreationUnifiedFormView: View
         }
     }
     
-    private func formatCoordinates(_ location: LocationInfo) -> String {
+    private func formatCoordinates(_ location: LocationInfo) -> String
+    {
         "Lat: \(String(format: "%.4f", location.Coordinate.latitude)), Lng: \(String(format: "%.4f", location.Coordinate.longitude))"
     }
     
-    private struct DetailRow: View {
+    private struct DetailRow: View
+    {
         let label: String
         let value: String
         
@@ -691,11 +732,13 @@ struct MeetCreationUnifiedFormView: View
         return f
     }()
     
-    private func formatDate(_ date: Date) -> String {
+    private func formatDate(_ date: Date) -> String
+    {
         Self.reviewFormatter.string(from: date)
     }
     
-    private func formatDuration(from start: Date, to end: Date) -> String {
+    private func formatDuration(from start: Date, to end: Date) -> String
+    {
         let interval = max(0, end.timeIntervalSince(start))
         let hours = Int(interval) / 3600
         let minutes = (Int(interval) % 3600) / 60
@@ -706,7 +749,8 @@ struct MeetCreationUnifiedFormView: View
 }
 
 // MARK: - Unified View Model
-final class MeetFormUnifiedModel: ObservableObject {
+final class MeetFormUnifiedModel: ObservableObject
+{
     // Location
     @Published var latitude: Double?
     @Published var longitude: Double?

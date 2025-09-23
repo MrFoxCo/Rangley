@@ -668,11 +668,11 @@ private struct ParticipantDetailOverlay: View
                             } label: {
                                 Image(systemName: "xmark")
                                     .font(.system(size: 16, weight: .semibold))
-                                    .foregroundStyle(AppPalette.Text.secondary)
-                                    .frame(width: 32, height: 32)
+                                    .foregroundColor(AppPalette.Brand.neonPink)
+                                    .frame(width: 28, height: 28)
                                     .background(
                                         Circle()
-                                            .fill(AppPalette.Brand.neonPink)
+                                            .fill(AppPalette.Brand.neonPink.opacity(0.1))
                                     )
                             }
                         }

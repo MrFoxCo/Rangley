@@ -8,7 +8,8 @@
 import SwiftUI
 import UIKit
 
-struct MeetCreationUnifiedOverlay: View {
+struct MeetCreationUnifiedOverlay: View
+{
     // MARK: Configuration
     @Binding var showOverlay: Bool
     @Binding var entryMode: MeetCreationEntryMode?

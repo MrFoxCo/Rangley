@@ -802,6 +802,12 @@ struct ControlsView: View
     
     @Binding var meetCreationMode: MeetCreationEntryMode?
     
+    private var shouldHideDock: Bool
+    {
+        uiState.showLocationPopup ||
+        uiState.showMeetOverlay ||
+        uiState.showEditSheet
+    }
     
     var body: some View
     {
@@ -828,38 +834,43 @@ struct ControlsView: View
             Spacer()
             
             // Bottom Dock
-            HStack {
-                Spacer()
-                DockView(
-                    baseURL: Env.apiBaseURL,
-                    token: authState.currentToken,
-                    mapDataStore: mapData, // Pass the mapData store directly
-                    onSignOut: {
-                        Task {
-                            await authState.signOut()
+            if !shouldHideDock {
+                HStack {
+                    Spacer()
+                    DockView(
+                        baseURL: Env.apiBaseURL,
+                        token: authState.currentToken,
+                        mapDataStore: mapData, // Pass the mapData store directly
+                        onSignOut: {
+                            Task {
+                                await authState.signOut()
+                            }
+                        },
+                        onCreateMeet: {
+                            // Set entry mode for create button
+                            meetCreationMode = .createButton
+                            uiState.showLocationPopup = true  // Use same overlay
+                        },
+                        onMeetSelected: { meet in
+                            mapData.selectedMeet = meet
+                            uiState.showMeetOverlay = true
+                        },
+                        onUserSelected: { user in
+                            print("Selected user: \(user.display_name)")
+                            // Handle user selection - maybe show user profile or invite to meet
                         }
-                    },
-                    onCreateMeet: {
-                        // Set entry mode for create button
-                        meetCreationMode = .createButton
-                        uiState.showLocationPopup = true  // Use same overlay
-                    },
-                    onMeetSelected: { meet in
-                        mapData.selectedMeet = meet
-                        uiState.showMeetOverlay = true
-                    },
-                    onUserSelected: { user in
-                        print("Selected user: \(user.display_name)")
-                        // Handle user selection - maybe show user profile or invite to meet
-                    }
-                )
-                Spacer()
+                    )
+                    Spacer()
+                }
+                .padding(.bottom, 8)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
-            .padding(.bottom, 8)
+
         }
         .task {
             await authState.updateToken()
         }
+        .animation(.easeInOut(duration: 0.1), value: shouldHideDock)
     }
 }
 
