@@ -13,6 +13,7 @@ public struct ViewMeetsModel: Codable, Identifiable, Sendable
 {
     public let meet_id_uuid         : UUID
     public let meet_status_id       : Int16
+    public let change_stamp         : Int64?
     public let latitude             : Double
     public let longitude            : Double
     public let region_latitude      : Double
@@ -28,8 +29,21 @@ public struct ViewMeetsModel: Codable, Identifiable, Sendable
     public let created_by_user_uuid : UUID
     public let display_name         : String
     public let is_owner             : Bool
+    public let participant_details  : [ParticipantDetail]? // nil for non-owners; [] for owners with none
+    public let accepted_count       : Int32
 
     public var id: UUID { meet_id_uuid }
+    
+    public var remaining_capacity: Int32 { max(0, max_capacity - accepted_count) }
+    public var owner_participants: [ParticipantDetail] { participant_details ?? [] }
+
+}
+
+public struct ParticipantDetail: Codable, Sendable, Equatable
+{
+    public let user_uuid            : UUID
+    public let display_name         : String
+    public let participant_status_id: Int16
 }
 
 extension ViewMeetsModel: Equatable {

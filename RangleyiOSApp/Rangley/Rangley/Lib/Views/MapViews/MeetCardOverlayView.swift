@@ -5,6 +5,19 @@
 //  Created by Anthony Guzzardo on 9/12/25.
 //
 
+// =========================================================
+// =========================================================
+// =========================================================
+// MARK: - IGNORE THE BELOW TODOs FOR NOW
+
+// TODO: - Delete on one screen isn't refreshign for the user on the other screen
+// ... but if you tap on my meets button it will reset the shit
+
+// MARK: - IGNORE THE ABOVE TODOs FOR NOW
+// =========================================================
+// =========================================================
+// =========================================================
+
 import MapKit
 import CoreLocation
 import SwiftUI
@@ -12,7 +25,8 @@ import Amplify
 import AWSPluginsCore
 
 // MARK: - Fixed Meet Bubble Button (Key Fix!)
-struct MeetBubbleButton: View {
+struct MeetBubbleButton: View
+{
     let meet: ViewMeetsModel
     let ns: Namespace.ID
     let onTap: () -> Void
@@ -114,9 +128,9 @@ struct MeetCardOverlay: View
 // MARK: - Card content (no background; background is provided by overlay for the morph)
 private struct MeetCardView: View
 {
-    let meet: ViewMeetsModel
-    let onClose: () -> Void
-    let onEdit: (ViewMeetsModel) -> Void
+    let meet    : ViewMeetsModel
+    let onClose : () -> Void
+    let onEdit  : (ViewMeetsModel) -> Void
     let onDelete: (ViewMeetsModel) -> Void
 
     @State private var showDeleteConfirm = false
@@ -268,9 +282,10 @@ private struct MeetCardView: View
             }
             
             // Category and Capacity side by side
+            // TODO: - Setup Max Capacity this in Version 2
             HStack(spacing: 12) {
                 Chip(text: meet.category_name, systemImage: "tag.fill")
-                Chip(text: "\(meet.max_capacity) spots", systemImage: "person.2.fill")
+               // Chip(text: "\(meet.max_capacity) spots", systemImage: "person.2.fill")
             }
             
             // Location Information
@@ -338,6 +353,58 @@ private struct MeetCardView: View
                 }
                 .padding(.top, 4)
             }
+            // Participant Information
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Participants")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(AppPalette.Text.primary)
+                
+                if meet.is_owner {
+                    // Show detailed participant list for owners
+                    if let participants = meet.participant_details, !participants.isEmpty {
+                        // Horizontal scrolling profile circles
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 12) {
+                                ForEach(participants, id: \.user_uuid) { participant in
+                                    ProfileCircle(
+                                        name: participant.display_name,
+                                        statusId: participant.participant_status_id
+                                    )
+                                }
+                            }
+                        }
+                        .frame(height: 44) // Fixed height for the scroll view
+                    } else {
+                        Text("No participants yet")
+                            .font(.system(size: 13))
+                            .foregroundStyle(AppPalette.Text.tertiary)
+                            .italic()
+                    }
+                } else {
+                    // Show just the count for non-owners
+                    HStack {
+                        Image(systemName: "person.2.fill")
+                            .font(.system(size: 12))
+                            .foregroundStyle(AppPalette.Brand.neonPink)
+                        
+                        Text("\(meet.accepted_count) accepted")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(AppPalette.Text.primary)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(AppPalette.Surface.fieldFill.opacity(0.3))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
+                            )
+                    )
+                }
+            }
+            .padding(.top, 4)
+
             Spacer(minLength: 0)
         }
         .padding(20)
@@ -377,7 +444,8 @@ private struct LiveDot: View
 }
 
 // MARK: - Chip Component
-private struct Chip: View {
+private struct Chip: View
+{
     let text: String
     let systemImage: String
     
@@ -396,3 +464,162 @@ private struct Chip: View {
     }
 }
 
+private struct ParticipantStatusChip: View {
+    let statusId: Int16
+    
+    private var statusInfo: (text: String, color: Color) {
+        switch statusId {
+        case 4: return ("Invited", Color.gray)
+        case 5: return ("Declined", Color.red)
+        case 6: return ("Accepted", Color.green)
+        default: return ("Unknown", Color.gray)
+        }
+    }
+    
+    var body: some View {
+        Text(statusInfo.text)
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(statusInfo.color)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                Capsule()
+                    .fill(statusInfo.color.opacity(0.15))
+                    .overlay(
+                        Capsule().stroke(statusInfo.color.opacity(0.3), lineWidth: 1)
+                    )
+            )
+    }
+}
+
+
+// TODO: - COnsider remvoign
+struct FlowLayout: Layout
+{
+    var spacing: CGFloat = 8
+    
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let result = FlowResult(
+            in: proposal.width ?? .infinity,
+            subviews: subviews,
+            spacing: spacing
+        )
+        return result.size
+    }
+    
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let result = FlowResult(
+            in: bounds.width,
+            subviews: subviews,
+            spacing: spacing
+        )
+        for (index, subview) in subviews.enumerated() {
+            subview.place(
+                at: CGPoint(
+                    x: bounds.minX + result.positions[index].x,
+                    y: bounds.minY + result.positions[index].y
+                ),
+                proposal: ProposedViewSize(result.sizes[index])
+            )
+        }
+    }
+    
+    struct FlowResult {
+        var size: CGSize = .zero
+        var positions: [CGPoint] = []
+        var sizes: [CGSize] = []
+        
+        init(in maxWidth: CGFloat, subviews: Subviews, spacing: CGFloat) {
+            var x: CGFloat = 0
+            var y: CGFloat = 0
+            var rowHeight: CGFloat = 0
+            
+            for subview in subviews {
+                let size = subview.sizeThatFits(.unspecified)
+                sizes.append(size)
+                
+                if x + size.width > maxWidth, x > 0 {
+                    x = 0
+                    y += rowHeight + spacing
+                    rowHeight = 0
+                }
+                
+                positions.append(CGPoint(x: x, y: y))
+                x += size.width + spacing
+                rowHeight = max(rowHeight, size.height)
+            }
+            
+            self.size = CGSize(width: maxWidth, height: y + rowHeight)
+        }
+    }
+}
+
+// TODO: - consider removing
+private struct ParticipantPill: View {
+    let name: String
+    let statusId: Int16
+    
+    var body: some View {
+        HStack(spacing: 6) {
+            // Initial circle (like in your screenshot)
+            Circle()
+                .fill(AppPalette.Brand.neonPink.opacity(0.3))
+                .frame(width: 28, height: 28)
+                .overlay(
+                    Text(String(name.prefix(1).uppercased()))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(AppPalette.Brand.neonPink)
+                )
+            
+            Text(name)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(AppPalette.Text.primary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(
+            Capsule()
+                .fill(AppPalette.Surface.fieldFill.opacity(0.5))
+                .overlay(
+                    Capsule()
+                        .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1)
+                )
+        )
+    }
+}
+// Add this new ProfileCircle view
+
+private struct ProfileCircle: View
+{
+    let name: String
+    let statusId: Int16
+    
+    /// participant status id numbers: 4 = invited, 5 = declined, 6 = accepted, 7 = owner
+    private var statusColor: Color {
+        switch statusId {
+        case 6: return Color.green  // Accepted
+        case 5: return Color.red    // Declined
+        case 7: return AppPalette.Brand.neonPink  // Owner
+        default: return Color.gray  // Invited (4) or unknown
+        }
+    }
+    
+    var body: some View {
+        Circle()
+            .fill(AppPalette.Brand.neonPink.opacity(0.2))
+            .frame(width: 40, height: 40)
+            .overlay(
+                Text(String(name.prefix(1).uppercased()))
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(AppPalette.Brand.neonPink)
+            )
+            .overlay(
+                // Status indicator dot (optional - remove if not needed)
+                Circle()
+                    .fill(statusColor)
+                    .frame(width: 10, height: 10)
+                    .offset(x: 14, y: -14)
+            )
+    }
+}

@@ -159,6 +159,17 @@ ON rangley.tb_meet_participants (user_id, participant_status_id);
 CREATE INDEX idx_part_invited_date
 ON rangley.tb_meet_participants (dttm_invited_utc DESC);
 
+-- Fast path for “my meets that I’m currently in”
+CREATE INDEX IF NOT EXISTS ix_tb_meet_participants_user_curr
+ON rangley.tb_meet_participants (user_id, participant_status_id, meet_id)
+WHERE participant_status_id IN (1,3,6,7);
+
+
+
+CREATE INDEX IF NOT EXISTS ix_part_meet_user
+  ON rangley.tb_meet_participants (meet_id, user_id);
+
+
 
 CREATE TABLE rangley.tb_meets
 (
@@ -292,6 +303,10 @@ CREATE UNIQUE INDEX ux_users_email_ci
 CREATE UNIQUE INDEX ux_users_cellphone
   ON rangley.tb_users (cellphone)
   WHERE cellphone IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_users_cognito_sub
+  ON rangley.tb_users (cognito_sub);
+
 
 
 CREATE TABLE IF NOT EXISTS rangley.tb_user_privacy_settings 

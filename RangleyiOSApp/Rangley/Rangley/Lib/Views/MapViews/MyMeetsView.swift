@@ -9,10 +9,8 @@
 // =========================================================
 // =========================================================
 // MARK: - IGNORE THE BELOW TODOs FOR NOW
-
-// TODO: - Top of this is a little compacted with the top
-// TODO: - NEED TO ADD LITTLE Meet Participants if there are other meet participants
-
+// TODO: - Need to setup a refresh so that you don't have to tap on MyMeets button just to see updated shit
+// TODO: - My meets button is still kinda not working 
 // MARK: - IGNORE THE ABOVE TODOs FOR NOW
 // =========================================================
 // =========================================================

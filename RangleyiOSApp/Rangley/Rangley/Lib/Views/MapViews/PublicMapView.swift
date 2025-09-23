@@ -15,24 +15,24 @@ import UIKit
 import AWSPluginsCore
 
 
-/// =========================================================
-/// =========================================================
-/// =========================================================
-/// MARK: - IGNORE THE BELOW TODOs FOR NOW
-/// TODO: - FIGURE OUT A WAY TO TRIGER UPDATES ON OTHER PHONES WHEN MEETS ARE CREATED OR UPDATED
-/// TODO: - Fix the rotating screen view -- probably should look to be vertical
-/// TODO: - Create UNDO for deletes and updates
-/// TODO: - Create UNDO for deletes and updates
-/// TODO: - Fix recenter compass top right
-/// TODO: - return to user tap
-/// TODO: - Remeber User when Login Option and for Create New Account
-/// TODO: - NEED TO ADD categories and max capacties as options
-/// TODO: - DOCKVIEW REFUSES TO Dissapear when a keyboard comes onto the screen.
-/// MARK: - IGNORE THE ABOVE TODOs FOR NOW
-/// =========================================================
-/// =========================================================
-/// =========================================================
-
+// =========================================================
+// =========================================================
+// =========================================================
+// MARK: - IGNORE THE BELOW TODOs FOR NOW
+// TODO: - FIGURE OUT A WAY TO TRIGER UPDATES ON OTHER PHONES WHEN MEETS ARE CREATED OR UPDATED
+// TODO: - Fix the rotating screen view -- probably should look to be vertical
+// TODO: - Create UNDO for deletes and updates
+// TODO: - Create UNDO for deletes and updates
+// TODO: - Fix recenter compass top right
+// TODO: - return to user tap
+// TODO: - Remeber User when Login Option and for Create New Account
+// TODO: - NEED TO ADD categories and max capacties as options
+// TODO: - Figure out why the forms are slightly lagging between continues
+// TODO: - MASSIVE ISSUE THE REFRESH TOKEN ISN'T REFRESHING THE SESSION BASICALLY EXPIRES AND CAN'T TALK TO SERVER
+// MARK: - IGNORE THE ABOVE TODOs FOR NOW
+// =========================================================
+// =========================================================
+// =========================================================
 
 
 
@@ -633,7 +633,8 @@ struct MapView: View
                 {
                     ForEach(mapData.meets.filter(isInVisibleRegion), id: \.meet_id_uuid) { meet in
                         Annotation(
-                            meet.name,
+                            "",
+//                            meet.name,
                             coordinate: CLLocationCoordinate2D(latitude: meet.latitude, longitude: meet.longitude),
                             anchor: .center
                         ) {

@@ -84,7 +84,6 @@ public func routes(_ app: Application) throws
     }
     
     // GET /v/meets  -> all meet card data
-    // GET /v/meets  -> all meet card data
     v.get("meets")
     {
         req async throws -> [Func.ViewMeets.Results] in
