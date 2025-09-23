@@ -17,7 +17,8 @@ public struct HamburgerMenu: View
         self.onSignOut = onSignOut
     }
 
-    public var body: some View {
+    public var body: some View
+    {
         Button {
             showMenu = true
         } label: {
@@ -25,7 +26,7 @@ public struct HamburgerMenu: View
                 .font(.system(size: 18, weight: .semibold))
                 .imageScale(.large)
                 .foregroundStyle(AppPalette.Brand.neonPink)
-                .padding(12)
+                .frame(width: 48, height: 48)
                 .background(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
                         .fill(AppPalette.Brand.neonPink.opacity(0.14))
@@ -35,7 +36,6 @@ public struct HamburgerMenu: View
                         .stroke(AppPalette.Brand.neonPink.opacity(0.55), lineWidth: 1)
                 )
                 .contentShape(RoundedRectangle(cornerRadius: 16))
-                .frame(width: 48, height: 48)
         }
         .accessibilityLabel("Menu")
         .sheet(isPresented: $showMenu) {

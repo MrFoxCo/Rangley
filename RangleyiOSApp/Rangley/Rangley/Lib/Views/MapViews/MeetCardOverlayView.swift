@@ -85,8 +85,10 @@ struct MeetCardOverlay: View
     var onEdit:   (ViewMeetsModel) -> Void = { _ in }
     var onDelete: (ViewMeetsModel) -> Void = { _ in }
 
-    var body: some View {
-        ZStack {
+    var body: some View
+    {
+        ZStack
+        {
             if isPresented, let meet = selectedMeet {
                 Color.black.opacity(0.4)
                     .ignoresSafeArea()
@@ -98,7 +100,7 @@ struct MeetCardOverlay: View
                     onEdit: onEdit,
                     onDelete: onDelete
                 )
-                .frame(maxWidth: 420, maxHeight: 600)
+                .frame(maxWidth: 420, maxHeight: 490)
                 .background(
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
                         .fill(AppPalette.bgGradient)
@@ -113,12 +115,14 @@ struct MeetCardOverlay: View
                     removal: .opacity.combined(with: .scale(scale: 0.95))
                 ))
                 .padding(.horizontal, 20)
+                .padding(.top, 20)
             }
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.88), value: isPresented)
     }
 
-    private func close() {
+    private func close()
+    {
         withAnimation(.spring(response: 0.35, dampingFraction: 0.88)) {
             isPresented = false
         }

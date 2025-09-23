@@ -22,9 +22,10 @@
 
 import SwiftUI
 
-public struct DockView: View {
-    public var onSignOut: () -> Void
-    public var onCreateMeet: () -> Void
+public struct DockView: View
+{
+    public var onSignOut     : () -> Void
+    public var onCreateMeet  : () -> Void
     public var onMeetSelected: (ViewMeetsModel) -> Void
     public var onUserSelected: (ViewUsersModel) -> Void
     
@@ -72,93 +73,12 @@ public struct DockView: View {
                 )
                 
                 // Create meet button with migraine aura effect
-                Button(action: onCreateMeet)
-                {
-                    ZStack {
-                        // Migraine aura effect layers
-                        ForEach(0..<3, id: \.self) { index in
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .stroke(
-                                    LinearGradient(
-                                        colors: [
-                                            AppPalette.Brand.neonPink.opacity(0.8),
-                                            Color.purple.opacity(0.6),
-                                            Color.cyan.opacity(0.4),
-                                            AppPalette.Brand.neonPink.opacity(0.3)
-                                        ],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    ),
-                                    lineWidth: 2
-                                )
-                                .scaleEffect(1.0 + (Double(index) * 0.1))
-                                .opacity(isAnimating ? 0.2 : 0.6)
-                                .animation(
-                                    .easeInOut(duration: 2.0 + Double(index) * 0.5)
-                                    .repeatForever(autoreverses: true)
-                                    .delay(Double(index) * 0.3),
-                                    value: isAnimating
-                                )
-                        }
-                        
-                        // Background with shimmer
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(
-                                RadialGradient(
-                                    colors: [
-                                        AppPalette.Brand.neonPink.opacity(0.2),
-                                        Color.purple.opacity(0.15),
-                                        Color.cyan.opacity(0.1)
-                                    ],
-                                    center: .center,
-                                    startRadius: 10,
-                                    endRadius: 30
-                                )
-                            )
-                            .scaleEffect(isAnimating ? 1.05 : 1.0)
-                            .animation(
-                                .easeInOut(duration: 1.5)
-                                .repeatForever(autoreverses: true),
-                                value: isAnimating
-                            )
-                        
-                        // Plus icon
-                        Image(systemName: "plus")
-                            .font(.system(size: 20, weight: .bold))
-                            .imageScale(.large)
-                            .foregroundStyle(
-                                LinearGradient(
-                                    colors: [
-                                        AppPalette.Brand.neonPink,
-                                        Color.purple,
-                                        Color.cyan
-                                    ],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                            .rotationEffect(.degrees(isAnimating ? 90 : 0))
-                            .animation(
-                                .easeInOut(duration: 3.0)
-                                .repeatForever(autoreverses: true),
-                                value: isAnimating
-                            )
-                    }
-                    .frame(width: 48, height: 48)
-                }
-                .accessibilityLabel("Create Meet")
-                .onAppear {
-                    isAnimating = true
-                }
-                
-                // Search button
-                Button(action: { showSearch = true })
-                {
-                    Image(systemName: "magnifyingglass")
+                Button(action: onCreateMeet) {
+                    Image(systemName: "plus")
                         .font(.system(size: 18, weight: .semibold))
                         .imageScale(.large)
                         .foregroundStyle(AppPalette.Brand.neonPink)
-                        .padding(12)
+                        .frame(width: 48, height: 48)
                         .background(
                             RoundedRectangle(cornerRadius: 16, style: .continuous)
                                 .fill(AppPalette.Brand.neonPink.opacity(0.14))
@@ -168,7 +88,24 @@ public struct DockView: View {
                                 .stroke(AppPalette.Brand.neonPink.opacity(0.55), lineWidth: 1)
                         )
                         .contentShape(RoundedRectangle(cornerRadius: 16))
+                }
+                .accessibilityLabel("Create Meet")
+                // Search button
+                Button(action: { showSearch = true }) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 18, weight: .semibold))
+                        .imageScale(.large)
+                        .foregroundStyle(AppPalette.Brand.neonPink)
                         .frame(width: 48, height: 48)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(AppPalette.Brand.neonPink.opacity(0.14))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .stroke(AppPalette.Brand.neonPink.opacity(0.55), lineWidth: 1)
+                        )
+                        .contentShape(RoundedRectangle(cornerRadius: 16))
                 }
                 .accessibilityLabel("Search")
                 
