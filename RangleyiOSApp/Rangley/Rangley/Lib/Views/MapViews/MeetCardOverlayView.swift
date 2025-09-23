@@ -125,7 +125,7 @@ struct MeetCardOverlay: View
     }
 }
 
-// MARK: - Card content (no background; background is provided by overlay for the morph)
+// MARK: - Updated MeetCardView with Overlay Implementation
 private struct MeetCardView: View
 {
     let meet    : ViewMeetsModel
@@ -137,7 +137,7 @@ private struct MeetCardView: View
     @State private var addressText: String = "Loading address..."
     @State private var geocodingTask: Task<Void, Never>?
     
-    // For participant detail sheet
+    // For participant detail overlay - UPDATED
     @State private var selectedParticipant: ParticipantDetail?
     @State private var showingParticipantDetail = false
     
@@ -206,211 +206,222 @@ private struct MeetCardView: View
 
     var body: some View
     {
-        VStack(alignment: .leading, spacing: 16)
-        {
-            // Header with creator name and action buttons
-            HStack(alignment: .center)
+        ZStack {
+            VStack(alignment: .leading, spacing: 16)
             {
-                HStack(spacing: 8) {
-                    if isActive {
-                        LiveDot(color: liveGreen)
-                    }
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Created by")
-                            .font(.caption)
-                            .foregroundStyle(AppPalette.Text.tertiary)
-                        Text(meet.display_name)
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(AppPalette.Text.primary)
-                    }
-                }
-                
-                Spacer()
-                
-                HStack(spacing: 8)
+                // Header with creator name and action buttons
+                HStack(alignment: .center)
                 {
-                    if meet.is_owner {
-                        Button { onEdit(meet) } label: {
-                            Image(systemName: "pencil")
-                                .font(.system(size: 14, weight: .bold))
-                                .padding(8)
-                                .background(AppPalette.Surface.fieldFill, in: Circle())
-                                .overlay(Circle().stroke(AppPalette.Surface.fieldStroke, lineWidth: 1))
-                                .foregroundStyle(AppPalette.Brand.neonPink)
+                    HStack(spacing: 8) {
+                        if isActive {
+                            LiveDot(color: liveGreen)
                         }
-                        .buttonStyle(.plain)
-
-                        Button(role: .destructive) { showDeleteConfirm = true } label: {
-                            Image(systemName: "trash")
-                                .font(.system(size: 14, weight: .bold))
-                                .padding(8)
-                                .background(AppPalette.Surface.fieldFill, in: Circle())
-                                .overlay(Circle().stroke(AppPalette.Surface.fieldStroke, lineWidth: 1))
-                                .foregroundStyle(AppPalette.Brand.neonPink)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Created by")
+                                .font(.caption)
+                                .foregroundStyle(AppPalette.Text.tertiary)
+                            Text(meet.display_name)
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(AppPalette.Text.primary)
                         }
-                        .buttonStyle(.plain)
                     }
                     
-                    Button(action: onClose) {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 14, weight: .bold))
-                            .padding(8)
-                            .background(AppPalette.Surface.fieldFill, in: Circle())
-                            .overlay(Circle().stroke(AppPalette.Surface.fieldStroke, lineWidth: 1))
-                            .foregroundStyle(AppPalette.Text.secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            
-            Divider()
-                .background(AppPalette.Surface.fieldStroke)
-            
-            // Event Name (the main title)
-            Text(meet.name)
-                .font(.system(size: 24, weight: .bold, design: .rounded))
-                .foregroundStyle(AppPalette.Text.primary)
-                .lineLimit(2)
-            
-            // Date and Time
-            Label {
-                Text(dateRangeText)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(AppPalette.Text.primary)
-            } icon: {
-                Image(systemName: "calendar")
-                    .foregroundStyle(AppPalette.Brand.neonPink)
-            }
-            
-            // Category
-            HStack(spacing: 12) {
-                Chip(text: meet.category_name, systemImage: "tag.fill")
-            }
-            
-            // Location Information
-            VStack(alignment: .leading, spacing: 8)
-            {
-                Label {
-                    VStack(alignment: .leading, spacing: 4) {
-                        if !displayAddressName.isEmpty {
-                            Text(displayAddressName)
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundStyle(AppPalette.Text.primary)
-                                .lineLimit(1)
-                        }
-                        
-                        if !displayAddress.isEmpty {
-                            Text(displayAddress)
-                                .font(.system(size: 14))
-                                .foregroundStyle(AppPalette.Text.secondary)
-                                .lineLimit(1)
-                        }
-                        
-                        if !displaySubLocality.isEmpty {
-                            Text(displaySubLocality)
-                                .font(.system(size: 13))
-                                .foregroundStyle(AppPalette.Text.tertiary)
-                                .lineLimit(1)
-                        }
-                        
-                        if !displayCityAndState.isEmpty {
-                            Text(displayCityAndState)
-                                .font(.system(size: 13))
-                                .foregroundStyle(AppPalette.Text.secondary)
-                                .lineLimit(1)
-                        }
-                    }
-                } icon: {
-                    Image(systemName: "location.fill")
-                        .foregroundStyle(AppPalette.Brand.neonPink)
-                        .frame(width: 20)
-                }
-                .padding(.vertical, 12)
-                .padding(.horizontal, 12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(AppPalette.Surface.fieldFill.opacity(0.5))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
-                        )
-                )
-            }
-            
-            // Description (if exists)
-            if !meet.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("About")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(AppPalette.Text.primary)
-                    Text(meet.description)
-                        .font(.system(size: 14))
-                        .foregroundStyle(AppPalette.Text.secondary)
-                        .lineLimit(6)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(.top, 4)
-            }
-            
-            // Participant Information - UPDATED SECTION
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Participants")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(AppPalette.Text.primary)
-                
-                if meet.is_owner {
-                    // Show detailed participant list for owners
-                    if let participants = meet.participant_details, !participants.isEmpty {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 12) {
-                                ForEach(participants, id: \.user_uuid) { participant in
-                                    SimpleProfileCircle(
-                                        name: participant.display_name,
-                                        statusId: participant.participant_status_id
-                                    ) {
-                                        selectedParticipant = participant
-                                        showingParticipantDetail = true
-                                    }
-                                }
+                    Spacer()
+                    
+                    HStack(spacing: 8)
+                    {
+                        if meet.is_owner {
+                            Button { onEdit(meet) } label: {
+                                Image(systemName: "pencil")
+                                    .font(.system(size: 14, weight: .bold))
+                                    .padding(8)
+                                    .background(AppPalette.Surface.fieldFill, in: Circle())
+                                    .overlay(Circle().stroke(AppPalette.Surface.fieldStroke, lineWidth: 1))
+                                    .foregroundStyle(AppPalette.Brand.neonPink)
                             }
-                            .padding(.horizontal, 16)
+                            .buttonStyle(.plain)
+
+                            Button(role: .destructive) { showDeleteConfirm = true } label: {
+                                Image(systemName: "trash")
+                                    .font(.system(size: 14, weight: .bold))
+                                    .padding(8)
+                                    .background(AppPalette.Surface.fieldFill, in: Circle())
+                                    .overlay(Circle().stroke(AppPalette.Surface.fieldStroke, lineWidth: 1))
+                                    .foregroundStyle(AppPalette.Brand.neonPink)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .frame(height: 40)
-                    } else {
-                        Text("No participants yet")
-                            .font(.system(size: 13))
-                            .foregroundStyle(AppPalette.Text.tertiary)
-                            .italic()
-                    }
-                } else {
-                    // Show just the count for non-owners
-                    HStack {
-                        Image(systemName: "person.2.fill")
-                            .font(.system(size: 12))
-                            .foregroundStyle(AppPalette.Brand.neonPink)
                         
-                        Text("\(meet.accepted_count) accepted")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(AppPalette.Text.primary)
+                        Button(action: onClose) {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 14, weight: .bold))
+                                .padding(8)
+                                .background(AppPalette.Surface.fieldFill, in: Circle())
+                                .overlay(Circle().stroke(AppPalette.Surface.fieldStroke, lineWidth: 1))
+                                .foregroundStyle(AppPalette.Text.secondary)
+                        }
+                        .buttonStyle(.plain)
                     }
+                }
+                
+                Divider()
+                    .background(AppPalette.Surface.fieldStroke)
+                
+                // Event Name (the main title)
+                Text(meet.name)
+                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                    .foregroundStyle(AppPalette.Text.primary)
+                    .lineLimit(2)
+                
+                // Date and Time
+                Label {
+                    Text(dateRangeText)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(AppPalette.Text.primary)
+                } icon: {
+                    Image(systemName: "calendar")
+                        .foregroundStyle(AppPalette.Brand.neonPink)
+                }
+                
+                // Category
+                HStack(spacing: 12) {
+                    Chip(text: meet.category_name, systemImage: "tag.fill")
+                }
+                
+                // Location Information
+                VStack(alignment: .leading, spacing: 8)
+                {
+                    Label {
+                        VStack(alignment: .leading, spacing: 4) {
+                            if !displayAddressName.isEmpty {
+                                Text(displayAddressName)
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundStyle(AppPalette.Text.primary)
+                                    .lineLimit(1)
+                            }
+                            
+                            if !displayAddress.isEmpty {
+                                Text(displayAddress)
+                                    .font(.system(size: 14))
+                                    .foregroundStyle(AppPalette.Text.secondary)
+                                    .lineLimit(1)
+                            }
+                            
+                            if !displaySubLocality.isEmpty {
+                                Text(displaySubLocality)
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(AppPalette.Text.tertiary)
+                                    .lineLimit(1)
+                            }
+                            
+                            if !displayCityAndState.isEmpty {
+                                Text(displayCityAndState)
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(AppPalette.Text.secondary)
+                                    .lineLimit(1)
+                            }
+                        }
+                    } icon: {
+                        Image(systemName: "location.fill")
+                            .foregroundStyle(AppPalette.Brand.neonPink)
+                            .frame(width: 20)
+                    }
+                    .padding(.vertical, 12)
                     .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(AppPalette.Surface.fieldFill.opacity(0.3))
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(AppPalette.Surface.fieldFill.opacity(0.5))
                             .overlay(
-                                RoundedRectangle(cornerRadius: 8)
+                                RoundedRectangle(cornerRadius: 12)
                                     .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
                             )
                     )
                 }
-            }
-            .padding(.top, 4)
+                
+                // Description (if exists)
+                if !meet.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("About")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(AppPalette.Text.primary)
+                        Text(meet.description)
+                            .font(.system(size: 14))
+                            .foregroundStyle(AppPalette.Text.secondary)
+                            .lineLimit(6)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.top, 4)
+                }
+                
+                // Participant Information - UPDATED SECTION
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Participants")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(AppPalette.Text.primary)
+                    
+                    if meet.is_owner {
+                        // Show detailed participant list for owners
+                        if let participants = meet.participant_details, !participants.isEmpty {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 12) {
+                                    ForEach(participants, id: \.user_uuid) { participant in
+                                        SimpleProfileCircle(
+                                            name: participant.display_name,
+                                            statusId: participant.participant_status_id
+                                        ) {
+                                            selectedParticipant = participant
+                                            showingParticipantDetail = true
+                                        }
+                                    }
+                                }
+                                .padding(.horizontal, 16)
+                            }
+                            .frame(height: 40)
+                        } else {
+                            Text("No participants yet")
+                                .font(.system(size: 13))
+                                .foregroundStyle(AppPalette.Text.tertiary)
+                                .italic()
+                        }
+                    } else {
+                        // Show just the count for non-owners
+                        HStack {
+                            Image(systemName: "person.2.fill")
+                                .font(.system(size: 12))
+                                .foregroundStyle(AppPalette.Brand.neonPink)
+                            
+                            Text("\(meet.accepted_count) accepted")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundStyle(AppPalette.Text.primary)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(AppPalette.Surface.fieldFill.opacity(0.3))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
+                                )
+                        )
+                    }
+                }
+                .padding(.top, 4)
 
-            Spacer(minLength: 0)
+                Spacer(minLength: 0)
+            }
+            .padding(20)
+            
+            // PARTICIPANT DETAIL OVERLAY - REPLACES THE SHEET
+            if showingParticipantDetail, let participants = meet.participant_details {
+                ParticipantDetailOverlay(
+                    participants: participants,
+                    selectedParticipant: $selectedParticipant,
+                    showingDetail: $showingParticipantDetail
+                )
+            }
         }
-        .padding(20)
         .task { loadAddress() }
         .onDisappear { geocodingTask?.cancel() }
         .onReceive(timer) { now = $0 }
@@ -423,15 +434,7 @@ private struct MeetCardView: View
         } message: {
             Text("This action cannot be undone.")
         }
-        .sheet(isPresented: $showingParticipantDetail) {
-            if let participants = meet.participant_details {
-                ParticipantDetailSheet(
-                    participants: participants,
-                    selectedParticipant: $selectedParticipant,
-                    showingDetail: $showingParticipantDetail
-                )
-            }
-        }
+        // REMOVE THE OLD SHEET PRESENTATION - IT'S NOW HANDLED BY THE OVERLAY ABOVE
     }
 }
 
@@ -544,12 +547,19 @@ private struct SimpleProfileCircle: View
     }
 }
 
-// Alternative version with a more iOS-native popover style:
-private struct ParticipantDetailSheet: View
+private struct ParticipantDetailOverlay: View
 {
     let participants: [ParticipantDetail]
     @Binding var selectedParticipant: ParticipantDetail?
     @Binding var showingDetail: Bool
+    
+    private var currentIndex: Int {
+        guard let selected = selectedParticipant,
+              let index = participants.firstIndex(where: { $0.user_uuid == selected.user_uuid }) else {
+            return 0
+        }
+        return index
+    }
     
     private var participant: ParticipantDetail? {
         selectedParticipant
@@ -593,93 +603,147 @@ private struct ParticipantDetailSheet: View
         return ""
     }
     
+    private func navigateToParticipant(at index: Int) {
+        guard index >= 0 && index < participants.count else { return }
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+            selectedParticipant = participants[index]
+        }
+    }
+    
     var body: some View {
-        VStack(spacing: 0) {
-            // Drag indicator
-            RoundedRectangle(cornerRadius: 2)
-                .fill(Color.secondary.opacity(0.3))
-                .frame(width: 36, height: 4)
-                .padding(.top, 8)
-                .padding(.bottom, 16)
+        ZStack {
+            // Background overlay
+            Color.black.opacity(0.4)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    withAnimation(.easeOut(duration: 0.3)) {
+                        showingDetail = false
+                    }
+                }
             
-            if let participant = participant {
-                VStack(spacing: 20) {
-                    // Profile section
-                    VStack(spacing: 12) {
-                        // Large profile circle
-                        ZStack {
-                            Circle()
-                                .fill(AppPalette.Brand.neonPink.opacity(0.2))
-                                .frame(width: 80, height: 80)
-                                .overlay(
-                                    Text(initials)
-                                        .font(.system(size: 28, weight: .semibold))
-                                        .foregroundStyle(AppPalette.Brand.neonPink)
-                                )
-                                .overlay(
-                                    Circle()
-                                        .fill(statusColor)
-                                        .frame(width: 20, height: 20)
-                                        .offset(x: 28, y: -28)
-                                        .overlay(
-                                            Circle()
-                                                .stroke(AppPalette.Surface.primary, lineWidth: 3)
-                                                .frame(width: 20, height: 20)
-                                                .offset(x: 28, y: -28)
-                                        )
-                                )
+            // Main card
+            VStack(spacing: 0) {
+                if let participant = participant {
+                    VStack(spacing: 24) {
+                        // Close button
+                        HStack {
+                            Spacer()
+                            Button {
+                                withAnimation(.easeOut(duration: 0.3)) {
+                                    showingDetail = false
+                                }
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundStyle(AppPalette.Text.secondary)
+                                    .frame(width: 32, height: 32)
+                                    .background(
+                                        Circle()
+                                            .fill(AppPalette.Surface.fieldFill)
+                                    )
+                            }
+                        }
+                        .padding(.top, 20)
+                        .padding(.horizontal, 20)
+                        
+                        // Profile section
+                        VStack(spacing: 16) {
+                            // Large profile circle
+                            ZStack {
+                                Circle()
+                                    .fill(AppPalette.Brand.neonPink.opacity(0.2))
+                                    .frame(width: 100, height: 100)
+                                    .overlay(
+                                        Text(initials)
+                                            .font(.system(size: 36, weight: .semibold))
+                                            .foregroundStyle(AppPalette.Brand.neonPink)
+                                    )
+                                    .overlay(
+                                        Group {
+                                            if participant.participant_status_id == 7 {
+                                                // Crown icon for Owner status
+                                                Image(systemName: "crown.fill")
+                                                    .font(.system(size: 12, weight: .semibold))
+                                                    .foregroundStyle(.yellow)
+                                            } else {
+                                                // Regular colored circle for other statuses
+                                                Circle()
+                                                    .fill(statusColor)
+                                                    .frame(width: 24, height: 24)
+                                                    .overlay(
+                                                        Circle()
+                                                            .stroke(AppPalette.Surface.primary, lineWidth: 3)
+                                                            .frame(width: 24, height: 24)
+                                                    )
+                                            }
+                                        }
+                                        .offset(x: 35, y: -35)
+                                    )
+                            }
+                            
+                            VStack(spacing: 8) {
+                                Text(participant.display_name)
+                                    .font(.system(size: 22, weight: .bold))
+                                    .foregroundStyle(AppPalette.Text.primary)
+                                
+                                Text(statusText)
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundStyle(statusColor)
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 6)
+                                    .background(
+                                        Capsule()
+                                            .fill(statusColor.opacity(0.15))
+                                            .overlay(
+                                                Capsule().stroke(statusColor.opacity(0.4), lineWidth: 1)
+                                            )
+                                    )
+                            }
                         }
                         
-                        VStack(spacing: 4) {
-                            Text(participant.display_name)
-                                .font(.system(size: 18, weight: .semibold))
-                                .foregroundStyle(AppPalette.Text.primary)
-                            
-                            Text(statusText)
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundStyle(statusColor)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 4)
-                                .background(
-                                    Capsule()
-                                        .fill(statusColor.opacity(0.15))
-                                        .overlay(
-                                            Capsule().stroke(statusColor.opacity(0.4), lineWidth: 1)
-                                        )
-                                )
-                        }
-                    }
-                    
-                    // Navigation through participants
-                    if participants.count > 1 {
-                        HStack(spacing: 8) {
-                            ForEach(Array(participants.enumerated()), id: \.element.user_uuid) { index, p in
-                                Button {
-                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                        selectedParticipant = p
-                                    }
-                                } label: {
+                        // Navigation indicators (only show if multiple participants)
+                        if participants.count > 1 {
+                            HStack(spacing: 10) {
+                                ForEach(Array(participants.enumerated()), id: \.element.user_uuid) { index, p in
                                     Circle()
-                                        .fill(p.user_uuid == participant.user_uuid ?
+                                        .fill(index == currentIndex ?
                                               AppPalette.Brand.neonPink :
                                               AppPalette.Brand.neonPink.opacity(0.3))
                                         .frame(width: 8, height: 8)
+                                        .scaleEffect(index == currentIndex ? 1.2 : 1.0)
+                                        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: currentIndex)
                                 }
                             }
+                            .padding(.bottom, 8)
                         }
-                        .padding(.bottom, 8)
+                        
+                        Spacer(minLength: 20)
                     }
                 }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 32)
             }
+            .frame(width: 280, height: 320)
+            .background(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(AppPalette.Surface.primary)
+                    .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
+            )
+            .scaleEffect(showingDetail ? 1.0 : 0.8)
+            .opacity(showingDetail ? 1.0 : 0)
+            .gesture(
+                DragGesture()
+                    .onEnded { value in
+                        let threshold: CGFloat = 50
+                        
+                        if value.translation.width > threshold && currentIndex > 0 {
+                            // Swipe right - go to previous
+                            navigateToParticipant(at: currentIndex - 1)
+                        } else if value.translation.width < -threshold && currentIndex < participants.count - 1 {
+                            // Swipe left - go to next
+                            navigateToParticipant(at: currentIndex + 1)
+                        }
+                    }
+            )
         }
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(AppPalette.Surface.primary)
-                .ignoresSafeArea(edges: .bottom)
-        )
-        .presentationDetents([.height(280)])
-        .presentationDragIndicator(.hidden)
+        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: showingDetail)
     }
 }
