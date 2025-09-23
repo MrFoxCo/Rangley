@@ -610,19 +610,13 @@ private struct ParticipantDetailOverlay: View
         }
     }
     
-    var body: some View {
-        ZStack {
-            // Background overlay
-            Color.black.opacity(0.4)
-                .ignoresSafeArea()
-                .onTapGesture {
-                    withAnimation(.easeOut(duration: 0.3)) {
-                        showingDetail = false
-                    }
-                }
-            
+    var body: some View
+    {
+        ZStack
+        {
             // Main card
-            VStack(spacing: 0) {
+            VStack(spacing: 0)
+            {
                 if let participant = participant {
                     VStack(spacing: 24) {
                         // Close button
@@ -639,7 +633,7 @@ private struct ParticipantDetailOverlay: View
                                     .frame(width: 32, height: 32)
                                     .background(
                                         Circle()
-                                            .fill(AppPalette.Surface.fieldFill)
+                                            .fill(AppPalette.Brand.neonPink)
                                     )
                             }
                         }
@@ -724,8 +718,8 @@ private struct ParticipantDetailOverlay: View
             .frame(width: 280, height: 320)
             .background(
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(AppPalette.Surface.primary)
-                    .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
+                    .fill(AppPalette.Brand.russianViolet)
+                    .shadow(color: .black, radius: 20, x: 0, y: 10)
             )
             .scaleEffect(showingDetail ? 1.0 : 0.8)
             .opacity(showingDetail ? 1.0 : 0)

@@ -52,7 +52,7 @@ struct AppPalette {
     
     struct Surface
     {
-        static let primary        = Color.white.opacity(0.08)
+        static let primary        = Color.white.opacity(0.9)
         static let fieldFill        = Color.white.opacity(0.08)
         static let nearByBadgeFill   = Color.white.opacity(0.9)
         static let fieldStroke = Color.white.opacity(0.16)
