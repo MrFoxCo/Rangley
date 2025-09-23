@@ -100,10 +100,23 @@ final class InboxStore: ObservableObject {
 
     func respondToInvitation(_ n: ViewNotificationsModel, statusId: Int16) async throws {
         guard !token.isEmpty else { throw AuthAPIError.http(-1, "No auth token") }
+
+        // Optimistic UI: remove the pending invite locally and update the badge
+        await MainActor.run {
+            self.notifications.removeAll { $0.id == n.id }
+            self.inviteCount = self.notifications.filter {
+                $0.notification_type_id == 8 && $0.participant_status_id == 4
+            }.count
+        }
+
+        // Server call
         let body = RespondToInviteBody(meet_id_uuid: n.meet_id_uuid, response_status_id: statusId)
         _ = try await AuthAPI.respondToInvitation(baseURL: baseURL, token: token, body: body)
-        await refresh(force: true) // keep badge + list in sync
+
+        // Reconcile with backend
+        await refresh(force: true)
     }
+
 
     // MARK: - Helpers
     func clear() {

@@ -72,16 +72,6 @@ struct MyMeetsView: View
         }
         .sheet(isPresented: $isPresented) {
             MyMeetsOverlay(
-                meets: mapDataStore.meets, // Use global state
-                notifications: inbox.notifications,
-                isLoading: mapDataStore.isLoading, // Use global loading state
-                errorMessage: mapDataStore.error, // Use global error state
-                onRetry: {
-                    Task {
-                        await mapDataStore.forceRefresh() // Use global refresh
-                        await inbox.refresh()
-                    }
-                },
                 onMeetSelected: { meet in
                     isPresented = false
                     onMeetSelected?(meet)
@@ -89,11 +79,14 @@ struct MyMeetsView: View
                 onInvitationResponse: { n, status in
                     Task {
                         try? await inbox.respondToInvitation(n, statusId: status)
-                        await mapDataStore.forceRefresh() // This will update global state immediately
+                        await mapDataStore.forceRefresh()
                     }
                 }
             )
+            .environmentObject(inbox)         // LIVE InboxStore
+            .environmentObject(mapDataStore)  // LIVE MapDataStore
         }
+
     }
     
     private struct CountBadge: View
@@ -147,36 +140,31 @@ struct MyMeetsView: View
 // MARK: - MyMeetsOverlay
 struct MyMeetsOverlay: View
 {
-    let meets           : [ViewMeetsModel]
-    let notifications   : [ViewNotificationsModel]
-    let isLoading       : Bool
-    let errorMessage    : String?
-    let onRetry         : () -> Void
-    let onMeetSelected  : ((ViewMeetsModel) -> Void)?
+    @EnvironmentObject var inbox: InboxStore
+    @EnvironmentObject var mapDataStore: MapDataStore
+
+    let onMeetSelected: ((ViewMeetsModel) -> Void)?
     let onInvitationResponse: ((ViewNotificationsModel, Int16) -> Void)?
-    
+
     @Environment(\.dismiss) private var dismiss
-    
-    var body: some View
-    {
+
+    var body: some View {
         NavigationView {
             VStack(spacing: 0) {
                 headerView
-                
                 ZStack {
-                    AppPalette.Brand.russianViolet.opacity(0.05)
-                        .ignoresSafeArea()
-                    
-                    if isLoading {
+                    AppPalette.Brand.russianViolet.opacity(0.05).ignoresSafeArea()
+
+                    if mapDataStore.isLoading {
                         loadingView
-                    } else if let errorMessage = errorMessage {
-                        errorView(errorMessage)
-                    } else if meets.isEmpty && notifications.isEmpty {
+                    } else if let e = mapDataStore.error {
+                        errorView(e)
+                    } else if mapDataStore.meets.isEmpty && inbox.notifications.isEmpty {
                         emptyStateView
                     } else {
                         MyMeetsContentView(
-                            meets: meets,
-                            notifications: notifications,
+                            meets: mapDataStore.meets,
+                            notifications: inbox.notifications,
                             onMeetSelected: onMeetSelected,
                             onInvitationResponse: onInvitationResponse
                         )
@@ -185,8 +173,13 @@ struct MyMeetsOverlay: View
             }
             .navigationBarHidden(true)
         }
+        .task {
+            await mapDataStore.forceRefresh()
+            await inbox.refresh(force: true)
+        }
     }
 }
+
 
 
 // MARK: - Content Views
@@ -234,25 +227,29 @@ private extension MyMeetsOverlay
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     
-    func errorView(_ message: String) -> some View {
+    private func errorView(_ message: String) -> some View
+    {
         VStack(spacing: 20) {
             Image(systemName: "exclamationmark.triangle")
                 .font(.system(size: 48, weight: .light))
                 .foregroundStyle(Color.orange.opacity(0.7))
-            
+
             VStack(spacing: 8) {
                 Text("Unable to Load Meets")
                     .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(Color.primary)
-                
+
                 Text(message)
                     .font(.system(size: 16))
                     .foregroundStyle(Color.secondary)
                     .multilineTextAlignment(.center)
             }
-            
+
             Button("Retry") {
-                onRetry()
+                Task {
+                    await mapDataStore.forceRefresh()
+                    await inbox.refresh(force: true)
+                }
             }
             .font(.system(size: 16, weight: .semibold))
             .foregroundStyle(Color.white)
@@ -266,6 +263,7 @@ private extension MyMeetsOverlay
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 40)
     }
+
     
     var emptyStateView: some View {
         VStack(spacing: 20) {

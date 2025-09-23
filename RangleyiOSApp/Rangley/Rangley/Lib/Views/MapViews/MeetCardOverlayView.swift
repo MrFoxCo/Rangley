@@ -137,12 +137,15 @@ private struct MeetCardView: View
     @State private var addressText: String = "Loading address..."
     @State private var geocodingTask: Task<Void, Never>?
     
+    // For participant detail sheet
+    @State private var selectedParticipant: ParticipantDetail?
+    @State private var showingParticipantDetail = false
+    
     // "Live" time awareness
     @State private var now: Date = .init()
     private let timer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
     private var isActive: Bool { now >= meet.dttm_start_utc && now < meet.dttm_end_utc }
-    private let liveGreen = Color(hex: "#39FF14") // swap to AppPalette.Brand.neonGreen if you have it
-
+    private let liveGreen = Color(hex: "#39FF14")
 
     // Address components from geocoding
     @State private var displayAddressName  : String = ""
@@ -173,7 +176,6 @@ private struct MeetCardView: View
                     return
                 }
 
-                // Safer extraction (no out-of-bounds)
                 let name      = p.name?.trimmingCharacters(in: .whitespacesAndNewlines)
                 let street    = p.thoroughfare?.trimmingCharacters(in: .whitespacesAndNewlines)
                 let number    = p.subThoroughfare?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -211,7 +213,7 @@ private struct MeetCardView: View
             {
                 HStack(spacing: 8) {
                     if isActive {
-                        LiveDot(color: liveGreen) // small, inline; won't overlap content
+                        LiveDot(color: liveGreen)
                     }
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Created by")
@@ -227,7 +229,6 @@ private struct MeetCardView: View
                 
                 HStack(spacing: 8)
                 {
-                    // Only show edit and delete buttons if user is owner
                     if meet.is_owner {
                         Button { onEdit(meet) } label: {
                             Image(systemName: "pencil")
@@ -281,11 +282,9 @@ private struct MeetCardView: View
                     .foregroundStyle(AppPalette.Brand.neonPink)
             }
             
-            // Category and Capacity side by side
-            // TODO: - Setup Max Capacity this in Version 2
+            // Category
             HStack(spacing: 12) {
                 Chip(text: meet.category_name, systemImage: "tag.fill")
-               // Chip(text: "\(meet.max_capacity) spots", systemImage: "person.2.fill")
             }
             
             // Location Information
@@ -353,7 +352,8 @@ private struct MeetCardView: View
                 }
                 .padding(.top, 4)
             }
-            // Participant Information
+            
+            // Participant Information - UPDATED SECTION
             VStack(alignment: .leading, spacing: 12) {
                 Text("Participants")
                     .font(.system(size: 14, weight: .semibold))
@@ -362,18 +362,21 @@ private struct MeetCardView: View
                 if meet.is_owner {
                     // Show detailed participant list for owners
                     if let participants = meet.participant_details, !participants.isEmpty {
-                        // Horizontal scrolling profile circles
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 12) {
                                 ForEach(participants, id: \.user_uuid) { participant in
-                                    ProfileCircle(
+                                    SimpleProfileCircle(
                                         name: participant.display_name,
                                         statusId: participant.participant_status_id
-                                    )
+                                    ) {
+                                        selectedParticipant = participant
+                                        showingParticipantDetail = true
+                                    }
                                 }
                             }
+                            .padding(.horizontal, 16)
                         }
-                        .frame(height: 44) // Fixed height for the scroll view
+                        .frame(height: 40)
                     } else {
                         Text("No participants yet")
                             .font(.system(size: 13))
@@ -410,6 +413,7 @@ private struct MeetCardView: View
         .padding(20)
         .task { loadAddress() }
         .onDisappear { geocodingTask?.cancel() }
+        .onReceive(timer) { now = $0 }
         .alert("Delete this meet?", isPresented: $showDeleteConfirm) {
             Button("Delete", role: .destructive) {
                 onDelete(meet)
@@ -418,6 +422,15 @@ private struct MeetCardView: View
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This action cannot be undone.")
+        }
+        .sheet(isPresented: $showingParticipantDetail) {
+            if let participants = meet.participant_details {
+                ParticipantDetailSheet(
+                    participants: participants,
+                    selectedParticipant: $selectedParticipant,
+                    showingDetail: $showingParticipantDetail
+                )
+            }
         }
     }
 }
@@ -464,138 +477,14 @@ private struct Chip: View
     }
 }
 
-private struct ParticipantStatusChip: View {
-    let statusId: Int16
-    
-    private var statusInfo: (text: String, color: Color) {
-        switch statusId {
-        case 4: return ("Invited", Color.gray)
-        case 5: return ("Declined", Color.red)
-        case 6: return ("Accepted", Color.green)
-        default: return ("Unknown", Color.gray)
-        }
-    }
-    
-    var body: some View {
-        Text(statusInfo.text)
-            .font(.system(size: 11, weight: .medium))
-            .foregroundStyle(statusInfo.color)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(
-                Capsule()
-                    .fill(statusInfo.color.opacity(0.15))
-                    .overlay(
-                        Capsule().stroke(statusInfo.color.opacity(0.3), lineWidth: 1)
-                    )
-            )
-    }
-}
+// Replace the existing ProfileCircle struct with this updated version:
 
-
-// TODO: - COnsider remvoign
-struct FlowLayout: Layout
-{
-    var spacing: CGFloat = 8
-    
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let result = FlowResult(
-            in: proposal.width ?? .infinity,
-            subviews: subviews,
-            spacing: spacing
-        )
-        return result.size
-    }
-    
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let result = FlowResult(
-            in: bounds.width,
-            subviews: subviews,
-            spacing: spacing
-        )
-        for (index, subview) in subviews.enumerated() {
-            subview.place(
-                at: CGPoint(
-                    x: bounds.minX + result.positions[index].x,
-                    y: bounds.minY + result.positions[index].y
-                ),
-                proposal: ProposedViewSize(result.sizes[index])
-            )
-        }
-    }
-    
-    struct FlowResult {
-        var size: CGSize = .zero
-        var positions: [CGPoint] = []
-        var sizes: [CGSize] = []
-        
-        init(in maxWidth: CGFloat, subviews: Subviews, spacing: CGFloat) {
-            var x: CGFloat = 0
-            var y: CGFloat = 0
-            var rowHeight: CGFloat = 0
-            
-            for subview in subviews {
-                let size = subview.sizeThatFits(.unspecified)
-                sizes.append(size)
-                
-                if x + size.width > maxWidth, x > 0 {
-                    x = 0
-                    y += rowHeight + spacing
-                    rowHeight = 0
-                }
-                
-                positions.append(CGPoint(x: x, y: y))
-                x += size.width + spacing
-                rowHeight = max(rowHeight, size.height)
-            }
-            
-            self.size = CGSize(width: maxWidth, height: y + rowHeight)
-        }
-    }
-}
-
-// TODO: - consider removing
-private struct ParticipantPill: View {
-    let name: String
-    let statusId: Int16
-    
-    var body: some View {
-        HStack(spacing: 6) {
-            // Initial circle (like in your screenshot)
-            Circle()
-                .fill(AppPalette.Brand.neonPink.opacity(0.3))
-                .frame(width: 28, height: 28)
-                .overlay(
-                    Text(String(name.prefix(1).uppercased()))
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(AppPalette.Brand.neonPink)
-                )
-            
-            Text(name)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(AppPalette.Text.primary)
-                .lineLimit(1)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(
-            Capsule()
-                .fill(AppPalette.Surface.fieldFill.opacity(0.5))
-                .overlay(
-                    Capsule()
-                        .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1)
-                )
-        )
-    }
-}
-// Add this new ProfileCircle view
-
-private struct ProfileCircle: View
+private struct SimpleProfileCircle: View
 {
     let name: String
     let statusId: Int16
+    let onTap: () -> Void
     
-    /// participant status id numbers: 4 = invited, 5 = declined, 6 = accepted, 7 = owner
     private var statusColor: Color {
         switch statusId {
         case 6: return Color.green  // Accepted
@@ -605,21 +494,192 @@ private struct ProfileCircle: View
         }
     }
     
+    private var initials: String {
+        let components = name.split(separator: " ")
+        if components.count >= 2 {
+            let first = String(components[0].prefix(1))
+            let second = String(components[1].prefix(1))
+            return (first + second).uppercased()
+        } else if components.count == 1 {
+            let word = String(components[0])
+            if word.count >= 2 {
+                return String(word.prefix(2)).uppercased()
+            } else {
+                return word.uppercased()
+            }
+        }
+        return ""
+    }
+    
     var body: some View {
-        Circle()
-            .fill(AppPalette.Brand.neonPink.opacity(0.2))
-            .frame(width: 40, height: 40)
-            .overlay(
-                Text(String(name.prefix(1).uppercased()))
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(AppPalette.Brand.neonPink)
-            )
-            .overlay(
-                // Status indicator dot (optional - remove if not needed)
+        Button(action: onTap) {
+            ZStack {
                 Circle()
-                    .fill(statusColor)
-                    .frame(width: 10, height: 10)
-                    .offset(x: 14, y: -14)
-            )
+                    .fill(AppPalette.Brand.neonPink.opacity(0.2))
+                    .frame(width: 40, height: 40)
+                    .overlay(
+                        Text(initials)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(AppPalette.Brand.neonPink)
+                    )
+                    .overlay(
+                        Group {
+                            if statusId == 7 {
+                                // Crown icon for Owner status
+                                Image(systemName: "crown.fill")
+                                    .font(.system(size: 8, weight: .semibold))
+                                    .foregroundStyle(.yellow)
+                            } else {
+                                // Regular colored circle for other statuses
+                                Circle()
+                                    .fill(statusColor)
+                                    .frame(width: 10, height: 10)
+                            }
+                        }
+                        .offset(x: 14, y: -14)
+                    )
+            }
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+}
+
+// Alternative version with a more iOS-native popover style:
+private struct ParticipantDetailSheet: View
+{
+    let participants: [ParticipantDetail]
+    @Binding var selectedParticipant: ParticipantDetail?
+    @Binding var showingDetail: Bool
+    
+    private var participant: ParticipantDetail? {
+        selectedParticipant
+    }
+    
+    private var statusText: String {
+        guard let participant = participant else { return "" }
+        switch participant.participant_status_id {
+        case 6: return "Accepted"
+        case 5: return "Declined"
+        case 7: return "Owner"
+        default: return "Invited"
+        }
+    }
+    
+    private var statusColor: Color {
+        guard let participant = participant else { return .gray }
+        switch participant.participant_status_id {
+        case 6: return Color.green
+        case 5: return Color.red
+        case 7: return AppPalette.Brand.neonPink
+        default: return Color.gray
+        }
+    }
+    
+    private var initials: String {
+        guard let participant = participant else { return "" }
+        let components = participant.display_name.split(separator: " ")
+        if components.count >= 2 {
+            let first = String(components[0].prefix(1))
+            let second = String(components[1].prefix(1))
+            return (first + second).uppercased()
+        } else if components.count == 1 {
+            let word = String(components[0])
+            if word.count >= 2 {
+                return String(word.prefix(2)).uppercased()
+            } else {
+                return word.uppercased()
+            }
+        }
+        return ""
+    }
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Drag indicator
+            RoundedRectangle(cornerRadius: 2)
+                .fill(Color.secondary.opacity(0.3))
+                .frame(width: 36, height: 4)
+                .padding(.top, 8)
+                .padding(.bottom, 16)
+            
+            if let participant = participant {
+                VStack(spacing: 20) {
+                    // Profile section
+                    VStack(spacing: 12) {
+                        // Large profile circle
+                        ZStack {
+                            Circle()
+                                .fill(AppPalette.Brand.neonPink.opacity(0.2))
+                                .frame(width: 80, height: 80)
+                                .overlay(
+                                    Text(initials)
+                                        .font(.system(size: 28, weight: .semibold))
+                                        .foregroundStyle(AppPalette.Brand.neonPink)
+                                )
+                                .overlay(
+                                    Circle()
+                                        .fill(statusColor)
+                                        .frame(width: 20, height: 20)
+                                        .offset(x: 28, y: -28)
+                                        .overlay(
+                                            Circle()
+                                                .stroke(AppPalette.Surface.primary, lineWidth: 3)
+                                                .frame(width: 20, height: 20)
+                                                .offset(x: 28, y: -28)
+                                        )
+                                )
+                        }
+                        
+                        VStack(spacing: 4) {
+                            Text(participant.display_name)
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(AppPalette.Text.primary)
+                            
+                            Text(statusText)
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundStyle(statusColor)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 4)
+                                .background(
+                                    Capsule()
+                                        .fill(statusColor.opacity(0.15))
+                                        .overlay(
+                                            Capsule().stroke(statusColor.opacity(0.4), lineWidth: 1)
+                                        )
+                                )
+                        }
+                    }
+                    
+                    // Navigation through participants
+                    if participants.count > 1 {
+                        HStack(spacing: 8) {
+                            ForEach(Array(participants.enumerated()), id: \.element.user_uuid) { index, p in
+                                Button {
+                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                        selectedParticipant = p
+                                    }
+                                } label: {
+                                    Circle()
+                                        .fill(p.user_uuid == participant.user_uuid ?
+                                              AppPalette.Brand.neonPink :
+                                              AppPalette.Brand.neonPink.opacity(0.3))
+                                        .frame(width: 8, height: 8)
+                                }
+                            }
+                        }
+                        .padding(.bottom, 8)
+                    }
+                }
+                .padding(.horizontal, 24)
+                .padding(.bottom, 32)
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(AppPalette.Surface.primary)
+                .ignoresSafeArea(edges: .bottom)
+        )
+        .presentationDetents([.height(280)])
+        .presentationDragIndicator(.hidden)
     }
 }
