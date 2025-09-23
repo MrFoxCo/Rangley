@@ -133,9 +133,10 @@ private struct MeetCardView: View
     let onEdit  : (ViewMeetsModel) -> Void
     let onDelete: (ViewMeetsModel) -> Void
 
-    @State private var showDeleteConfirm = false
-    @State private var addressText: String = "Loading address..."
-    @State private var geocodingTask: Task<Void, Never>?
+    @State private var showDeleteConfirm         = false
+    @State private var showLeaveConfirm          = false
+    @State private var addressText      : String = "Loading address..."
+    @State private var geocodingTask    : Task<Void, Never>?
     
     // For participant detail overlay - UPDATED
     @State private var selectedParticipant: ParticipantDetail?
@@ -159,6 +160,18 @@ private struct MeetCardView: View
         f.dateStyle = .medium
         f.timeStyle = .short
         return f.string(from: meet.dttm_start_utc, to: meet.dttm_end_utc)
+    }
+    
+    // Helper to check if current user is an accepted participant (not owner)
+    private var isAcceptedParticipant: Bool
+    {
+        guard !meet.is_owner,
+              let participants = meet.participant_details else { return false }
+        
+        // Check if current user has accepted (status 6)
+        // Note: In a real implementation, you'd compare against current user's UUID
+        // For now, we'll check if there's any accepted participant that's not the owner
+        return participants.contains { $0.participant_status_id == 6 && $0.participant_status_id != 7 }
     }
 
     // Geocoding function to get address from coordinates
@@ -250,6 +263,17 @@ private struct MeetCardView: View
                                     .foregroundStyle(AppPalette.Brand.neonPink)
                             }
                             .buttonStyle(.plain)
+                        } else if isAcceptedParticipant {
+                            // Leave Meet button for accepted participants (not owners)
+                            Button(role: .destructive) { showLeaveConfirm = true } label: {
+                                Image(systemName: "person.badge.minus")
+                                    .font(.system(size: 14, weight: .bold))
+                                    .padding(8)
+                                    .background(AppPalette.Surface.fieldFill, in: Circle())
+                                    .overlay(Circle().stroke(AppPalette.Surface.fieldStroke, lineWidth: 1))
+                                    .foregroundStyle(.red)
+                            }
+                            .buttonStyle(.plain)
                         }
                         
                         Button(action: onClose) {
@@ -285,7 +309,7 @@ private struct MeetCardView: View
                 
                 // Category
                 HStack(spacing: 12) {
-                    Chip(text: meet.category_name, systemImage: "tag.fill")
+                    Chip(text: meet.category_name, systemImage: "figure.run")
                 }
                 
                 // Location Information
@@ -434,7 +458,18 @@ private struct MeetCardView: View
         } message: {
             Text("This action cannot be undone.")
         }
-        // REMOVE THE OLD SHEET PRESENTATION - IT'S NOW HANDLED BY THE OVERLAY ABOVE
+        .alert("Leave this meet?", isPresented: $showLeaveConfirm) {
+            Button("Leave", role: .destructive) {
+                // TODO: Implement leave meet functionality
+                print("User chose to leave the meet")
+                onClose()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Are you sure you want to leave this meet?")
+        }
+
+        
     }
 }
 
@@ -664,11 +699,6 @@ private struct ParticipantDetailOverlay: View
                                                 Circle()
                                                     .fill(statusColor)
                                                     .frame(width: 24, height: 24)
-                                                    .overlay(
-                                                        Circle()
-                                                            .stroke(AppPalette.Surface.primary, lineWidth: 3)
-                                                            .frame(width: 24, height: 24)
-                                                    )
                                             }
                                         }
                                         .offset(x: 35, y: -35)

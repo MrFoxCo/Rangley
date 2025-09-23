@@ -45,7 +45,8 @@ struct MyMeetsView: View
         self.onMeetSelected = onMeetSelected
     }
     
-    var body: some View {
+    var body: some View
+    {
         Button(action: {
             isPresented = true
             Task {
@@ -150,9 +151,12 @@ struct MyMeetsOverlay: View
 
     var body: some View {
         NavigationView {
-            VStack(spacing: 0) {
+            VStack(spacing: 0)
+            {
                 headerView
-                ZStack {
+
+                ZStack
+                {
                     AppPalette.Brand.russianViolet.opacity(0.05).ignoresSafeArea()
 
                     if mapDataStore.isLoading {
@@ -324,7 +328,9 @@ struct MyMeetsContentView: View
     }
 
     var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
+
+        ScrollView(.vertical, showsIndicators: false)
+        {
             LazyVStack(spacing: 24) {
 
                 // 👇 If there are invitations, put them first.
@@ -347,6 +353,7 @@ struct MyMeetsContentView: View
                 )
             }
             .padding(.horizontal, 20)
+            .padding(.top, 20)
             .padding(.bottom, 20)
         }
     }
@@ -925,9 +932,9 @@ struct MeetCard: View
             
             Spacer()
             
-            Label("\(meet.max_capacity)", systemImage: "person.3")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Color.secondary)
+//            Label("\(meet.max_capacity)", systemImage: "person.3")
+//                .font(.system(size: 12, weight: .medium))
+//                .foregroundStyle(Color.secondary)
         }
     }
     
