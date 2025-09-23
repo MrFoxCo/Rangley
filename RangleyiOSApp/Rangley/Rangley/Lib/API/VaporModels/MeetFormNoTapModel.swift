@@ -14,7 +14,7 @@ final class MeetFormNoTapModel: ObservableObject
 {
     // Inputs (originals for update — unused in create mode)
     private let mode: MeetFormNoTapMode
-    private let meetIDUUID: String? // present in update mode
+    private let meetIDUUID: UUID? // present in update mode
 
     // Editable fields
     @Published var name: String

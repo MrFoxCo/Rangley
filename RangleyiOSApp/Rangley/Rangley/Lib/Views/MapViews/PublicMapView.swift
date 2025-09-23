@@ -5,16 +5,6 @@
 //  Created by Anthony Guzzardo on 9/18/25.
 //
 
-import CoreLocation
-import Combine
-import MapKit
-import SwiftUI
-import Foundation
-import Amplify
-import UIKit
-import AWSPluginsCore
-
-
 // =========================================================
 // =========================================================
 // =========================================================
@@ -35,6 +25,14 @@ import AWSPluginsCore
 // =========================================================
 
 
+import CoreLocation
+import Combine
+import MapKit
+import SwiftUI
+import Foundation
+import Amplify
+import UIKit
+import AWSPluginsCore
 
 @MainActor
 class MapDataStore: ObservableObject
@@ -499,10 +497,11 @@ public struct PublicMapView: View
     
     @Namespace private var meetNS
     @State private var tapTask: Task<Void, Never>?
-    
+    @State private var meetCreationMode: MeetCreationEntryMode?
 
 
-    public var body: some View {
+    public var body: some View
+    {
         content
             .environmentObject(inbox)
 
@@ -555,14 +554,16 @@ public struct PublicMapView: View
                     locationData: locationData,
                     uiState: uiState,
                     meetNS: meetNS,
-                    authToken: authState.currentToken
+                    authToken: authState.currentToken,
+                    meetCreationMode: $meetCreationMode
                 )
 
                 ControlsView(
                     mapData: mapData,
                     locationData: locationData,
                     uiState: uiState,
-                    authState: authState
+                    authState: authState,
+                    meetCreationMode: $meetCreationMode
                 )
             }
             .environment(\.colorScheme, uiState.isDaylight ? .light : .dark)
@@ -584,25 +585,25 @@ public struct PublicMapView: View
                 .preferredColorScheme(.dark)
         }
     }
+    
     private func handleMapTap(_ proxy: MapProxy, _ value: SpatialTapGesture.Value)
     {
         guard !uiState.showLocationPopup && !uiState.showMeetOverlay else { return }
-
-        // If the tap is on/near any MeetBubble, do nothing (let the button handle it)
+        
         if tapHitsAnnotation(proxy, value.location, meets: mapData.meets) {
             return
         }
-
+        
         tapTask?.cancel()
         tapTask = Task {
             if let coordinate = proxy.convert(value.location, from: .local),
                let locationInfo = await locationData.reverseGeocode(coordinate: coordinate) {
-                uiState.selectedLocation = locationInfo
+                // Set entry mode for tap-on-map
+                meetCreationMode = .tapOnMap(location: locationInfo)
                 uiState.showLocationPopup = true
             }
         }
-    }
-}
+    }}
 
 
 // MARK: - Map View Component
@@ -669,13 +670,14 @@ struct OverlaysView: View
     @ObservedObject var uiState: UIStateStore
     let meetNS: Namespace.ID
     let authToken: String
+    @Binding var meetCreationMode: MeetCreationEntryMode?
     
     var body: some View {
         ZStack {
-            // Meet Creation Overlay
-            MeetCreationOverlayByTap(
-                selectedLocation: $uiState.selectedLocation,
-                showPopup: $uiState.showLocationPopup,
+            // Meet Creation Overlay (Unified)
+            MeetCreationUnifiedOverlay(
+                showOverlay: $uiState.showLocationPopup,
+                entryMode: $meetCreationMode,
                 baseURL: Env.apiBaseURL,
                 token: authToken,
                 onCreateMeet: { location, name, start, end, invitedUsers in
@@ -703,36 +705,6 @@ struct OverlaysView: View
             if mapData.isLoading {
                 LoadingOverlay()
             }
-        }
-        .sheet(isPresented: $uiState.showCreateForm) {
-            MeetCreationFormView(
-                mode: .create(location: seedForCreate()),
-                onCreate: { body in
-                    Task {
-                        do {
-                            let newLat = body.latitude
-                            let newLon = body.longitude
-                            
-                            try await mapData.createMeet(body)
-                            
-                            await MainActor.run {
-                                uiState.showCreateForm = false
-                            }
-                            
-                            try? await Task.sleep(nanoseconds: 500_000_000)
-                            
-                            locationData.centerOn(coordinate: CLLocationCoordinate2D(
-                                latitude: newLat,
-                                longitude: newLon
-                            ))
-                        } catch {
-                            print("createMeet error:", error)
-                        }
-                    }
-                },
-                onClose: { uiState.showCreateForm = false },
-                onPickLocation: nil
-            )
         }
         .sheet(isPresented: $uiState.showEditSheet) {
             if let editing = mapData.selectedMeet {
@@ -828,6 +800,9 @@ struct ControlsView: View
     @State private var isBadgeExpanded = false
     @State private var showBadgeRadiusSelector = false
     
+    @Binding var meetCreationMode: MeetCreationEntryMode?
+    
+    
     var body: some View
     {
         VStack {
@@ -865,7 +840,9 @@ struct ControlsView: View
                         }
                     },
                     onCreateMeet: {
-                        uiState.showCreateForm = true
+                        // Set entry mode for create button
+                        meetCreationMode = .createButton
+                        uiState.showLocationPopup = true  // Use same overlay
                     },
                     onMeetSelected: { meet in
                         mapData.selectedMeet = meet
