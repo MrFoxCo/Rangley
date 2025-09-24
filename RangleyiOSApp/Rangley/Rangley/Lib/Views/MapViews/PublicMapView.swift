@@ -812,30 +812,63 @@ struct ControlsView: View
     var body: some View
     {
         VStack {
-            // Top Controls
-            HStack
-            {
-                // Nearby Meets Badge
-                NearbyMeetsBadgeView(
-                    meets: mapData.meets,
-                    userLocation: locationData.userLocation?.coordinate ?? CLLocationCoordinate2D(latitude: 41.9211, longitude: -87.6338),
-                    selectedRadius: $selectedRadius,
-                    onExpandedChange: { isExpanded in
-                        isBadgeExpanded = isExpanded
-                    },
-                    onRadiusSelectorChange: { showSelector in
-                        showBadgeRadiusSelector = showSelector
-                    }
-                )
-                .padding(.trailing, 16)
-            }
-            .padding(.top, 16)
+            // TODO: - we may have too many wrapped h stacks... basically the NearbyMeetsBadgeView is supposed to be at the top of the screen length 10 away from the top in the dead center. the NearbyMeetsBadgeView is supposed to be dead center.
             
-            Spacer()
-            
-            // Bottom Dock
             if !shouldHideDock {
-                HStack {
+
+                HStack
+                {
+                    // Nearby Meets Badge
+                    NearbyMeetsBadgeView(
+                        meets: mapData.meets,
+                        userLocation: locationData.userLocation?.coordinate ?? CLLocationCoordinate2D(latitude: 41.9211, longitude: -87.6338),
+                        selectedRadius: $selectedRadius,
+                        onExpandedChange: { isExpanded in
+                            isBadgeExpanded = isExpanded
+                        },
+                        onRadiusSelectorChange: { showSelector in
+                            showBadgeRadiusSelector = showSelector
+                        }
+                    )
+                    .padding(.trailing, 16)
+                }
+                .padding(.top, 16)
+                .transition(.move(edge: .top).combined(with: .opacity))
+                    
+                Spacer()
+                
+
+                
+                // TODO: - the recenter button is supposed to be slightly above the dock view off to the left so it's easy to tap on
+//                HStack
+//                {
+//                    Button(action: {
+//                        locationData.centerOnUser()
+//                    }) {
+//                        Image(systemName: "location.fill")
+//                            .font(.system(size: 18, weight: .medium))
+//                            .foregroundColor(locationData.userLocation != nil ? AppPalette.Brand.neonPink : .gray)
+//                            .frame(width: 44, height: 44)
+//                            .background(
+//                                Circle()
+//                                    .fill(AppPalette.Surface.fieldFill)
+//                                    .overlay(
+//                                        Circle()
+//                                            .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
+//                                    )
+//                            )
+//                            .shadow(radius: 2)
+//                    }
+//                    .disabled(locationData.userLocation == nil)
+//                    .padding(.trailing, 16)
+//
+//                }
+//                .padding(.bottom, 20)
+//                .transition(.move(edge: .bottom).combined(with: .opacity))
+                
+                // DOCKVIEW STAYS AT BOTTOM OF SCREEN
+                HStack
+                {
                     Spacer()
                     DockView(
                         baseURL: Env.apiBaseURL,
