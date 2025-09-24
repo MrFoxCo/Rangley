@@ -213,11 +213,12 @@ class APIService: APIServiceProtocol
     
     func removeParticipant(meetId: UUID, participantId: UUID) async throws {
         let token = try await getAuthToken()
-        let body = RespondToInviteBody(
+        let body = UpdateParticipantStatusBody(
             meet_id_uuid: meetId,
-            response_status_id: 9
+            target_user_uuid: participantId,
+            new_status_id: 9
         )
-        _ = try await AuthAPI.respondToInvitation(baseURL: Env.apiBaseURL, token: token, body: body)
+        _ = try await AuthAPI.updateParticipantStatus(baseURL: Env.apiBaseURL, token: token, body: body)
     }
 }
 
@@ -662,7 +663,7 @@ public struct PublicMapView: View
                     mapData: mapData,
                     locationData: locationData,
                     uiState: uiState,
-                    authState: authState,  // Add this line
+                    authState: authState,
                     meetNS: meetNS,
                     authToken: authState.currentToken,
                     meetCreationMode: $meetCreationMode

@@ -498,6 +498,38 @@ struct AuthAPI
         }
     }
     
+    static func updateParticipantStatus(baseURL: URL, token: String, body: UpdateParticipantStatusBody) async throws -> UpdateParticipantStatusResponse
+    {
+        var req = URLRequest(url: makeURL(baseURL, ["s", "update-participant-status"]))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.httpBody = try isoEncoder.encode(body)
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
+        guard (200..<300).contains(http.statusCode) else {
+           #if DEBUG
+           print("=== Update Participant Status Failed ===")
+           print("Status Code: \(http.statusCode)")
+           print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+           #endif
+           throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        }
+
+        do {
+           return try JSONDecoder().decode(UpdateParticipantStatusResponse.self, from: data)
+        } catch {
+           #if DEBUG
+           print("=== Decode Error in updateParticipantStatus ===")
+           print("Error: \(error)")
+           print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+           #endif
+           throw AuthAPIError.decode(error.localizedDescription)
+        }
+    }
+    
     // MARK: - DTOs for Users API
 
     private struct UsersSearchBody: Codable, Sendable

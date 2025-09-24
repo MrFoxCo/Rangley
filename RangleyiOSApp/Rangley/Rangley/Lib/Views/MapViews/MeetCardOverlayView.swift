@@ -81,12 +81,12 @@ struct MeetCardOverlay: View
 {
     @Binding var selectedMeet   : ViewMeetsModel?
     @Binding var isPresented    : Bool
-    let ns              : Namespace.ID
-    let currentUserUUID : UUID?
-    var onEdit          :   (ViewMeetsModel) -> Void = { _ in }
-    var onDelete        :   (ViewMeetsModel) -> Void = { _ in }
-    var onLeave         :   (ViewMeetsModel) -> Void = { _ in }
-    var onRemoveParticipant: (ViewMeetsModel, ParticipantDetail) -> Void = { _, _ in }  // NEW
+    let ns                  : Namespace.ID
+    let currentUserUUID     : UUID?
+    var onEdit              :   (ViewMeetsModel) -> Void = { _ in }
+    var onDelete            :   (ViewMeetsModel) -> Void = { _ in }
+    var onLeave             :   (ViewMeetsModel) -> Void = { _ in }
+    var onRemoveParticipant : (ViewMeetsModel, ParticipantDetail) -> Void = { _, _ in }  // NEW
 
     var body: some View
     {
@@ -783,7 +783,7 @@ private struct ParticipantDetailOverlay: View
             .frame(width: 280, height: 320)
             .background(
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(AppPalette.Brand.russianViolet)
+                    .fill(AppPalette.Brand.japDarkerPurple)
                     .shadow(color: .black, radius: 20, x: 0, y: 10)
             )
             .scaleEffect(showingDetail ? 1.0 : 0.8)
