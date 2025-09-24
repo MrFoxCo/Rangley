@@ -838,35 +838,30 @@ struct ControlsView: View
                 Spacer()
                 
 
+            // ==========================================
+            // ABOVE DOCK (LEFT): Recenter button for map
+            // ==========================================
+                HStack {
+                    Button(action: { locationData.centerOnUser() }) {
+                        Image(systemName: "location.fill")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundColor(locationData.userLocation != nil ? AppPalette.Brand.neonPink : .gray)
+                            .frame(width: 44, height: 44)
+                            .background(
+                                Circle()
+                                    .fill(AppPalette.Surface.fieldFill)
+                                    .overlay(Circle().stroke(AppPalette.Surface.recenterField, lineWidth: 6))
+                            )
+                            .shadow(radius: 2)
+                    }
+                    .disabled(locationData.userLocation == nil)
+                    Spacer()
+                }
+                .padding(.leading, 36)
+                .padding(.bottom, 20) // slightly above the dock
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+
                 
-                // TODO: - the recenter button is supposed to be slightly above the dock view off to the left so it's easy to tap on
-//                HStack
-//                {
-//                    Button(action: {
-//                        locationData.centerOnUser()
-//                    }) {
-//                        Image(systemName: "location.fill")
-//                            .font(.system(size: 18, weight: .medium))
-//                            .foregroundColor(locationData.userLocation != nil ? AppPalette.Brand.neonPink : .gray)
-//                            .frame(width: 44, height: 44)
-//                            .background(
-//                                Circle()
-//                                    .fill(AppPalette.Surface.fieldFill)
-//                                    .overlay(
-//                                        Circle()
-//                                            .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
-//                                    )
-//                            )
-//                            .shadow(radius: 2)
-//                    }
-//                    .disabled(locationData.userLocation == nil)
-//                    .padding(.trailing, 16)
-//
-//                }
-//                .padding(.bottom, 20)
-//                .transition(.move(edge: .bottom).combined(with: .opacity))
-                
-                // DOCKVIEW STAYS AT BOTTOM OF SCREEN
                 HStack
                 {
                     Spacer()

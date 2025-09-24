@@ -56,6 +56,8 @@ struct AppPalette {
         static let fieldFill         = Color.white.opacity(0.08)
         static let nearByBadgeFill   = Color.white.opacity(0.9)
         static let fieldStroke       = Color.white.opacity(0.16)
+        //static let recenterField     = Color.white.opacity(0.96)
+        static let recenterField = AppPalette.Brand.russianViolet.opacity(0.90)
         static let focusStroke       = Brand.neonPink
     }
 
