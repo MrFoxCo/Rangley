@@ -341,7 +341,7 @@ struct MyMeetsContentView: View
         {
             LazyVStack(spacing: 24) {
 
-                // 👇 If there are invitations, put them first.
+                // If there are invitations, put them first.
                 if !invitationNotifications.isEmpty {
                     InvitationsSection(
                         notifications: invitationNotifications,

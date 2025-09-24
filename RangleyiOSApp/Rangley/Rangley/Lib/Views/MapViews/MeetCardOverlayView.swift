@@ -271,7 +271,7 @@ private struct MeetCardView: View
                         } else if isAcceptedParticipant {
                             // Leave Meet button for accepted participants (not owners)
                             Button(role: .destructive) { showLeaveConfirm = true } label: {
-                                Image(systemName: "person.badge.minus")
+                                Image(systemName: "rectangle.portrait.and.arrow.right")
                                     .font(.system(size: 14, weight: .bold))
                                     .padding(8)
                                     .background(AppPalette.Surface.fieldFill, in: Circle())

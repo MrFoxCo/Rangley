@@ -5,24 +5,23 @@
 //  Created by Anthony Guzzardo on 9/18/25.
 //
 
-// =========================================================
-// =========================================================
-// =========================================================
+// =================================================================================
+// =================================================================================
+// =================================================================================
 // MARK: - IGNORE THE BELOW TODOs FOR NOW
-// TODO: - FIGURE OUT A WAY TO TRIGER UPDATES ON OTHER PHONES WHEN MEETS ARE CREATED OR UPDATED
 // TODO: - Fix the rotating screen view -- probably should look to be vertical
 // TODO: - Create UNDO for deletes and updates
-// TODO: - Create UNDO for deletes and updates
 // TODO: - Fix recenter compass top right
-// TODO: - return to user tap
-// TODO: - Remeber User when Login Option and for Create New Account
+// TODO: - Fix return to user button only appears when not centered
+// TODO: - Remeber User when Create New Account
 // TODO: - NEED TO ADD categories and max capacties as options
-// TODO: - Figure out why the forms are slightly lagging between continues
-// TODO: - MASSIVE ISSUE THE REFRESH TOKEN ISN'T REFRESHING THE SESSION BASICALLY EXPIRES AND CAN'T TALK TO SERVER
+// TODO: - FIX THE leave meet refresh
+// TODO: - add remove user if owner functionality
+// TODO: - add count for people inside radius to the meet bubble button
 // MARK: - IGNORE THE ABOVE TODOs FOR NOW
-// =========================================================
-// =========================================================
-// =========================================================
+// =================================================================================
+// =================================================================================
+// =================================================================================
 
 
 import CoreLocation
@@ -129,13 +128,19 @@ class MapDataStore: ObservableObject
         }
     }
     
-    func leaveMeet(_ meetId: UUID) async throws {  // ADD THIS FUNCTION
+    func leaveMeet(_ meetId: UUID) async throws {
         try await apiService.leaveMeet(meetId)
-        await forceRefresh()
         
+        // Immediately remove the meet from the local array
+        meets.removeAll { $0.meet_id_uuid == meetId }
+        
+        // Clear selection if it was the meet being left
         if selectedMeet?.meet_id_uuid == meetId {
             selectedMeet = nil
         }
+        
+        // Then refresh to get the updated list from server
+        await forceRefresh()
     }
 }
 
