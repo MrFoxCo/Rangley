@@ -1,5 +1,5 @@
 //
-//  UserRegisterFlow.swift
+//  UserRegisterFlowNoCode.swift
 //  Rangley
 //
 //  Created by You on 9/10/25.
@@ -807,10 +807,4 @@ private struct DoneStep: View
         }
         .padding(16)
     }
-}
-
-// MARK: - Preview
-
-#Preview {
-    UserRegisterNoCodeFlow()
 }

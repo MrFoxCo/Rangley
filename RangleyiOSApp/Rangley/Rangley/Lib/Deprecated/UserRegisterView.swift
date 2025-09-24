@@ -862,10 +862,3 @@ private struct DoneStep: View
         .padding(16)
     }
 }
-
-
-// MARK: - Preview
-
-#Preview {
-    UserRegisterFlow()
-}
