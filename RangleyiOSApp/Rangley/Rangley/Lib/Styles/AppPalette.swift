@@ -15,6 +15,7 @@ struct AppPalette {
         static let russianViolet    = Color(hex: "#2E003E") // Russian violet Phtalo #1A002A Gunmetal Plum #1C0B1C
         static let gunmetalPlum     = Color(hex: "#1C0B1C")
         static let phthaloViolet    = Color(hex: "#1A002A")
+        static let obsidianViolet   = Color(hex: "#120017")
         
         
         static let violetMid        = Color(hex: "#23003E")
@@ -45,9 +46,10 @@ struct AppPalette {
     }
     
     struct Text {
-        static let primary   = Color.white
-        static let secondary = Color.white.opacity(0.72)
-        static let tertiary  = Color.white.opacity(0.56)
+        static let primary      = Color.white
+        static let secondary    = Color.white.opacity(0.72)
+        static let tertiary     = Color.white.opacity(0.56)
+        static let quaternary   = Color.white.opacity(0.2)
         
         static let nearByBadgeFillPrimary   = Color.black
         static let nearByBadgeFillSecondary   = Color.black.opacity(0.9)
@@ -64,8 +66,13 @@ struct AppPalette {
         static let recenterField = AppPalette.Brand.russianViolet.opacity(0.90)
         static let focusStroke       = Brand.neonPink
         
-        static let meetSearch = AppPalette.Brand.russianViolet
-        static let userSearch = AppPalette.Brand.russianViolet
+        static let meetSearch = AppPalette.Brand.gunmetalPlum
+        static let userSearch = AppPalette.Brand.gunmetalPlum
+  
+        static let invitationCard   = AppPalette.Brand.obsidianViolet
+        static let myMeetsCard      = AppPalette.Brand.gunmetalPlum
+        static let joinedMeetsCard  = AppPalette.Brand.gunmetalPlum
+
     }
 
     // Solid – Russian Violet (darkest; avoid edge crush if too dim)

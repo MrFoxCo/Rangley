@@ -117,7 +117,7 @@ struct MyMeetsView: View
                             Circle().fill(AppPalette.Brand.neonPink)
                         )
                         .overlay(
-                            Circle().stroke(Color.white.opacity(0.85), lineWidth: 1)
+                            Circle().stroke(AppPalette.Text.secondary, lineWidth: 1)
                         )
                         .accessibilityHidden(true)
                 } else {
@@ -130,7 +130,7 @@ struct MyMeetsView: View
                             Capsule().fill(AppPalette.Brand.neonPink)
                         )
                         .overlay(
-                            Capsule().stroke(Color.white.opacity(0.85), lineWidth: 1)
+                            Capsule().stroke(AppPalette.Text.secondary, lineWidth: 1)
                         )
                         .accessibilityHidden(true)
                 }
@@ -209,7 +209,7 @@ private extension MyMeetsOverlay
             
             Text("My Meets")
                 .font(.system(size: 20, weight: .bold))
-                .foregroundStyle(Color.primary)
+                .foregroundStyle(AppPalette.Text.primary)
             
             Spacer()
             
@@ -219,6 +219,7 @@ private extension MyMeetsOverlay
         .padding(.horizontal, 20)
         .padding(.top, 20)
         .padding(.bottom, 16)
+        .background(Color(AppPalette.Brand.russianViolet))
     }
     
     var loadingView: some View {
@@ -229,9 +230,10 @@ private extension MyMeetsOverlay
             
             Text("Loading your meets...")
                 .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(Color.secondary)
+                .foregroundStyle(AppPalette.Text.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(AppPalette.Brand.russianViolet))
     }
     
     private func errorView(_ message: String) -> some View
@@ -244,11 +246,11 @@ private extension MyMeetsOverlay
             VStack(spacing: 8) {
                 Text("Unable to Load Meets")
                     .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(Color.primary)
+                    .foregroundStyle(AppPalette.Text.primary)
 
                 Text(message)
                     .font(.system(size: 16))
-                    .foregroundStyle(Color.secondary)
+                    .foregroundStyle(AppPalette.Text.secondary)
                     .multilineTextAlignment(.center)
             }
 
@@ -259,7 +261,7 @@ private extension MyMeetsOverlay
                 }
             }
             .font(.system(size: 16, weight: .semibold))
-            .foregroundStyle(Color.white)
+            .foregroundStyle(AppPalette.Text.primary)
             .padding(.horizontal, 24)
             .padding(.vertical, 12)
             .background(
@@ -269,6 +271,7 @@ private extension MyMeetsOverlay
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 40)
+        .background(Color(AppPalette.Brand.russianViolet))
     }
 
     
@@ -281,16 +284,17 @@ private extension MyMeetsOverlay
             VStack(spacing: 8) {
                 Text("No Meets Yet")
                     .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(Color.primary)
+                    .foregroundStyle(AppPalette.Text.primary)
                 
                 Text("Your created meets and invitations will appear here")
                     .font(.system(size: 16))
-                    .foregroundStyle(Color.secondary)
+                    .foregroundStyle(AppPalette.Text.secondary)
                     .multilineTextAlignment(.center)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 40)
+        .background(Color(AppPalette.Brand.russianViolet))
     }
 }
 
@@ -359,6 +363,7 @@ struct MyMeetsContentView: View
             .padding(.top, 20)
             .padding(.bottom, 20)
         }
+        .background(Color(AppPalette.Brand.russianViolet))
     }
 }
 
@@ -429,11 +434,11 @@ struct InvitationsSection: View
             
             Text("Invitations")
                 .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(Color.primary)
+                .foregroundStyle(AppPalette.Text.primary)
             
             Text("(\(notifications.count))")
                 .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(Color.secondary)
+                .foregroundStyle(AppPalette.Text.secondary)
             
             Spacer()
         }
@@ -525,7 +530,7 @@ struct InvitationCard: View
                 .font(.system(size: 12))
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(8)
-                .background(Color(.secondarySystemBackground))
+                .background(Color(AppPalette.Surface.invitationCard))
                 .cornerRadius(8)
             }
             // Else, fall back to generic Any renderer:
@@ -537,7 +542,7 @@ struct InvitationCard: View
                         .padding(8)
                 }
                 .frame(maxHeight: 240)
-                .background(Color(.secondarySystemBackground))
+                .background(Color(AppPalette.Surface.invitationCard))
                 .cornerRadius(8)
             } else {
                 // Loud diagnostics
@@ -552,7 +557,7 @@ struct InvitationCard: View
                     }
                 }
                 .padding(8)
-                .background(Color(.secondarySystemBackground))
+                .background(Color(AppPalette.Surface.invitationCard))
                 .cornerRadius(8)
             }
             HStack(spacing: 12) {
@@ -567,7 +572,7 @@ struct InvitationCard: View
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(Color(.systemBackground))
+                .fill(Color(AppPalette.Surface.invitationCard))
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
                         .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1.5)
@@ -625,7 +630,7 @@ struct InvitationDisclosureCard: View
 
                     Text(timestamp)
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(Color.white.opacity(0.6))
+                        .foregroundStyle(AppPalette.Text.tertiary)
                 }
 
                 Spacer()
@@ -682,7 +687,7 @@ struct InvitationDisclosureCard: View
                         .padding(12)
                         .background(
                             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(Color(.secondarySystemBackground).opacity(0.8))
+                                .fill(Color(AppPalette.Surface.invitationCard))
                         )
                     }
                     // fallback generic renderer
@@ -696,7 +701,7 @@ struct InvitationDisclosureCard: View
                         .frame(maxHeight: 240)
                         .background(
                             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(Color(.secondarySystemBackground).opacity(0.8))
+                                .fill(Color(AppPalette.Surface.invitationCard))
                         )
                     } else {
                         Text("No additional details.")
@@ -710,7 +715,7 @@ struct InvitationDisclosureCard: View
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Color(.secondarySystemBackground).opacity(0.18))
+                .fill(Color(AppPalette.Surface.invitationCard))
                 .overlay(
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
                         .stroke(AppPalette.Brand.neonPink.opacity(0.25), lineWidth: 1)
@@ -780,26 +785,27 @@ struct MeetsSectionView       : View
                 meetsContent
             }
         }
+        
     }
     
     private var sectionHeader: some View {
         HStack(spacing: 8) {
             Image(systemName: icon)
                 .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(isPlaceholder ? Color.secondary : AppPalette.Brand.neonPink)
+                .foregroundStyle(isPlaceholder ? AppPalette.Text.primary : AppPalette.Brand.neonPink)
             
             Text(title)
                 .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(Color.primary)
+                .foregroundStyle(AppPalette.Text.primary)
             
             if isPlaceholder {
                 Text("(Coming soon)")
                     .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(Color.secondary)
+                    .foregroundStyle(AppPalette.Text.secondary)
             } else {
                 Text("(\(meets.count))")
                     .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(Color.secondary)
+                    .foregroundStyle(AppPalette.Text.secondary)
             }
             
             Spacer()
@@ -826,21 +832,21 @@ struct EmptyMeetsSectionView  : View
         VStack(spacing: 12) {
             Image(systemName: icon)
                 .font(.system(size: 32, weight: .light))
-                .foregroundStyle(Color.secondary.opacity(0.6))
+                .foregroundStyle(AppPalette.Text.tertiary)
             
             Text(message)
                 .font(.system(size: 16))
-                .foregroundStyle(Color.secondary)
+                .foregroundStyle(AppPalette.Text.secondary)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 30)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(.systemBackground).opacity(0.5))
+                .fill(Color(AppPalette.Brand.russianViolet))
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+                        .stroke(AppPalette.Text.quaternary, lineWidth: 1)
                 )
         )
         .opacity(isPlaceholder ? 0.6 : 1.0)
@@ -875,7 +881,7 @@ struct MeetCard: View
             .padding(16)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(.systemBackground))
+                    .fill(Color(AppPalette.Surface.joinedMeetsCard))
                     .overlay(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
                             .stroke(AppPalette.Brand.neonPink.opacity(0.2), lineWidth: 1)
@@ -890,7 +896,7 @@ struct MeetCard: View
             VStack(alignment: .leading, spacing: 4) {
                 Text(meet.name)
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Color.primary)
+                    .foregroundStyle(AppPalette.Text.primary)
                     .lineLimit(2)
                 
                 Text(meet.category_name)
@@ -923,7 +929,7 @@ struct MeetCard: View
     private var descriptionText: some View {
         Text(meet.description)
             .font(.system(size: 14))
-            .foregroundStyle(Color.secondary)
+            .foregroundStyle(AppPalette.Text.secondary)
             .lineLimit(2)
     }
     
@@ -931,13 +937,13 @@ struct MeetCard: View
         HStack {
             Label(dateFormatter.string(from: meet.dttm_start_utc), systemImage: "calendar")
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Color.secondary)
+                .foregroundStyle(AppPalette.Text.secondary)
             
             Spacer()
             
 //            Label("\(meet.max_capacity)", systemImage: "person.3")
 //                .font(.system(size: 12, weight: .medium))
-//                .foregroundStyle(Color.secondary)
+//                .foregroundStyle(AppPalette.Text.secondary)
         }
     }
     
