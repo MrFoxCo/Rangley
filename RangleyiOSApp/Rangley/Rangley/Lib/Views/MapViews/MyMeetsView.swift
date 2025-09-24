@@ -18,6 +18,7 @@
 
 import SwiftUI
 import Foundation
+import CoreLocation
 
 struct MyMeetsView: View
 {
@@ -581,7 +582,7 @@ struct InvitationCard: View
     }
 }
 
-
+// MARK: - Something informational
 struct InvitationDisclosureCard: View
 {
     let notification: ViewNotificationsModel
@@ -589,6 +590,7 @@ struct InvitationDisclosureCard: View
     var onDecline: () -> Void
 
     @State private var isExpanded = false
+    @State private var locationName: String = "Loading location..."
 
     // prefer typed payload first; fall back to generic Any
     private var payload: InvitationPayload? { notification.payload(InvitationPayload.self) }
@@ -677,9 +679,7 @@ struct InvitationDisclosureCard: View
                             labeledRow("When",
                                        "\(p.meet_start.formatted(date: .abbreviated, time: .shortened)) → \(p.meet_end.formatted(date: .omitted, time: .shortened))")
                             labeledRow("Category", p.category_name)
-                            labeledRow("Location",
-                                       String(format: "%.5f, %.5f",
-                                              p.meet_location.latitude, p.meet_location.longitude))
+                            labeledRow("Location", locationName)
                             if let msg = p.invitation_message, !msg.isEmpty {
                                 labeledRow("Message", msg)
                             }
@@ -724,6 +724,9 @@ struct InvitationDisclosureCard: View
         .animation(.default, value: isExpanded)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(Text("Invitation from \(titleText) on \(timestamp)"))
+        .onAppear {
+            loadLocationName()
+        }
     }
 
     // small helper for the summary rows
@@ -737,6 +740,65 @@ struct InvitationDisclosureCard: View
                 .font(.system(size: 12))
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+    
+    private func loadLocationName() {
+        guard let payload = payload else {
+            locationName = "Location unavailable"
+            return
+        }
+        
+        let location = CLLocation(
+            latitude: payload.meet_location.latitude,
+            longitude: payload.meet_location.longitude
+        )
+        
+        CLGeocoder().reverseGeocodeLocation(location) { placemarks, error in
+            DispatchQueue.main.async {
+                if error != nil {
+                    locationName = String(format: "%.4f, %.4f",
+                                        payload.meet_location.latitude,
+                                        payload.meet_location.longitude)
+                    return
+                }
+                
+                guard let placemark = placemarks?.first else {
+                    locationName = String(format: "%.4f, %.4f",
+                                        payload.meet_location.latitude,
+                                        payload.meet_location.longitude)
+                    return
+                }
+                
+                // Build a nice location name
+                var components: [String] = []
+                
+                if let name = placemark.name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
+                    components.append(name)
+                } else if let street = placemark.thoroughfare?.trimmingCharacters(in: .whitespacesAndNewlines), !street.isEmpty {
+                    if let number = placemark.subThoroughfare?.trimmingCharacters(in: .whitespacesAndNewlines), !number.isEmpty {
+                        components.append("\(number) \(street)")
+                    } else {
+                        components.append(street)
+                    }
+                }
+                
+                if let city = placemark.locality?.trimmingCharacters(in: .whitespacesAndNewlines), !city.isEmpty {
+                    components.append(city)
+                }
+                
+                if let state = placemark.administrativeArea?.trimmingCharacters(in: .whitespacesAndNewlines), !state.isEmpty {
+                    components.append(state)
+                }
+                
+                if components.isEmpty {
+                    locationName = String(format: "%.4f, %.4f",
+                                        payload.meet_location.latitude,
+                                        payload.meet_location.longitude)
+                } else {
+                    locationName = components.joined(separator: ", ")
+                }
+            }
         }
     }
 }

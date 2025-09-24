@@ -48,251 +48,319 @@ final class AddressSearchVM: NSObject, ObservableObject, MKLocalSearchCompleterD
 
 struct AddressSearchPicker: View
 {
-    var initialRadiusMeters: Double = 2000
     var onPick: (LocationInfo) -> Void
     var onCancel: () -> Void
 
     @StateObject private var vm = AddressSearchVM()
     @State private var selectedItem: MKMapItem?
-    @State private var radiusMeters: Double
-    @State private var isDisappearing = false
-
-    init(initialRadiusMeters: Double = 2000,
-         onPick: @escaping (LocationInfo) -> Void,
-         onCancel: @escaping () -> Void) {
-        self.initialRadiusMeters = max(50, initialRadiusMeters)
-        self.onPick = onPick
-        self.onCancel = onCancel
-        _radiusMeters = State(initialValue: max(50, initialRadiusMeters))
-    }
+    @State private var isSearching = false
+    @FocusState private var isSearchFieldFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header
-            searchHeader
+            // Search Field
+            searchSection
             
             // Content
-            VStack(spacing: 20) {
-                // Search Field
-                searchField
-                
-                // Suggestions List
-                if !vm.suggestions.isEmpty {
-                    suggestionsList
-                }
-                
-                // Selected Location Map
-                if let item = selectedItem, !isDisappearing {
-                    selectedLocationSection(item)
-                }
-                
-                Spacer(minLength: 20)
+            if let item = selectedItem {
+                selectedLocationView(item)
+            } else if !vm.suggestions.isEmpty {
+                suggestionsView
+            } else if vm.query.isEmpty {
+                emptyStateView
+            } else {
+                loadingView
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 20)
+            
+            Spacer(minLength: 20)
+            
+            // Action Button
+            actionButton
         }
-        .background(AppPalette.bgGradient)
-        .preferredColorScheme(.dark)
-        .presentationDetents([.large])
-        .onDisappear {
-            isDisappearing = true
+        .padding(.horizontal, 24)
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                isSearchFieldFocused = true
+            }
         }
     }
     
-    // MARK: - Search Header
-    private var searchHeader: some View {
-        HStack(spacing: 16) {
-            // Close button
-            Button(action: {
-                isDisappearing = true
-                onCancel()
-            }) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(AppPalette.Brand.neonPink)
-                    .frame(width: 32, height: 32)
-                    .background(
-                        Circle()
-                            .fill(AppPalette.Brand.neonPink.opacity(0.1))
-                    )
-            }
-            .disabled(isDisappearing)
-            
-            // Title
-            Text("Enter Address")
-                .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(AppPalette.Text.primary)
-                .frame(maxWidth: .infinity)
-            
-            // Use button
-            Button(action: {
-                guard let item = selectedItem else { return }
-                isDisappearing = true
-                onPick(makeLocationInfo(from: item, radius: radiusMeters))
-            }) {
-                Text("Use")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(selectedItem != nil ? AppPalette.Brand.neonPink : AppPalette.Text.tertiary)
-                    .frame(width: 32, height: 32)
-            }
-            .disabled(selectedItem == nil || isDisappearing)
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, 20)
-        .padding(.bottom, 16)
-    }
-    
-    // MARK: - Search Field
-    private var searchField: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "location")
-                .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(AppPalette.Brand.neonPink.opacity(0.7))
-            
-            TextField("Search address or place", text: $vm.query)
+    // MARK: - Search Section
+    private var searchSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Search for a location")
                 .font(.system(size: 16))
-                .foregroundStyle(Color.primary)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .disabled(isDisappearing)
+                .foregroundColor(AppPalette.Text.secondary)
             
-            if !vm.query.isEmpty {
-                Button(action: { vm.query = "" }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 14))
-                        .foregroundStyle(AppPalette.Brand.neonPink.opacity(0.7))
+            HStack(spacing: 12) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(AppPalette.Brand.neonPink.opacity(0.7))
+                
+                TextField("", text: $vm.query, prompt: Text("Enter address or place name").foregroundColor(AppPalette.Text.tertiary))
+                    .font(.system(size: 16))
+                    .foregroundColor(AppPalette.Text.primary)
+                    .focused($isSearchFieldFocused)
+                    .textInputAutocapitalization(.words)
+                    .autocorrectionDisabled()
+                    .onSubmit {
+                        if let first = vm.suggestions.first {
+                            Task { await selectSuggestion(first) }
+                        }
+                    }
+                
+                if !vm.query.isEmpty {
+                    Button(action: {
+                        vm.query = ""
+                        selectedItem = nil
+                    }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 16))
+                            .foregroundColor(AppPalette.Text.tertiary)
+                    }
                 }
-                .disabled(isDisappearing)
             }
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(AppPalette.Surface.fieldFill)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(
+                                isSearchFieldFocused ? AppPalette.Surface.focusStroke : AppPalette.Surface.fieldStroke,
+                                lineWidth: isSearchFieldFocused ? 2 : 1
+                            )
+                    )
+            )
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(.systemBackground))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1)
-                )
-        )
+        .padding(.bottom, 24)
     }
     
-    // MARK: - Suggestions List
-    private var suggestionsList: some View {
-        ScrollView {
-            LazyVStack(spacing: 8) {
-                ForEach(vm.suggestions, id: \.self) { suggestion in
-                    suggestionRow(suggestion)
-                }
+    // MARK: - Empty State
+    private var emptyStateView: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "location.magnifyingglass")
+                .font(.system(size: 48))
+                .foregroundColor(AppPalette.Brand.neonPink.opacity(0.6))
+            
+            VStack(spacing: 8) {
+                Text("Start typing to search")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(AppPalette.Text.primary)
+                
+                Text("Enter an address, business name, or landmark")
+                    .font(.system(size: 14))
+                    .foregroundColor(AppPalette.Text.secondary)
+                    .multilineTextAlignment(.center)
             }
-            .padding(.vertical, 8)
         }
-        .frame(maxHeight: 200)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.vertical, 40)
+    }
+    
+    // MARK: - Loading View
+    private var loadingView: some View {
+        VStack(spacing: 16) {
+            ProgressView()
+                .tint(AppPalette.Brand.neonPink)
+            
+            Text("Searching...")
+                .font(.system(size: 16))
+                .foregroundColor(AppPalette.Text.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.vertical, 40)
+    }
+    
+    // MARK: - Suggestions View
+    private var suggestionsView: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Suggestions")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundColor(AppPalette.Text.primary)
+            
+            ScrollView {
+                LazyVStack(spacing: 12) {
+                    ForEach(vm.suggestions, id: \.self) { suggestion in
+                        suggestionRow(suggestion)
+                    }
+                }
+                .padding(.vertical, 8)
+            }
+            .frame(maxHeight: 300)
+        }
     }
     
     private func suggestionRow(_ suggestion: MKLocalSearchCompletion) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(suggestion.title)
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(AppPalette.Text.primary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            
-            if !suggestion.subtitle.isEmpty {
-                Text(suggestion.subtitle)
-                    .font(.system(size: 13))
-                    .foregroundStyle(AppPalette.Text.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(.systemBackground).opacity(0.05))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(AppPalette.Brand.neonPink.opacity(0.2), lineWidth: 1)
-                )
-        )
-        .contentShape(Rectangle())
-        .onTapGesture {
-            if !isDisappearing {
-                Task { await select(suggestion) }
-            }
-        }
-    }
-    
-    // MARK: - Selected Location Section
-    private func selectedLocationSection(_ item: MKMapItem) -> some View {
-        VStack(spacing: 16) {
-            // Map
-            Map {
-                Annotation("Selected", coordinate: item.placemark.coordinate) {
-                    Image(systemName: "mappin.circle.fill")
-                        .foregroundColor(AppPalette.Brand.neonPink)
-                        .font(.title2)
+        Button(action: {
+            Task { await selectSuggestion(suggestion) }
+        }) {
+            HStack(spacing: 12) {
+                Image(systemName: "mappin.circle.fill")
+                    .font(.system(size: 16))
+                    .foregroundColor(AppPalette.Brand.neonPink)
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(suggestion.title)
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundColor(AppPalette.Text.primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    
+                    if !suggestion.subtitle.isEmpty {
+                        Text(suggestion.subtitle)
+                            .font(.system(size: 13))
+                            .foregroundColor(AppPalette.Text.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
-                MapCircle(center: item.placemark.coordinate, radius: radiusMeters)
-                    .stroke(AppPalette.Brand.neonPink.opacity(0.35), lineWidth: 2)
-                    .foregroundStyle(AppPalette.Brand.neonPink.opacity(0.08))
+                
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(AppPalette.Text.tertiary)
             }
-            .frame(height: 220)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1)
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(AppPalette.Surface.fieldFill)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
+                    )
             )
-            .allowsHitTesting(!isDisappearing)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+    
+    // MARK: - Selected Location View
+    private func selectedLocationView(_ item: MKMapItem) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Selected Location")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundColor(AppPalette.Text.primary)
             
-            // Radius Control
-            radiusControl
+            // Location details card
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 12) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 20))
+                        .foregroundColor(AppPalette.Brand.neonPink)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(item.name ?? "Selected Location")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(AppPalette.Text.primary)
+                        
+                        if let address = formatAddress(item.placemark) {
+                            Text(address)
+                                .font(.system(size: 14))
+                                .foregroundColor(AppPalette.Text.secondary)
+                                .lineLimit(2)
+                        }
+                    }
+                    
+                    Spacer()
+                }
+                .padding(16)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(AppPalette.Brand.neonPink.opacity(0.05))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1)
+                        )
+                )
+                
+                // Map preview
+                Map {
+                    Annotation("Selected", coordinate: item.placemark.coordinate) {
+                        Image(systemName: "mappin.circle.fill")
+                            .foregroundColor(AppPalette.Brand.neonPink)
+                            .font(.title2)
+                    }
+                }
+                .frame(height: 200)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
+                )
+                .allowsHitTesting(false)
+            }
         }
     }
     
-    // MARK: - Radius Control
-    private var radiusControl: some View {
-        VStack(spacing: 12) {
-            HStack {
-                Text("Search Radius")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(AppPalette.Text.secondary)
-                Spacer()
-                Text("\(Int(radiusMeters))m")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(AppPalette.Brand.neonPink)
-                    .monospacedDigit()
-            }
-            
-            Slider(value: $radiusMeters, in: 50...20000, step: 50)
-                .tint(AppPalette.Brand.neonPink)
-                .disabled(isDisappearing)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(.systemBackground).opacity(0.05))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(AppPalette.Brand.neonPink.opacity(0.2), lineWidth: 1)
+    // MARK: - Action Button
+    private var actionButton: some View {
+        Button(action: {
+            guard let item = selectedItem else { return }
+            onPick(makeLocationInfo(from: item))
+        }) {
+            Text("Use This Location")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(selectedItem != nil ? AppPalette.Brand.neonPink : AppPalette.Brand.neonPink.opacity(0.5))
                 )
-        )
-    }
-
-    private func select(_ s: MKLocalSearchCompletion) async {
-        guard !isDisappearing else { return }
-        if let item = await vm.selectCompletion(s) {
-            selectedItem = item
         }
+        .disabled(selectedItem == nil)
+        .padding(.bottom, 24)
     }
-
-    private func makeLocationInfo(from item: MKMapItem, radius: Double) -> LocationInfo {
+    
+    // MARK: - Helper Methods
+    private func selectSuggestion(_ suggestion: MKLocalSearchCompletion) async {
+        isSearching = true
+        if let item = await vm.selectCompletion(suggestion) {
+            selectedItem = item
+            vm.query = item.name ?? suggestion.title
+            isSearchFieldFocused = false
+        }
+        isSearching = false
+    }
+    
+    private func formatAddress(_ placemark: MKPlacemark) -> String? {
+        var components: [String] = []
+        
+        if let number = placemark.subThoroughfare,
+           let street = placemark.thoroughfare {
+            components.append("\(number) \(street)")
+        } else if let street = placemark.thoroughfare {
+            components.append(street)
+        }
+        
+        if let city = placemark.locality {
+            components.append(city)
+        }
+        
+        if let state = placemark.administrativeArea {
+            components.append(state)
+        }
+        
+        return components.isEmpty ? nil : components.joined(separator: ", ")
+    }
+    
+    private func makeLocationInfo(from item: MKMapItem) -> LocationInfo {
         let p = item.placemark
         let c = p.coordinate
+        
+        // Use a reasonable default radius based on placemark type
+        let defaultRadius: Double = {
+            if p.thoroughfare != nil {
+                return 500.0  // Street address - smaller radius
+            } else if p.locality != nil {
+                return 1000.0 // City/locality - medium radius
+            } else {
+                return 2000.0 // Larger area - bigger radius
+            }
+        }()
+        
         return LocationInfo(
             Coordinate: .init(c.latitude, c.longitude),
             RegionCoordinate: .init(c.latitude, c.longitude),
-            RegionRadius: radius,
+            RegionRadius: defaultRadius,
             Name: p.name,
             ThoroughFare: p.thoroughfare,
             SubThoroughFare: p.subThoroughfare,

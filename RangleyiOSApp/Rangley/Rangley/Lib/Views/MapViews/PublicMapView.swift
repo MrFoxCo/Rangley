@@ -180,20 +180,26 @@ class APIService: APIServiceProtocol
 }
 
 
-// MARK: - Enhanced LocationDataStore with Location-Based Refresh
+// MARK: - Enhanced LocationDataStore with Recenter Button Logic
 @MainActor
 class LocationDataStore: ObservableObject
 {
     @Published var userLocation     : CLLocation?
     @Published var cameraPosition   : MapCameraPosition
     @Published var currentRegion    : MKCoordinateRegion
-
+    @Published var shouldShowRecenterButton = false // New property
 
     private var hasInitiallyPositioned = false
     private let locationManager = LocationManager()
     private var geocodeCache: [String: LocationInfo] = [:]
     private var lastRefreshLocation: CLLocation?
     private let significantLocationChangeDistance: CLLocationDistance = 100 // 100 meters
+    
+    // Store the initial centered position and zoom level
+    private var initialCenterCoordinate: CLLocationCoordinate2D?
+    private var initialZoomLevel: Double?
+    private let recenterThresholdDistance: CLLocationDistance = 500 // meters
+    private let zoomThresholdMultiplier: Double = 2.0 // Show button if zoomed out 2x or more
     
     // Callback for location-based refresh
     var onSignificantLocationChange: (() async -> Void)?
@@ -220,14 +226,17 @@ class LocationDataStore: ObservableObject
     
     private var cancellables = Set<AnyCancellable>()
     
-
-    // Then update your handleLocationUpdate method:
     private func handleLocationUpdate(_ newLocation: CLLocation) {
         userLocation = newLocation
         
         // Center on user location the first time we get it
         if !hasInitiallyPositioned {
             hasInitiallyPositioned = true
+            
+            // Store the initial position when we first center on user
+            initialCenterCoordinate = newLocation.coordinate
+            initialZoomLevel = 0.04 // Your default latitudeDelta
+            
             print("📍 Centering camera on user location: \(newLocation.coordinate)")
             withAnimation(.easeInOut(duration: 1.0)) {
                 cameraPosition = .region(MKCoordinateRegion(
@@ -249,22 +258,58 @@ class LocationDataStore: ObservableObject
         } else {
             lastRefreshLocation = newLocation
         }
+        
+        // Update recenter button visibility
+        updateRecenterButtonVisibility()
     }
     
-    // Existing methods remain unchanged...
     func updateRegion(_ region: MKCoordinateRegion) {
         currentRegion = region
+        updateRecenterButtonVisibility()
+    }
+    
+    private func updateRecenterButtonVisibility() {
+        guard let userLocation = userLocation,
+              let _ = initialCenterCoordinate,
+              let initialZoom = initialZoomLevel else {
+            shouldShowRecenterButton = false
+            return
+        }
+        
+        // Check if camera has moved significantly from user's location
+        let currentCenter = CLLocation(latitude: currentRegion.center.latitude,
+                                     longitude: currentRegion.center.longitude)
+        let userLocationCL = CLLocation(latitude: userLocation.coordinate.latitude,
+                                      longitude: userLocation.coordinate.longitude)
+        
+        let distanceFromUser = currentCenter.distance(from: userLocationCL)
+        
+        // Check if user has zoomed out significantly
+        let currentZoomLevel = currentRegion.span.latitudeDelta
+        let hasZoomedOut = currentZoomLevel > (initialZoom * zoomThresholdMultiplier)
+        
+        // Show button if either condition is met
+        let hasMovedAway = distanceFromUser > recenterThresholdDistance
+        
+        shouldShowRecenterButton = hasMovedAway || hasZoomedOut
     }
     
     func centerOnUser() {
         guard let location = userLocation else { return }
         
+        // Reset to initial zoom level when recentering
+        let targetSpan = MKCoordinateSpan(latitudeDelta: initialZoomLevel ?? 0.04,
+                                        longitudeDelta: initialZoomLevel ?? 0.04)
+        
         withAnimation(.easeInOut(duration: 1.0)) {
             cameraPosition = .region(MKCoordinateRegion(
                 center: location.coordinate,
-                span: MKCoordinateSpan(latitudeDelta: 0.04, longitudeDelta: 0.04)
+                span: targetSpan
             ))
         }
+        
+        // Update the initial position to current user location
+        initialCenterCoordinate = location.coordinate
     }
     
     func centerOn(coordinate: CLLocationCoordinate2D, span: MKCoordinateSpan? = nil) {
@@ -278,6 +323,7 @@ class LocationDataStore: ObservableObject
         }
     }
     
+    // Rest of your existing methods remain unchanged...
     func reverseGeocode(coordinate: CLLocationCoordinate2D) async -> LocationInfo?
     {
         let cacheKey = "\(coordinate.latitude),\(coordinate.longitude)"
@@ -788,7 +834,7 @@ struct OverlaysView: View
 }
 
 
-// MARK: - Controls View Component (Updated)
+// MARK: - Controls View Component (Updated with Conditional Recenter)
 struct ControlsView: View
 {
     @ObservedObject var mapData     : MapDataStore
@@ -812,10 +858,7 @@ struct ControlsView: View
     var body: some View
     {
         VStack {
-            // TODO: - we may have too many wrapped h stacks... basically the NearbyMeetsBadgeView is supposed to be at the top of the screen length 10 away from the top in the dead center. the NearbyMeetsBadgeView is supposed to be dead center.
-            
             if !shouldHideDock {
-
                 HStack
                 {
                     // Nearby Meets Badge
@@ -837,30 +880,32 @@ struct ControlsView: View
                     
                 Spacer()
                 
-
-            // ==========================================
-            // ABOVE DOCK (LEFT): Recenter button for map
-            // ==========================================
+                // ==========================================
+                // ABOVE DOCK (LEFT): Conditional Recenter button for map
+                // ==========================================
                 HStack {
-                    Button(action: { locationData.centerOnUser() }) {
-                        Image(systemName: "location.fill")
-                            .font(.system(size: 18, weight: .medium))
-                            .foregroundColor(locationData.userLocation != nil ? AppPalette.Brand.neonPink : .gray)
-                            .frame(width: 44, height: 44)
-                            .background(
-                                Circle()
-                                    .fill(AppPalette.Surface.fieldFill)
-                                    .overlay(Circle().stroke(AppPalette.Surface.recenterField, lineWidth: 6))
-                            )
-                            .shadow(radius: 2)
+                    // Only show recenter button when user has moved away or zoomed out
+                    if locationData.shouldShowRecenterButton {
+                        Button(action: { locationData.centerOnUser() }) {
+                            Image(systemName: "location.fill")
+                                .font(.system(size: 18, weight: .medium))
+                                .foregroundColor(locationData.userLocation != nil ? AppPalette.Brand.neonPink : .gray)
+                                .frame(width: 44, height: 44)
+                                .background(
+                                    Circle()
+                                        .fill(AppPalette.Surface.fieldFill)
+                                        .overlay(Circle().stroke(AppPalette.Surface.recenterField, lineWidth: 6))
+                                )
+                                .shadow(radius: 2)
+                        }
+                        .disabled(locationData.userLocation == nil)
+                        .transition(.scale.combined(with: .opacity))
                     }
-                    .disabled(locationData.userLocation == nil)
                     Spacer()
                 }
                 .padding(.leading, 36)
                 .padding(.bottom, 20) // slightly above the dock
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-
+                .animation(.spring(response: 0.4, dampingFraction: 0.8), value: locationData.shouldShowRecenterButton)
                 
                 HStack
                 {
@@ -893,7 +938,6 @@ struct ControlsView: View
                 .padding(.bottom, 8)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
-
         }
         .task {
             await authState.updateToken()
@@ -901,7 +945,6 @@ struct ControlsView: View
         .animation(.easeInOut(duration: 0.1), value: shouldHideDock)
     }
 }
-
 
 // MARK: - Loading Overlay
 struct LoadingOverlay: View

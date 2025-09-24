@@ -188,6 +188,13 @@ struct MeetCreationUnifiedFormView: View
                 isAnimating = true
             }
             setupInitialState()
+            
+            // Auto-show location picker for createButton flow on location step
+            if case .createButton = entryMode, currentStep == .location {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                    showLocationPicker = true
+                }
+            }
         }
         .onChange(of: vm.start, initial: false) { _, newStart in
             if vm.end <= newStart {
@@ -196,17 +203,43 @@ struct MeetCreationUnifiedFormView: View
         }
         .onTapGesture { isNameFieldFocused = false }
         .onDisappear { geocodingTask?.cancel() }
-        .sheet(isPresented: $showLocationPicker) {
+        // Replace the fullScreenCover in MeetCreationUnifiedFormView.swift with this
+        .fullScreenCover(isPresented: $showLocationPicker) {
             LocationPickerSheet(
                 initial: vm.currentLocationInfo,
                 onPick: { picked in
+                    // Apply location immediately
                     vm.applyLocation(picked)
-                    displayLocationName = "Loading new location..."
-                    displayLocationSubtitle = ""
+                    
+                    // Update display with picked location data first
+                    if let name = picked.Name, !name.isEmpty {
+                        displayLocationName = name
+                    } else {
+                        displayLocationName = "Selected Location"
+                    }
+                    
+                    // Then start geocoding for better display
                     loadLocationAddress(picked)
+                    
+                    // Close picker first, then advance step
                     showLocationPicker = false
+                    
+                    if currentStep == .location {
+                        // Small delay to let the picker fully dismiss
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            nextStep()
+                        }
+                    }
                 },
-                onCancel: { showLocationPicker = false }
+                onCancel: {
+                    showLocationPicker = false
+                    if currentStep == .location {
+                        // Small delay before closing form to prevent graphics conflicts
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            onClose()
+                        }
+                    }
+                }
             )
         }
     }
@@ -365,58 +398,13 @@ struct MeetCreationUnifiedFormView: View
     private var locationStepContent: some View
     {
         VStack(spacing: 12) {
-            Text("Pick a spot for your meet")
-                .font(.system(size: 14))
+            Text("Selecting your location...")
+                .font(.system(size: 16))
                 .foregroundColor(AppPalette.Text.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .center)
             
-            Button {
-                showLocationPicker = true
-            } label: {
-                HStack {
-                    Image(systemName: "map")
-                    Text("Open Location Picker")
-                }
-                .font(.system(size: 16, weight: .semibold))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(AppPalette.Brand.neonPink, lineWidth: 1)
-                )
-            }
-            .padding(.top, 4)
-            
-            if vm.hasValidLocation {
-                VStack(alignment: .leading, spacing: 8) {
-                    Label {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(displayLocationName)
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(AppPalette.Text.primary)
-                            
-                            Text(displayLocationSubtitle)
-                                .font(.system(size: 12))
-                                .foregroundColor(AppPalette.Text.secondary)
-                        }
-                    } icon: {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(AppPalette.Brand.neonPink)
-                            .font(.system(size: 16))
-                    }
-                    .padding(12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(AppPalette.Brand.neonPink.opacity(0.05))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1)
-                            )
-                    )
-                }
-                .padding(.top, 12)
-            }
+            ProgressView()
+                .tint(AppPalette.Brand.neonPink)
         }
         .padding(.horizontal, 24)
     }
