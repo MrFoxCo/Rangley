@@ -9,7 +9,7 @@ import SwiftUI
 
 struct ViewUserMeModel: Codable, Identifiable
 {
-    let user_uuid           : String
+    let user_uuid           : UUID
     let username            : String
     let display_name        : String
     let cellphone           : String?
@@ -17,5 +17,5 @@ struct ViewUserMeModel: Codable, Identifiable
     let dob                 : Date
     let dttm_created_utc    : Date
     
-    var id: String { user_uuid }
+    var id: UUID { user_uuid }
 }

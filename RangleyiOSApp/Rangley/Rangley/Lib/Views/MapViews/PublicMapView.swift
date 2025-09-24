@@ -34,6 +34,7 @@ import Amplify
 import UIKit
 import AWSPluginsCore
 
+// MARK: - Updated MapDataStore with leaveMeet
 @MainActor
 class MapDataStore: ObservableObject
 {
@@ -103,10 +104,9 @@ class MapDataStore: ObservableObject
         await loadMeets()
     }
     
-    // Existing methods remain unchanged...
     func createMeet(_ body: MeetInsertBody) async throws {
         try await apiService.createMeet(body)
-        await forceRefresh() // Force refresh after creation
+        await forceRefresh()
     }
     
     func createMeetWithInvites(_ body: MeetWithInvitesInsertBody) async throws {
@@ -128,8 +128,16 @@ class MapDataStore: ObservableObject
             selectedMeet = nil
         }
     }
+    
+    func leaveMeet(_ meetId: UUID) async throws {  // ADD THIS FUNCTION
+        try await apiService.leaveMeet(meetId)
+        await forceRefresh()
+        
+        if selectedMeet?.meet_id_uuid == meetId {
+            selectedMeet = nil
+        }
+    }
 }
-
 
 // MARK: - API Service Protocol
 protocol APIServiceProtocol
@@ -139,6 +147,7 @@ protocol APIServiceProtocol
     func createMeetWithInvites(_ body: MeetWithInvitesInsertBody) async throws
     func updateMeet(_ body: UpdatedMeetInsertBody) async throws
     func deleteMeet(_ body: DeletedMeetInsertBody) async throws
+    func leaveMeet(_ meetId: UUID) async throws
 }
 
 
@@ -176,6 +185,15 @@ class APIService: APIServiceProtocol
     func deleteMeet(_ body: DeletedMeetInsertBody) async throws {
         let token = try await getAuthToken()
         _ = try await AuthAPI.deleteMeet(baseURL: Env.apiBaseURL, token: token, body: body)
+    }
+    
+    func leaveMeet(_ meetId: UUID) async throws {  // ADD THIS FUNCTION
+        let token = try await getAuthToken()
+        let body = RespondToInviteBody(
+            meet_id_uuid: meetId,
+            response_status_id: 8
+        )
+        _ = try await AuthAPI.respondToInvitation(baseURL: Env.apiBaseURL, token: token, body: body)
     }
 }
 
@@ -268,7 +286,8 @@ class LocationDataStore: ObservableObject
         updateRecenterButtonVisibility()
     }
     
-    private func updateRecenterButtonVisibility() {
+    private func updateRecenterButtonVisibility()
+    {
         guard let userLocation = userLocation,
               let _ = initialCenterCoordinate,
               let initialZoom = initialZoomLevel else {
@@ -294,7 +313,8 @@ class LocationDataStore: ObservableObject
         shouldShowRecenterButton = hasMovedAway || hasZoomedOut
     }
     
-    func centerOnUser() {
+    func centerOnUser()
+    {
         guard let location = userLocation else { return }
         
         // Reset to initial zoom level when recentering
@@ -312,7 +332,8 @@ class LocationDataStore: ObservableObject
         initialCenterCoordinate = location.coordinate
     }
     
-    func centerOn(coordinate: CLLocationCoordinate2D, span: MKCoordinateSpan? = nil) {
+    func centerOn(coordinate: CLLocationCoordinate2D, span: MKCoordinateSpan? = nil)
+    {
         let targetSpan = span ?? MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
         
         withAnimation(.easeInOut(duration: 1.0)) {
@@ -380,13 +401,15 @@ class AuthStateStore: ObservableObject
 {
     @Published var isAuthenticated = false
     @Published var currentToken = ""
+    @Published var currentUser: ViewUserMeModel?
     @Published var isCheckingAuth = true
     
     init() {
         checkAuthenticationStatus()
     }
     
-    func checkAuthenticationStatus() {
+    func checkAuthenticationStatus()
+    {
         Task {
             do {
                 let session = try await Amplify.Auth.fetchAuthSession()
@@ -397,6 +420,7 @@ class AuthStateStore: ObservableObject
                 
                 if session.isSignedIn {
                     await updateToken()
+                    await fetchCurrentUser()
                 }
             } catch {
                 await MainActor.run {
@@ -408,7 +432,21 @@ class AuthStateStore: ObservableObject
         }
     }
     
-    func updateToken() async {
+    private func fetchCurrentUser() async
+    {
+        do {
+            let user = try await AuthAPI.me(baseURL: Env.apiBaseURL, token: currentToken)
+            await MainActor.run {
+                currentUser = user
+            }
+        } catch {
+            print("Failed to fetch current user: \(error)")
+        }
+    }
+    
+    
+    func updateToken() async
+    {
         do {
             let session = try await Amplify.Auth.fetchAuthSession()
             guard let provider = session as? AuthCognitoTokensProvider else { return }
@@ -425,7 +463,8 @@ class AuthStateStore: ObservableObject
         }
     }
     
-    func signOut() async {
+    func signOut() async
+    {
         _ = await Amplify.Auth.signOut()
         await MainActor.run {
             isAuthenticated = false
@@ -599,6 +638,7 @@ public struct PublicMapView: View
                     mapData: mapData,
                     locationData: locationData,
                     uiState: uiState,
+                    authState: authState,  // Add this line
                     meetNS: meetNS,
                     authToken: authState.currentToken,
                     meetCreationMode: $meetCreationMode
@@ -714,6 +754,7 @@ struct OverlaysView: View
     @ObservedObject var mapData: MapDataStore
     @ObservedObject var locationData: LocationDataStore
     @ObservedObject var uiState: UIStateStore
+    @ObservedObject var authState: AuthStateStore  // Add this parameter
     let meetNS: Namespace.ID
     let authToken: String
     @Binding var meetCreationMode: MeetCreationEntryMode?
@@ -731,17 +772,32 @@ struct OverlaysView: View
                 }
             )
             
-            // Meet Card Overlay
+            // MARK: Meet Card Overlay - Fixed with authState parameter
+            // MARK: In OverlaysView body, update the MeetCardOverlay call to:
             MeetCardOverlay(
                 selectedMeet: $mapData.selectedMeet,
                 isPresented: $uiState.showMeetOverlay,
                 ns: meetNS,
+                currentUserUUID: authState.currentUser?.user_uuid,
+                // Remove this line: authState: authState,
                 onEdit: { meet in
                     uiState.showEditSheet = true
                 },
                 onDelete: { meet in
                     Task {
                         try? await mapData.deleteMeet(meet.meet_id_uuid)
+                        uiState.showMeetOverlay = false
+                    }
+                },
+                onLeave: { meet in
+                    Task {
+                        try? await mapData.leaveMeet(meet.meet_id_uuid)
+                        uiState.showMeetOverlay = false
+                    }
+                },
+                onRemove: { meet in
+                    Task {
+                        try? await mapData.leaveMeet(meet.meet_id_uuid)
                         uiState.showMeetOverlay = false
                     }
                 }

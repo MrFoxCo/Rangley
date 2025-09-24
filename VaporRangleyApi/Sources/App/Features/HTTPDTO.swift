@@ -165,7 +165,7 @@ enum HTTPDTO
         struct RespondToInviteBody: Content, Sendable
         {
             let meet_id_uuid        : UUID
-            let response_status_id  : Int16  // 3=Maybe, 5=Declined, 6=Accepted
+            let response_status_id  : Int16  // 3=Maybe, 5=Declined, 6=Accepted 8=Left 9 = removed
         }
         
         struct RespondToInviteResponse: Content, Sendable

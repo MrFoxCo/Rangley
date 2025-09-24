@@ -81,9 +81,11 @@ struct MeetCardOverlay: View
     @Binding var selectedMeet: ViewMeetsModel?
     @Binding var isPresented: Bool
     let ns: Namespace.ID
-
-    var onEdit:   (ViewMeetsModel) -> Void = { _ in }
-    var onDelete: (ViewMeetsModel) -> Void = { _ in }
+    let currentUserUUID: UUID?
+    var onEdit  :   (ViewMeetsModel) -> Void = { _ in }
+    var onDelete:   (ViewMeetsModel) -> Void = { _ in }
+    var onLeave :   (ViewMeetsModel) -> Void = { _ in }
+    var onRemove:   (ViewMeetsModel) -> Void = { _ in }
 
     var body: some View
     {
@@ -96,9 +98,12 @@ struct MeetCardOverlay: View
 
                 MeetCardView(
                     meet: meet,
+                    currentUserUUID: currentUserUUID,
                     onClose: close,
                     onEdit: onEdit,
-                    onDelete: onDelete
+                    onDelete: onDelete,
+                    onLeave: onLeave,
+                    onRemove: onRemove
                 )
                 .frame(maxWidth: 420, maxHeight: 490)
                 .background(
@@ -132,10 +137,14 @@ struct MeetCardOverlay: View
 // MARK: - Updated MeetCardView with Overlay Implementation
 private struct MeetCardView: View
 {
-    let meet    : ViewMeetsModel
-    let onClose : () -> Void
-    let onEdit  : (ViewMeetsModel) -> Void
-    let onDelete: (ViewMeetsModel) -> Void
+    let meet        : ViewMeetsModel
+    let currentUserUUID: UUID?
+    
+    let onClose     : () -> Void
+    let onEdit      : (ViewMeetsModel) -> Void
+    let onDelete    : (ViewMeetsModel) -> Void
+    let onLeave     : (ViewMeetsModel) -> Void
+    let onRemove    : (ViewMeetsModel) -> Void
 
     @State private var showDeleteConfirm         = false
     @State private var showLeaveConfirm          = false
@@ -166,18 +175,10 @@ private struct MeetCardView: View
         return f.string(from: meet.dttm_start_utc, to: meet.dttm_end_utc)
     }
     
-    // Helper to check if current user is an accepted participant (not owner)
-    private var isAcceptedParticipant: Bool
-    {
-        guard !meet.is_owner,
-              let participants = meet.participant_details else { return false }
-        
-        // Check if current user has accepted (status 6)
-        // Note: In a real implementation, you'd compare against current user's UUID
-        // For now, we'll check if there's any accepted participant that's not the owner
-        return participants.contains { $0.participant_status_id == 6 && $0.participant_status_id != 7 }
+    private var isAcceptedParticipant: Bool {
+        guard let _ = currentUserUUID else { return false }
+        return !meet.is_owner
     }
-
     // Geocoding function to get address from coordinates
     private func loadAddress()
     {
@@ -464,8 +465,7 @@ private struct MeetCardView: View
         }
         .alert("Leave this meet?", isPresented: $showLeaveConfirm) {
             Button("Leave", role: .destructive) {
-                // TODO: Implement leave meet functionality
-                print("User chose to leave the meet")
+                onLeave(meet)
                 onClose()
             }
             Button("Cancel", role: .cancel) {}

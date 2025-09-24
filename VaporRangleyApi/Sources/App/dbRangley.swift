@@ -744,7 +744,7 @@ enum Func
 
         struct Results: Content, Sendable
         {
-            let user_uuid           : String
+            let user_uuid           : UUID
             let username            : String
             let display_name        : String
             let cellphone           : String?
@@ -762,7 +762,7 @@ enum Func
         static func decode(_ r: any SQLRow) throws -> Results
         {
             try .init(
-                user_uuid           : r.decode(column: "user_uuid",         as: String.self),
+                user_uuid           : r.decode(column: "user_uuid",         as: UUID.self),
                 username            : r.decode(column: "username",          as: String.self),
                 display_name        : r.decode(column: "display_name",      as: String.self),
                 cellphone           : r.decode(column: "cellphone",         as: String?.self),
