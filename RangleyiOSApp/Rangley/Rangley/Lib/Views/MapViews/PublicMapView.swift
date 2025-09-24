@@ -5,9 +5,9 @@
 //  Created by Anthony Guzzardo on 9/18/25.
 //
 
-// =================================================================================
-// =================================================================================
-// =================================================================================
+// ==========================================================================================================
+// ==========================================================================================================
+// ==========================================================================================================
 // MARK: - IGNORE THE BELOW TODOs FOR NOW
 // TODO: - Fix the rotating screen view -- probably should look to be vertical
 // TODO: - Create UNDO for deletes and updates
@@ -18,10 +18,15 @@
 // TODO: - FIX THE leave meet refresh
 // TODO: - add remove user if owner functionality
 // TODO: - add count for people inside radius to the meet bubble button
+// TODO: - meet invitaiton should be single repsonsiblity (maybe give leaveMeet or left meet new one
+// TODO: - AWS SHIT verify with auth code, reset password, username, ...
+// TODO: - wire the account settings to have all of that shit
+// TODO: - start planning version two features (filter by date, public join, friends, .etc, caching etc. etc.
+// TODO:
 // MARK: - IGNORE THE ABOVE TODOs FOR NOW
-// =================================================================================
-// =================================================================================
-// =================================================================================
+// ==========================================================================================================
+// ==========================================================================================================
+// ==========================================================================================================
 
 
 import CoreLocation
