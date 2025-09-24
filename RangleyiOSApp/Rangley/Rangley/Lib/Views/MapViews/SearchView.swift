@@ -43,7 +43,8 @@ public struct SearchView: View
     
     public var body: some View
     {
-        NavigationView {
+        NavigationView
+        {
             VStack(spacing: 0) {
                 // Search header
                 searchHeader
@@ -64,7 +65,7 @@ public struct SearchView: View
                 
                 Spacer()
             }
-            .background(AppPalette.Brand.russianViolet.opacity(0.05))
+            .background(AppPalette.Brand.russianViolet)
             .navigationBarHidden(true)
         }
         .alert("Search Error", isPresented: $showError) {
@@ -106,7 +107,7 @@ public struct SearchView: View
                 
                 TextField("Search meets and users...", text: $searchText)
                     .font(.system(size: 16))
-                    .foregroundStyle(Color.primary)
+                    .foregroundStyle(AppPalette.Text.primary)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                 
@@ -122,7 +123,7 @@ public struct SearchView: View
             .padding(.vertical, 12)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(.systemBackground))
+                    .fill(Color(AppPalette.Brand.russianViolet))
                     .overlay(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
                             .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1)
@@ -178,7 +179,7 @@ public struct SearchView: View
             
             Text("Searching...")
                 .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(Color.secondary)
+                .foregroundStyle(AppPalette.Text.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -194,11 +195,11 @@ public struct SearchView: View
             VStack(spacing: 8) {
                 Text("Search Rangley")
                     .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(Color.primary)
+                    .foregroundStyle(AppPalette.Text.primary)
                 
                 Text("Find meets by name or users by username")
                     .font(.system(size: 16))
-                    .foregroundStyle(Color.secondary)
+                    .foregroundStyle(AppPalette.Text.secondary)
                     .multilineTextAlignment(.center)
             }
         }
@@ -217,11 +218,11 @@ public struct SearchView: View
             VStack(spacing: 8) {
                 Text("No Results Found")
                     .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(Color.primary)
+                    .foregroundStyle(AppPalette.Text.primary)
                 
                 Text("Try adjusting your search terms or scope")
                     .font(.system(size: 16))
-                    .foregroundStyle(Color.secondary)
+                    .foregroundStyle(AppPalette.Text.secondary)
                     .multilineTextAlignment(.center)
             }
         }
@@ -284,11 +285,11 @@ public struct SearchView: View
                 
                 Text(title)
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(Color.primary)
+                    .foregroundStyle(AppPalette.Text.primary)
                 
                 Text("(\(count))")
                     .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(Color.secondary)
+                    .foregroundStyle(AppPalette.Text.secondary)
                 
                 Spacer()
             }
@@ -472,7 +473,7 @@ struct MeetSearchResultCard: View
                     VStack(alignment: .leading, spacing: 4) {
                         Text(meet.name)
                             .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(Color.primary)
+                            .foregroundStyle(AppPalette.Text.primary)
                             .lineLimit(1)
                         
                         Text(meet.category_name)
@@ -492,26 +493,26 @@ struct MeetSearchResultCard: View
                 if !meet.description.isEmpty {
                     Text(meet.description)
                         .font(.system(size: 14))
-                        .foregroundStyle(Color.secondary)
+                        .foregroundStyle(AppPalette.Text.secondary)
                         .lineLimit(2)
                 }
                 
                 HStack {
                     Label(meet.display_name, systemImage: "person")
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Color.secondary)
+                        .foregroundStyle(AppPalette.Text.secondary)
                     
                     Spacer()
                     
                     Label("\(meet.max_capacity)", systemImage: "person.3")
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Color.secondary)
+                        .foregroundStyle(AppPalette.Text.secondary)
                 }
             }
             .padding(16)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(.systemBackground))
+                    .fill(Color(AppPalette.Brand.phthaloViolet))
                     .overlay(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
                             .stroke(AppPalette.Brand.neonPink.opacity(0.2), lineWidth: 1)
@@ -527,7 +528,8 @@ struct UserSearchResultCard: View
     let user: ViewUsersModel
     let onTap: () -> Void
     
-    var body: some View {
+    var body: some View
+    {
         Button(action: onTap) {
             HStack(spacing: 12) {
                 // Avatar placeholder
@@ -543,12 +545,12 @@ struct UserSearchResultCard: View
                 VStack(alignment: .leading, spacing: 4) {
                     Text(user.display_name)
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(Color.primary)
+                        .foregroundStyle(AppPalette.Text.primary)
                         .lineLimit(1)
                     
                     Text("@\(user.username)")
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(Color.secondary)
+                        .foregroundStyle(AppPalette.Text.secondary)
                         .lineLimit(1)
                 }
                 
@@ -570,13 +572,13 @@ struct UserSearchResultCard: View
                 if user.can_invite {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Color.secondary)
+                        .foregroundStyle(AppPalette.Text.secondary)
                 }
             }
             .padding(16)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(.systemBackground))
+                    .fill(Color(AppPalette.Brand.gunmetalPlum))
                     .overlay(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
                             .stroke(AppPalette.Brand.neonPink.opacity(0.2), lineWidth: 1)

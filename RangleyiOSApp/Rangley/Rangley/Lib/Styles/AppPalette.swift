@@ -12,7 +12,11 @@ import SwiftUI
 struct AppPalette {
     struct Brand {
         static let neonPink         = Color(hex: "#FF007D")
-        static let russianViolet    = Color(hex: "#2E003E") // Russian violet
+        static let russianViolet    = Color(hex: "#2E003E") // Russian violet Phtalo #1A002A Gunmetal Plum #1C0B1C
+        static let gunmetalPlum     = Color(hex: "#1C0B1C")
+        static let phthaloViolet    = Color(hex: "#1A002A")
+        
+        
         static let violetMid        = Color(hex: "#23003E")
         static let nearBlack        = Color(hex: "#0A0A0A")
         static let blueMid          = Color(hex: "#0F4C81") // figure out what color this is
@@ -59,6 +63,9 @@ struct AppPalette {
         //static let recenterField     = Color.white.opacity(0.96)
         static let recenterField = AppPalette.Brand.russianViolet.opacity(0.90)
         static let focusStroke       = Brand.neonPink
+        
+        static let meetSearch = AppPalette.Brand.russianViolet
+        static let userSearch = AppPalette.Brand.russianViolet
     }
 
     // Solid – Russian Violet (darkest; avoid edge crush if too dim)
@@ -67,3 +74,4 @@ struct AppPalette {
         startPoint: .top, endPoint: .bottom
     )
 }
+
