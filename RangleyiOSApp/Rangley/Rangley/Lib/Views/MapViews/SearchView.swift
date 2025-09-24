@@ -512,7 +512,7 @@ struct MeetSearchResultCard: View
             .padding(16)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(AppPalette.Brand.phthaloViolet))
+                    .fill(Color(AppPalette.Brand.japPurple))
                     .overlay(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
                             .stroke(AppPalette.Brand.neonPink.opacity(0.2), lineWidth: 1)
@@ -578,7 +578,7 @@ struct UserSearchResultCard: View
             .padding(16)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(AppPalette.Brand.gunmetalPlum))
+                    .fill(Color(AppPalette.Brand.japDarkerPurple))
                     .overlay(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
                             .stroke(AppPalette.Brand.neonPink.opacity(0.2), lineWidth: 1)

@@ -179,6 +179,28 @@ enum HTTPDTO
         // TODO: - ADD SHIT HERE FOR RESPOND TO MEET INVITES
     }
     
+    enum UpdateParticipantStatus
+    {
+        
+        struct UpdateParticipantStatusBody: Content, Sendable
+        {
+            let meet_id_uuid        : UUID
+            let target_user_uuid    : UUID
+            let new_status_id       : Int16  // 4=invited, 5=Declined, 6=Accepted, 7 = owner, 8=Left, 9 = removed
+        }
+        
+        struct UpdateParticipantStatusResponse: Content, Sendable
+        {
+            let success             : Bool
+            let message             : String
+            let participant_id_out  : Int64?
+            let old_status_id       : Int16?
+            let new_status_id       : Int16?
+            // Intentionally omitting participant_id_out since client doesn't need it
+        }
+        // TODO: - ADD SHIT HERE FOR RESPOND TO MEET INVITES
+    }
+    
     enum Notifications
     {
         // No SearchBody needed - just getting user's inbox
@@ -230,6 +252,38 @@ enum HTTPDTO
         }
     }
 }
+
+
+/*
+ ADd this later
+ 
+ extension HTTPDTO.Users.SearchBody {
+     func sanitized() -> Self {
+         func clean(_ xs: [String]?) -> [String]? {
+             let r = xs?.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .filter { !$0.isEmpty }
+             return (r?.isEmpty == false) ? r : nil
+         }
+         return .init(usernames: clean(usernames), emails: clean(emails), phones: clean(phones))
+     }
+ }
+... then in routes
+ 
+ let body = try req.content.decode(HTTPDTO.Users.SearchBody.self).sanitized()
+ let q = (try? req.query.decode(HTTPDTO.Users.SearchBody.self))?.sanitized() ?? .init(usernames:nil, emails:nil, phones:nil)
+
+ 
+ to support browsing later
+ extension HTTPDTO.Users {
+     struct BrowseQuery: Content, Sendable {
+         let limit: Int?
+         let offset: Int?
+     }
+ }
+
+ 
+ */
+
 
 
 /*

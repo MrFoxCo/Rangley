@@ -86,7 +86,7 @@ struct MeetCardOverlay: View
     var onEdit          :   (ViewMeetsModel) -> Void = { _ in }
     var onDelete        :   (ViewMeetsModel) -> Void = { _ in }
     var onLeave         :   (ViewMeetsModel) -> Void = { _ in }
-    var onRemove        :   (ViewMeetsModel) -> Void = { _ in }
+    var onRemoveParticipant: (ViewMeetsModel, ParticipantDetail) -> Void = { _, _ in }  // NEW
 
     var body: some View
     {
@@ -104,7 +104,7 @@ struct MeetCardOverlay: View
                     onEdit: onEdit,
                     onDelete: onDelete,
                     onLeave: onLeave,
-                    onRemove: onRemove
+                    onRemoveParticipant: onRemoveParticipant  // NEW: Pass the callback
                 )
                 .frame(maxWidth: 420, maxHeight: 490)
                 .background(
@@ -144,7 +144,7 @@ private struct MeetCardView: View
     let onEdit          : (ViewMeetsModel) -> Void
     let onDelete        : (ViewMeetsModel) -> Void
     let onLeave         : (ViewMeetsModel) -> Void
-    let onRemove        : (ViewMeetsModel) -> Void
+    let onRemoveParticipant: (ViewMeetsModel, ParticipantDetail) -> Void  // NEW
 
     @State private var showDeleteConfirm         = false
     @State private var showLeaveConfirm          = false
@@ -179,6 +179,7 @@ private struct MeetCardView: View
         guard let _ = currentUserUUID else { return false }
         return !meet.is_owner
     }
+    
     // Geocoding function to get address from coordinates
     private func loadAddress()
     {
@@ -442,12 +443,16 @@ private struct MeetCardView: View
             }
             .padding(20)
             
-            // PARTICIPANT DETAIL OVERLAY - REPLACES THE SHEET
+            // PARTICIPANT DETAIL OVERLAY - UPDATED WITH REMOVE FUNCTIONALITY
             if showingParticipantDetail, let participants = meet.participant_details {
                 ParticipantDetailOverlay(
                     participants: participants,
                     selectedParticipant: $selectedParticipant,
-                    showingDetail: $showingParticipantDetail
+                    showingDetail: $showingParticipantDetail,
+                    isOwner: meet.is_owner,  // NEW: Pass owner status
+                    onRemoveUser: { participant in  // NEW: Remove user callback
+                        onRemoveParticipant(meet, participant)
+                    }
                 )
             }
         }
@@ -472,11 +477,8 @@ private struct MeetCardView: View
         } message: {
             Text("Are you sure you want to leave this meet?")
         }
-
-        
     }
 }
-
 
 // MARK: - Live badge
 private struct LiveDot: View
@@ -591,6 +593,10 @@ private struct ParticipantDetailOverlay: View
     let participants: [ParticipantDetail]
     @Binding var selectedParticipant: ParticipantDetail?
     @Binding var showingDetail: Bool
+    let isOwner: Bool
+    let onRemoveUser: (ParticipantDetail) -> Void
+    
+    @State private var showRemoveConfirm = false
     
     private var currentIndex: Int {
         guard let selected = selectedParticipant,
@@ -642,6 +648,14 @@ private struct ParticipantDetailOverlay: View
         return ""
     }
     
+    private var canRemoveParticipant: Bool {
+        guard let participant = participant, isOwner else { return false }
+        // Can't remove the owner (themselves) or users who already left/were removed
+        return participant.participant_status_id != 7 &&
+               participant.participant_status_id != 8 &&
+               participant.participant_status_id != 9
+    }
+    
     private func navigateToParticipant(at index: Int) {
         guard index >= 0 && index < participants.count else { return }
         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
@@ -658,9 +672,26 @@ private struct ParticipantDetailOverlay: View
             {
                 if let participant = participant {
                     VStack(spacing: 24) {
-                        // Close button
+                        // Header with close and remove buttons
                         HStack {
+                            // Remove button (only for owner, only for removable participants)
+                            if canRemoveParticipant {
+                                Button {
+                                    showRemoveConfirm = true
+                                } label: {
+                                    Image(systemName: "person.badge.minus")
+                                        .font(.system(size: 16, weight: .semibold))
+                                        .foregroundColor(.red)
+                                        .frame(width: 28, height: 28)
+                                        .background(
+                                            Circle()
+                                                .fill(Color.red.opacity(0.1))
+                                        )
+                                }
+                            }
+                            
                             Spacer()
+                            
                             Button {
                                 withAnimation(.easeOut(duration: 0.3)) {
                                     showingDetail = false
@@ -773,5 +804,21 @@ private struct ParticipantDetailOverlay: View
             )
         }
         .animation(.spring(response: 0.4, dampingFraction: 0.8), value: showingDetail)
+        .alert("Remove participant?", isPresented: $showRemoveConfirm) {
+            Button("Remove", role: .destructive) {
+                if let participant = participant {
+                    onRemoveUser(participant)
+                    // Close the detail overlay after removing
+                    withAnimation(.easeOut(duration: 0.3)) {
+                        showingDetail = false
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            if let participant = participant {
+                Text("Remove \(participant.display_name) from this meet?")
+            }
+        }
     }
 }

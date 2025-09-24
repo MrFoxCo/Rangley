@@ -51,7 +51,10 @@ struct StartScreenView: View
             {
                 Spacer()
                 Image("RangleySticker")
-                    .resizable().scaledToFit().frame(width: 200, height: 200)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 200, height: 200)
+                    .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
 
                 NavigationLink {
                     LogInPageView()

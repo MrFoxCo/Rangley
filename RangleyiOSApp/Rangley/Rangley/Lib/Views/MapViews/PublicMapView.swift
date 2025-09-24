@@ -142,6 +142,15 @@ class MapDataStore: ObservableObject
             selectedMeet = nil
         }
     }
+    
+    func removeParticipant(meetId: UUID, participantId: UUID) async throws {
+        try await apiService.removeParticipant(meetId: meetId, participantId: participantId)
+        await forceRefresh()
+        
+        if selectedMeet?.meet_id_uuid == meetId {
+            selectedMeet = nil
+        }
+    }
 }
 
 // MARK: - API Service Protocol
@@ -153,6 +162,7 @@ protocol APIServiceProtocol
     func updateMeet(_ body: UpdatedMeetInsertBody) async throws
     func deleteMeet(_ body: DeletedMeetInsertBody) async throws
     func leaveMeet(_ meetId: UUID) async throws
+    func removeParticipant(meetId: UUID, participantId: UUID) async throws
 }
 
 
@@ -197,6 +207,15 @@ class APIService: APIServiceProtocol
         let body = RespondToInviteBody(
             meet_id_uuid: meetId,
             response_status_id: 8
+        )
+        _ = try await AuthAPI.respondToInvitation(baseURL: Env.apiBaseURL, token: token, body: body)
+    }
+    
+    func removeParticipant(meetId: UUID, participantId: UUID) async throws {
+        let token = try await getAuthToken()
+        let body = RespondToInviteBody(
+            meet_id_uuid: meetId,
+            response_status_id: 9
         )
         _ = try await AuthAPI.respondToInvitation(baseURL: Env.apiBaseURL, token: token, body: body)
     }
@@ -800,10 +819,14 @@ struct OverlaysView: View
                         uiState.showMeetOverlay = false
                     }
                 },
-                onRemove: { meet in
+                onRemoveParticipant: { meet, participant in
+                    print("Attempting to remove participant:")
+                    print("  - participant.user_uuid: \(participant.user_uuid)")
+                    print("  - participant.display_name: \(participant.display_name)")
+                    print("  - meet.meet_id_uuid: \(meet.meet_id_uuid)")
+                    
                     Task {
-                        try? await mapData.leaveMeet(meet.meet_id_uuid)
-                        uiState.showMeetOverlay = false
+                        try? await mapData.removeParticipant(meetId: meet.meet_id_uuid, participantId: participant.user_uuid)
                     }
                 }
             )
@@ -1026,7 +1049,7 @@ struct LoadingOverlay: View
     }
 }
 
-
+// TODO: - is this being used?
 private func tapHitsAnnotation(_ proxy: MapProxy, _ pt: CGPoint, meets: [ViewMeetsModel]) -> Bool
 {
     // ~50–60pt radius ≈ your 80pt bubble + padding

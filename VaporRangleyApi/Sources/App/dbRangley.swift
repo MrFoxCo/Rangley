@@ -39,6 +39,7 @@ enum RangleyFunc: String
     case v_users_by_cognito_sub                    = "rangley.rangley_fn_v_users_by_cognito_sub"
     case v_user_inbox_notifications_by_cognito_sub = "rangley.rangley_fn_v_user_inbox_notifications_by_cognito_sub"
     case m_respond_to_meet_invitation              = "rangley.rangley_fn_m_respond_to_meet_invitation"
+    case m_update_participant_status               = "rangley.rangley_fn_m_update_participant_status"
 }
 
 // MARK: - Generic call shapes
@@ -716,6 +717,46 @@ enum Func
         static func query(_ input: In) -> SQLQueryString
         {
             "SELECT * FROM \(unsafeRaw: funcName.rawValue)(\(bind: input.cognito_sub)::text, \(bind: input.meet_id_uuid)::uuid, \(bind: input.response_status_id)::int2);"
+        }
+
+        static func decode(_ r: any SQLRow) throws -> Results
+        {
+            try .init(
+                success           : r.decode(column: "success"           , as: Bool.self),
+                message           : r.decode(column: "message"           , as: String.self),
+                participant_id_out: r.decode(column: "participant_id_out", as: Int64?.self),
+                old_status_id     : r.decode(column: "old_status_id"     , as: Int16?.self),
+                new_status_id     : r.decode(column: "new_status_id"     , as: Int16?.self)
+            )
+        }
+
+
+    }
+    
+    enum UpdateParticipantStatus: PgFunctionRow
+    {
+        static let funcName: RangleyFunc = .m_update_participant_status
+
+        struct In: Sendable
+        {
+            let cognito_sub       : String
+            let meet_id_uuid        : UUID
+            let target_user_uuid    : UUID
+            let new_status_id       : Int16  // 3=Maybe, 5=Declined, 6=Accepted 8=Left 9 = removed
+        }
+
+        struct Results: Content, Sendable
+        {
+            let success             : Bool
+            let message             : String
+            let participant_id_out  : Int64?
+            let old_status_id       : Int16?
+            let new_status_id       : Int16?
+        }
+
+        static func query(_ input: In) -> SQLQueryString
+        {
+            "SELECT * FROM \(unsafeRaw: funcName.rawValue)(\(bind: input.cognito_sub)::text, \(bind: input.meet_id_uuid)::uuid, \(bind: input.target_user_uuid)::uuid, \(bind: input.new_status_id)::int2);"
         }
 
         static func decode(_ r: any SQLRow) throws -> Results

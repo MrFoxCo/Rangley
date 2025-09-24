@@ -412,6 +412,42 @@ public func routes(_ app: Application) throws
         }
     }
     
+    s.post("update-participant-status")
+    {
+        req async throws -> HTTPDTO.UpdateParticipantStatus.UpdateParticipantStatusResponse in
+        
+        // Auth validation
+        let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
+        
+        let body = try req.content.decode(HTTPDTO.UpdateParticipantStatus.UpdateParticipantStatusBody.self)
+        
+        // Database check
+        guard let sql = req.db as? any SQLDatabase
+        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+        
+        do {
+            let result = try await Func.UpdateParticipantStatus.call(on: sql, .init(
+                cognito_sub: sub,
+                meet_id_uuid: body.meet_id_uuid,
+                target_user_uuid: body.target_user_uuid,
+                new_status_id: body.new_status_id
+            ))
+            
+            return .init(
+                success: result.success,
+                message: result.message,
+                participant_id_out: result.participant_id_out,
+                old_status_id: result.old_status_id,
+                new_status_id: result.new_status_id
+            )
+            
+        } catch let error as PSQLError {
+            req.logger.error("Database error responding to invitation: \(error)")
+            throw Abort(.internalServerError, reason: "Failed to respond to invitation")
+        }
+    }
+    
     s.post("updated-meet")
     {
         req async throws -> HTTPDTO.Meets.InsertUpdateResponse in
