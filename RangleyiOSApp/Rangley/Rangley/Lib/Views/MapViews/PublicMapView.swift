@@ -22,7 +22,8 @@
 // TODO: - AWS SHIT verify with auth code, reset password, username, ...
 // TODO: - wire the account settings to have all of that shit
 // TODO: - start planning version two features (filter by date, public join, friends, .etc, caching etc. etc.
-// TODO:
+// TODO: - fix loading screen so it's the fucking rangley pig and not the black wheel bullshit that's
+// TODO: -  ^^^^this is for first download or simply reopening the app... an ANYTIME open of the app load
 // MARK: - IGNORE THE ABOVE TODOs FOR NOW
 // ==========================================================================================================
 // ==========================================================================================================
@@ -42,7 +43,7 @@ import AWSPluginsCore
 @MainActor
 class MapDataStore: ObservableObject
 {
-    @Published var meets: [ViewMeetsModel] = []
+    @Published var meets        : [ViewMeetsModel] = []
     @Published var selectedMeet: ViewMeetsModel?
     @Published var isLoading = false
     @Published var error: String?
@@ -135,17 +136,11 @@ class MapDataStore: ObservableObject
     
     func leaveMeet(_ meetId: UUID) async throws {
         try await apiService.leaveMeet(meetId)
+        await forceRefresh()
         
-        // Immediately remove the meet from the local array
-        meets.removeAll { $0.meet_id_uuid == meetId }
-        
-        // Clear selection if it was the meet being left
         if selectedMeet?.meet_id_uuid == meetId {
             selectedMeet = nil
         }
-        
-        // Then refresh to get the updated list from server
-        await forceRefresh()
     }
 }
 
@@ -265,7 +260,7 @@ class LocationDataStore: ObservableObject
             initialCenterCoordinate = newLocation.coordinate
             initialZoomLevel = 0.04 // Your default latitudeDelta
             
-            print("📍 Centering camera on user location: \(newLocation.coordinate)")
+            print("Centering camera on user location: \(newLocation.coordinate)")
             withAnimation(.easeInOut(duration: 1.0)) {
                 cameraPosition = .region(MKCoordinateRegion(
                     center: newLocation.coordinate,
