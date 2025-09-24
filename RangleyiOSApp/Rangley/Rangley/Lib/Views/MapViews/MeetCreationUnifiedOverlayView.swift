@@ -7,6 +7,7 @@
 
 import SwiftUI
 import UIKit
+import CoreLocation
 
 struct MeetCreationUnifiedOverlay: View
 {
@@ -21,7 +22,7 @@ struct MeetCreationUnifiedOverlay: View
     @State private var isAnimating = false
     @State private var isExploding = false
     @State private var showConfetti = false
-    @State private var showLocationConfirm = false
+    @State private var showCreateForm = false
     @State private var isSoftDismissing = false
     
     // MARK: Body
@@ -32,21 +33,21 @@ struct MeetCreationUnifiedOverlay: View
                 Color.black.opacity(0.4)
                     .ignoresSafeArea()
                     .onTapGesture {
-                        // Only allow backdrop dismiss if showing location confirm
-                        if showLocationConfirm {
+                        // Allow backdrop dismiss only when showing confirmation
+                        if !showCreateForm {
                             dismiss()
                         }
                     }
                 
                 // Content
                 ZStack {
-                    // For tap-on-map: show location confirm first
-                    if case .tapOnMap(let location) = mode, showLocationConfirm {
-                        LocationConfirmationPopupView(
-                            locationInfo: location,
+                    // Initial confirmation popup (for both flows)
+                    if !showCreateForm {
+                        CreateMeetConfirmationPopup(
+                            entryMode: mode,
                             onConfirm: {
                                 withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                    showLocationConfirm = false
+                                    showCreateForm = true
                                 }
                             },
                             onCancel: dismiss
@@ -57,8 +58,8 @@ struct MeetCreationUnifiedOverlay: View
                         ))
                     }
                     
-                    // Main form (for both flows)
-                    if !showLocationConfirm {
+                    // Main form (after confirmation)
+                    if showCreateForm {
                         MeetCreationUnifiedFormView(
                             entryMode: mode,
                             baseURL: baseURL,
@@ -76,6 +77,10 @@ struct MeetCreationUnifiedOverlay: View
                         .opacity(isExploding ? 0.0 : (isSoftDismissing ? 0.0 : 1.0))
                         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: isExploding)
                         .animation(.easeOut(duration: 0.25), value: isSoftDismissing)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .trailing).combined(with: .opacity),
+                            removal: .move(edge: .leading).combined(with: .opacity)
+                        ))
                     }
                     
                     // Confetti overlay
@@ -92,13 +97,7 @@ struct MeetCreationUnifiedOverlay: View
             }
         }
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showOverlay)
-        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showLocationConfirm)
-        .onAppear {
-            // For tap-on-map, show location confirm first
-            if case .tapOnMap = entryMode {
-                showLocationConfirm = true
-            }
-        }
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showCreateForm)
     }
     
     // MARK: Handlers
@@ -182,7 +181,7 @@ struct MeetCreationUnifiedOverlay: View
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
             showOverlay = false
             entryMode = nil
-            showLocationConfirm = false
+            showCreateForm = false
         }
     }
     
@@ -192,7 +191,7 @@ struct MeetCreationUnifiedOverlay: View
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
             showOverlay = false
             entryMode = nil
-            showLocationConfirm = false
+            showCreateForm = false
             isSoftDismissing = false
         }
     }
@@ -208,7 +207,7 @@ struct MeetCreationUnifiedOverlay: View
             withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                 showOverlay = false
                 entryMode = nil
-                showLocationConfirm = false
+                showCreateForm = false
                 isExploding = false
             }
         }
@@ -216,6 +215,142 @@ struct MeetCreationUnifiedOverlay: View
     }
 }
 
+// MARK: - form to ask if users actually want to create a meet
+struct CreateMeetConfirmationPopup: View
+{
+    let entryMode: MeetCreationEntryMode
+    let onConfirm: () -> Void
+    let onCancel: () -> Void
+    
+    @State private var isAnimating = false
+    @State private var locationName: String = "Loading location..."
+    
+    private var title: String {
+        switch entryMode {
+        case .tapOnMap: return "Create Meet Here?"
+        case .createButton: return "Create New Meet?"
+        }
+    }
+    
+    private var subtitle: String {
+        switch entryMode {
+        case .tapOnMap: return locationName
+        case .createButton: return "Start planning your meetup"
+        }
+    }
+    
+    var body: some View {
+        VStack(spacing: 16) {
+            // Icon
+            Image(systemName: "calendar.badge.plus")
+                .font(.system(size: 32, weight: .medium))
+                .foregroundColor(AppPalette.Brand.neonPink)
+            
+            // Title
+            Text(title)
+                .font(.system(size: 18, weight: .bold))
+                .foregroundColor(AppPalette.Text.primary)
+                .multilineTextAlignment(.center)
+
+            // Subtitle/Location
+            Text(subtitle)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(AppPalette.Text.secondary)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .minimumScaleFactor(0.9)
+
+            // Buttons
+            HStack(spacing: 12) {
+                Button(action: onCancel) {
+                    Text("Cancel")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(AppPalette.Text.secondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color.white.opacity(0.1))
+                                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                        )
+                }
+
+                Button(action: onConfirm) {
+                    Text("Yes, Create")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(AppPalette.Brand.neonPink)
+                        )
+                }
+            }
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(AppPalette.Brand.russianViolet)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1)
+                )
+        )
+        .frame(maxWidth: 280)
+        .shadow(color: AppPalette.Brand.neonPink.opacity(0.3), radius: 15, x: 0, y: 8)
+        .scaleEffect(isAnimating ? 1 : 0.5)
+        .opacity(isAnimating ? 1 : 0)
+        .onAppear {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+                isAnimating = true
+            }
+            loadLocationNameIfNeeded()
+        }
+    }
+    
+    private func loadLocationNameIfNeeded() {
+        guard case .tapOnMap(let location) = entryMode else { return }
+        
+        let clLocation = CLLocation(
+            latitude: location.Coordinate.latitude,
+            longitude: location.Coordinate.longitude
+        )
+        
+        CLGeocoder().reverseGeocodeLocation(clLocation) { placemarks, error in
+            DispatchQueue.main.async {
+                if error != nil {
+                    locationName = "Selected location"
+                    return
+                }
+                
+                guard let placemark = placemarks?.first else {
+                    locationName = "Selected location"
+                    return
+                }
+                
+                // Build location name similar to other components
+                var components: [String] = []
+                
+                if let name = placemark.name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
+                    components.append(name)
+                } else if let street = placemark.thoroughfare?.trimmingCharacters(in: .whitespacesAndNewlines), !street.isEmpty {
+                    if let number = placemark.subThoroughfare?.trimmingCharacters(in: .whitespacesAndNewlines), !number.isEmpty {
+                        components.append("\(number) \(street)")
+                    } else {
+                        components.append(street)
+                    }
+                }
+                
+                if let city = placemark.locality?.trimmingCharacters(in: .whitespacesAndNewlines), !city.isEmpty {
+                    components.append(city)
+                }
+                
+                locationName = components.isEmpty ? "Selected location" : components.joined(separator: ", ")
+            }
+        }
+    }
+}
 // MARK: - Usage Example
 /*
  In your main map view:
