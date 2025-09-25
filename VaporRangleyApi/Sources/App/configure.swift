@@ -58,6 +58,23 @@ public func configure(_ app: Application) throws
     
     
     
+    // MARK: - SMS CONFIGURATION
+    
+    let region = requireEnv("EUM_REGION")                 // "us-east-2"
+    let origId = requireEnv("EUM_ORIGINATION_ID")         // "pool-xxxx..."
+    let cfgSet = Environment.get("EUM_CONFIGURATION_SET")// optional
+
+    app.sms = .init(
+        region: region,
+        originationIdentity: origId,       // pool ID (or ARN)
+        configurationSetName: cfgSet,
+        defaultMessageType: "TRANSACTIONAL"
+    )
+    
+    // MARK: - END SMS
+    
+    
+    
     // MARK: - COGNITO
     // Env
     let rawIssuer = requireEnv("COGNITO_ISSUER")

@@ -57,7 +57,8 @@ private final class SignInVM: ObservableObject
     @Published var useBiometrics = true
     
     // CRITICAL: Load usernames WITHOUT triggering Face ID - just get the list
-    func loadRememberedUsers() {
+    func loadRememberedUsers()
+    {
         // This method MUST NEVER trigger biometric authentication
         do {
             let usernames = try KeychainAuth.listUsernamesWithoutBiometrics()
@@ -101,7 +102,8 @@ private final class SignInVM: ObservableObject
     }
     
     // CRITICAL: This is THE ONLY method that should trigger Face ID
-    func authenticateAndFillCredentials(for username: String) async -> Bool {
+    func authenticateAndFillCredentials(for username: String) async -> Bool
+    {
         do {
             // This is THE SINGLE POINT where Face ID gets triggered
             guard let password = try KeychainAuth.loadPassword(
@@ -134,7 +136,8 @@ private final class SignInVM: ObservableObject
     }
     
     // Auto-login after successful credential fill - with better error handling
-    func attemptAutoLogin(onSuccess: @escaping (String) -> Void) async {
+    func attemptAutoLogin(onSuccess: @escaping (String) -> Void) async
+    {
         guard canSubmit else {
             await MainActor.run {
                 self.banner = .error("Invalid credentials loaded")
@@ -158,21 +161,32 @@ private final class SignInVM: ObservableObject
     
     // ===== existing sign-in logic with improvements =====
     private var phoneDigits: String { principalRaw.filter(\.isNumber) }
-    private var normalizedPrincipal: String {
-        let ds = phoneDigits
-        switch ds.count {
-        case 10:                         return "+1" + ds
-        case 11 where ds.hasPrefix("1"): return "+" + ds
-        case 12...15:                    return "+" + ds
-        default:                         return principalRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+    
+    private var normalizedPrincipal: String
+    {
+        let trimmed = principalRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // If it looks like a phone number, normalize it
+        let digits = trimmed.filter(\.isNumber)
+        if digits.count >= 10 {
+            switch digits.count {
+            case 10: return "+1" + digits
+            case 11 where digits.hasPrefix("1"): return "+" + digits
+            case 12...15: return "+" + digits
+            default: break
+            }
         }
+        
+        // Otherwise return as-is (email or username)
+        return trimmed
     }
     
     var canSubmit: Bool {
         !normalizedPrincipal.isEmpty && !password.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
     
-    func signIn(onSuccess: @escaping (String) -> Void) async {
+    func signIn(onSuccess: @escaping (String) -> Void) async
+    {
         guard canSubmit else {
             banner = .error("Enter your phone (E.164), username, or email and password.")
             return

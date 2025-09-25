@@ -6,7 +6,8 @@
 //
 import Vapor
 
-public struct AppConfig : Sendable{
+public struct AppConfig : Sendable
+{
     public let dbHost: String
     public let dbPort: Int
     public let dbName: String
