@@ -699,7 +699,7 @@ private struct VerifyPhoneStep: View
     @FocusState private var codeFocused: Bool
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 20) {
             Text("Enter verification code")
                 .font(.title2.bold())
                 .foregroundStyle(AppPalette.Text.primary)
@@ -708,15 +708,13 @@ private struct VerifyPhoneStep: View
                 .font(.subheadline)
                 .foregroundStyle(AppPalette.Text.secondary)
             
-            TextField("000000", text: $verificationCode)
-                .keyboardType(.numberPad)
-                .textContentType(.oneTimeCode)
-                .multilineTextAlignment(.center)
-                .font(.title.monospacedDigit())
-                .textFieldStyle(.plain)
-                .focused($codeFocused)
-                .darkField(focused: codeFocused)
-                .onAppear { codeFocused = true }
+            // Custom 6-digit code input
+            DigitCodeInput(
+                code: $verificationCode,
+                digitCount: 6,
+                focused: $codeFocused
+            )
+            .onAppear { codeFocused = true }
             
             Button(action: onVerify) {
                 HStack {
@@ -751,6 +749,88 @@ private struct VerifyPhoneStep: View
             Spacer(minLength: 0)
         }
         .padding(16)
+    }
+}
+
+// MARK: - Custom 6-Digit Code Input
+
+private struct DigitCodeInput: View
+{
+    @Binding var code: String
+    let digitCount: Int
+    @FocusState.Binding var focused: Bool
+    
+    var body: some View {
+        ZStack {
+            // Hidden TextField that captures the actual input
+            TextField("", text: $code)
+                .keyboardType(.numberPad)
+                .textContentType(.oneTimeCode)
+                .focused($focused)
+                .opacity(0) // Make it invisible
+                .onChange(of: code) { _, newValue in
+                    // Limit to digit count and only allow numbers
+                    let filtered = String(newValue.filter { $0.isNumber }.prefix(digitCount))
+                    if filtered != code {
+                        code = filtered
+                    }
+                }
+            
+            // Visual representation with individual digit blocks
+            HStack(spacing: 12) {
+                ForEach(0..<digitCount, id: \.self) { index in
+                    DigitBlock(
+                        digit: digitAt(index: index),
+                        isActive: index == code.count && focused,
+                        isFilled: index < code.count
+                    )
+                }
+            }
+        }
+        .onTapGesture {
+            focused = true
+        }
+    }
+    
+    private func digitAt(index: Int) -> String {
+        guard index < code.count else { return "" }
+        let digitIndex = code.index(code.startIndex, offsetBy: index)
+        return String(code[digitIndex])
+    }
+}
+
+private struct DigitBlock: View
+{
+    let digit: String
+    let isActive: Bool
+    let isFilled: Bool
+    
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.white.opacity(0.15))
+                .frame(width: 44, height: 56)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(
+                            isActive ? AppPalette.Brand.neonPink : Color.white.opacity(0.3),
+                            lineWidth: isActive ? 2 : 1
+                        )
+                )
+            
+            if !digit.isEmpty {
+                Text(digit)
+                    .font(.title.monospacedDigit().bold())
+                    .foregroundColor(.white)
+            } else if isActive {
+                // Blinking cursor effect
+                Rectangle()
+                    .fill(AppPalette.Brand.neonPink)
+                    .frame(width: 2, height: 24)
+                    .opacity(isActive ? 1 : 0)
+                    .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: isActive)
+            }
+        }
     }
 }
 
