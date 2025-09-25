@@ -978,8 +978,8 @@ struct ControlsView: View
                                 .frame(width: 44, height: 44)
                                 .background(
                                     Circle()
-                                        .fill(AppPalette.Surface.fieldFill)
-                                        .overlay(Circle().stroke(AppPalette.Surface.recenterField, lineWidth: 6))
+                                        .fill(AppPalette.Brand.japPurple)
+                                        //.overlay(Circle().stroke(AppPalette.Brand.japDarkerPurple, lineWidth: 6))
                                 )
                                 .shadow(radius: 2)
                         }

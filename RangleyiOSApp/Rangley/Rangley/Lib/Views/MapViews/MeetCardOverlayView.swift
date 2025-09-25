@@ -109,7 +109,7 @@ struct MeetCardOverlay: View
                 .frame(maxWidth: 420, maxHeight: 490)
                 .background(
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .fill(AppPalette.bgGradient)
+                        .fill(AppPalette.Brand.japDarkerPurple)
                         .overlay(
                             RoundedRectangle(cornerRadius: 20, style: .continuous)
                                 .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
@@ -221,6 +221,30 @@ private struct MeetCardView: View
                 print("Geocoding error: \(error)")
             }
         }
+    }
+    
+    private func openInMaps()
+    {
+        let coordinate = CLLocationCoordinate2D(latitude: meet.latitude, longitude: meet.longitude)
+        let placemark = MKPlacemark(coordinate: coordinate)
+        let mapItem = MKMapItem(placemark: placemark)
+        
+        // Set the name for the destination
+        if !displayAddressName.isEmpty {
+            mapItem.name = displayAddressName
+        } else if !meet.name.isEmpty {
+            mapItem.name = meet.name
+        } else {
+            mapItem.name = "Meet Location"
+        }
+        
+        // Open Maps with directions
+        mapItem.openInMaps(launchOptions: [
+            MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
+        ])
+        
+        // Provide haptic feedback
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
 
     var body: some View
@@ -350,6 +374,17 @@ private struct MeetCardView: View
                                     .foregroundStyle(AppPalette.Text.secondary)
                                     .lineLimit(1)
                             }
+                            
+                            // "Tap for directions" hint
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.triangle.turn.up.right.circle")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(AppPalette.Brand.neonPink.opacity(0.7))
+                                Text("Tap for directions")
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(AppPalette.Brand.neonPink.opacity(0.7))
+                            }
+                            .padding(.top, 4)
                         }
                     } icon: {
                         Image(systemName: "location.fill")
@@ -367,6 +402,10 @@ private struct MeetCardView: View
                                     .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
                             )
                     )
+                    .contentShape(Rectangle()) // Make the entire area tappable
+                    .onTapGesture {
+                        openInMaps()
+                    }
                 }
                 
                 // Description (if exists)

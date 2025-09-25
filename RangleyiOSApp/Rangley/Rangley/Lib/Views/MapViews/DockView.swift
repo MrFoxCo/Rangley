@@ -192,7 +192,7 @@ public struct DockView: View
             .padding(.vertical, 12)
             .background(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(AppPalette.Brand.russianViolet.opacity(0.95))
+                    .fill(AppPalette.Brand.japDarkerPurple)
                     .overlay(
                         RoundedRectangle(cornerRadius: 24, style: .continuous)
                             .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1)

@@ -1,5 +1,5 @@
 //
-//  MeetCreationFormView.swift
+//  MeetCreationFormByTapView.swift
 //  Rangley
 //
 //  Created by Anthony Guzzardo on 9/12/25.
@@ -1260,7 +1260,7 @@ struct SelectedUserChip: View
 //    let user: ViewUsersModel
 //    let isSelected: Bool
 //    let onTap: () -> Void
-//    
+//
 //    var body: some View {
 //        Button(action: onTap) {
 //            HStack(spacing: 12) {
@@ -1273,21 +1273,21 @@ struct SelectedUserChip: View
 //                            .font(.system(size: 18, weight: .semibold))
 //                            .foregroundStyle(AppPalette.Brand.neonPink)
 //                    )
-//                
+//
 //                VStack(alignment: .leading, spacing: 4) {
 //                    Text(user.display_name)
 //                        .font(.system(size: 16, weight: .semibold))
 //                        .foregroundStyle(Color.primary)
 //                        .lineLimit(1)
-//                    
+//
 //                    Text("@\(user.username)")
 //                        .font(.system(size: 14, weight: .medium))
 //                        .foregroundStyle(Color.secondary)
 //                        .lineLimit(1)
 //                }
-//                
+//
 //                Spacer()
-//                
+//
 //                // Match badges (from original SearchView)
 //                HStack(spacing: 6) {
 //                    if user.matchedByUsername {
@@ -1300,13 +1300,13 @@ struct SelectedUserChip: View
 //                        matchBadge(text: "P", color: Color.green)
 //                    }
 //                }
-//                
+//
 //                // Selection indicator
 //                ZStack {
 //                    Circle()
 //                        .stroke(isSelected ? AppPalette.Brand.neonPink : AppPalette.Text.tertiary, lineWidth: 2)
 //                        .frame(width: 24, height: 24)
-//                    
+//
 //                    if isSelected {
 //                        Circle()
 //                            .fill(AppPalette.Brand.neonPink)
@@ -1333,7 +1333,7 @@ struct SelectedUserChip: View
 //        .scaleEffect(isSelected ? 0.98 : 1.0)
 //        .animation(.easeInOut(duration: 0.1), value: isSelected)
 //    }
-//    
+//
 //    private func matchBadge(text: String, color: Color) -> some View {
 //        Text(text)
 //            .font(.system(size: 10, weight: .bold))
