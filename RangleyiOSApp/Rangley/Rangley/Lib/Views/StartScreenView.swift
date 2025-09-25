@@ -67,7 +67,7 @@ struct StartScreenView: View
                 Spacer()
 
                 NavigationLink {
-                    UserRegisterNoCodeFlow()
+                    UserRegisterFlow()
                 } label: {
                     Text("Create new account")
                 }

@@ -47,8 +47,7 @@ public func routes(_ app: Application) throws
 {
     app.get("health") { _ in "ok" }
 
-    
-    
+
     // ===== Routing groups =====
     // MARK: - ROUTING GROUPS
     
@@ -246,6 +245,57 @@ public func routes(_ app: Application) throws
 //        
 //    }
 
+    // Send verification code
+    auth.post("send-verification")
+    {
+        req -> HTTPStatus in
+        let body = try req.content.decode(PhoneVerificationRequest.self)
+        
+        guard body.phone.starts(with: "+"), body.phone.count >= 10 else {
+            throw Abort(.badRequest, reason: "Invalid phone number format")
+        }
+        
+        let code = String(format: "%06d", Int.random(in: 100000...999999))
+        
+        // Store in memory
+        await VerificationCodeStore.shared.store(phone: body.phone, code: code)
+        
+        // Send SMS
+        do {
+            let message = "\(code) is your Rangley verification code is. Don't share it."
+            try await req.smsService.sendText(
+                to: body.phone,
+                body: message
+            )
+            
+            req.logger.info("Verification code sent to \(body.phone)")
+            return .ok
+            
+        } catch {
+            req.logger.error("Failed to send SMS: \(error)")
+            throw Abort(.internalServerError, reason: "Failed to send verification code")
+        }
+    }
+    
+    // Verify phone code
+    auth.post("verify-phone")
+    {
+        req -> VerificationResponse in
+        let body = try req.content.decode(VerifyCodeRequest.self)
+        
+        guard await VerificationCodeStore.shared.verify(phone: body.phone, code: body.code) else {
+            throw Abort(.badRequest, reason: "Invalid or expired verification code")
+        }
+        
+        req.logger.info("Phone \(body.phone) verified successfully")
+        
+        return VerificationResponse(
+            verified: true,
+            token: "phone_verified_\(body.phone.suffix(4))",
+            message: "Phone number verified successfully"
+        )
+    }
+    
     
 
     // MARK: - END INSERTS (i_*) or POST ROUTES
@@ -258,7 +308,8 @@ public func routes(_ app: Application) throws
     // POST /s/sms/send  { "to": "+13125551234", "body": "hi" }
     struct SendSMSReq: Content { let to: String; let body: String }
 
-    s.post("sms", "send") { req async throws -> HTTPStatus in
+    s.post("sms", "send")
+    { req async throws -> HTTPStatus in
         let p = try req.content.decode(SendSMSReq.self)
         _ = try await req.smsService.sendText(to: p.to, body: p.body)
         return .ok
@@ -308,16 +359,7 @@ public func routes(_ app: Application) throws
             guard dbResult.num_inserted == 1,
                   let meetId = dbResult.meet_id_uuid
             else { throw Abort(.internalServerError, reason: "Failed to create meet") }
-            
-//            do {
-//                // example: notify creator (or invited user) via SMS
-//                let phone = "+17737060003" // E.164; supply real target
-//                let text  = "Your meet “\(body.name)” is created. Starts \(body.dttm_start_utc)."
-//                _ = try await req.smsService.sendText(to: phone, body: text)
-//            } catch {
-//                // Don’t fail the whole request if SMS is non-critical
-//                req.logger.error("SMS failed: \(String(describing: error))")
-//            }
+    
 
             return .init(meet_id_uuid: meetId, num_inserted: dbResult.num_inserted)
             

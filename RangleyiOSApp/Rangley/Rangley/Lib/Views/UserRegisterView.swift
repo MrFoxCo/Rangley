@@ -1,5 +1,5 @@
 //
-//  UserRegisterFlowNoCode.swift
+//  UserRegisterView.swift
 //  Rangley
 //
 //  Created by You on 9/10/25.
@@ -39,6 +39,7 @@ private struct FormState: Equatable
     var dob: Date = .init(timeIntervalSince1970: 0)
 }
 
+// Add these to your existing Step enum
 private enum Step: Hashable {
     case cellphone
     case verifyPhone(phone: String)  // NEW
@@ -68,9 +69,7 @@ private enum FlowState: Equatable
 
 // MARK: - Auth client abstraction (thin wrapper over Amplify)
 
-// Update your AuthClient protocol
-private protocol AuthClient
-{
+private protocol AuthClient {
     func signUp(username: String, password: String, attributes: [AuthUserAttribute]) async throws -> AuthSignUpResult
     func confirmSignUp(for username: String, confirmationCode: String) async throws -> AuthSignUpResult  // Updated
     func resendSignUpCode(for username: String) async throws -> AuthCodeDeliveryDetails
@@ -87,8 +86,7 @@ private struct AmplifyAuthClient: AuthClient
     func resendSignUpCode(for username: String) async throws -> AuthCodeDeliveryDetails {
         try await Amplify.Auth.resendSignUpCode(for: username)
     }
-    
-    
+
     func signUp(username: String, password: String, attributes: [AuthUserAttribute]) async throws -> AuthSignUpResult
     {
         try await Amplify.Auth.signUp(username: username, password: password, options: .init(userAttributes: attributes))
@@ -117,16 +115,224 @@ private struct AmplifyAuthClient: AuthClient
 
 // MARK: - ViewModel (Reducer + Effects)
 
-// Update RegisterVM with verification logic
 @MainActor
 private final class RegisterVM: ObservableObject
 {
-    // Add these properties
+    @Published var form = FormState()
+    @Published var flow: FlowState = .collecting(.cellphone)
+    @Published var banner: BannerState = .none
+    @Published var isBusy = false
+
     @Published var verificationCode = ""
     @Published var isResending = false
     
-    // Update createAccount method
-    func createAccount() async {
+    // config
+    let baseURL = URL(string: "https://api.mrfoxco.com")! // move to config as needed
+
+    // deps
+    private let auth: AuthClient
+    private let df: DateFormatter
+
+    init(auth: AuthClient = AmplifyAuthClient())
+    {
+        self.auth = auth
+        self.df = DateFormatter()
+        self.df.calendar = .init(identifier: .iso8601)
+        self.df.locale   = .init(identifier: "en_US_POSIX")
+        self.df.timeZone = .init(secondsFromGMT: 0)
+        self.df.dateFormat = "yyyy-MM-dd"
+    }
+
+    // MARK: - Derived helpers
+
+    private var phoneDigits: String { form.phoneRaw.filter(\.isNumber) }
+
+    // Exposed (not private) so the IdChooser step can read it
+    var e164Phone: String?
+    {
+        let ds = phoneDigits
+        switch ds.count {
+        case 10:                         return "+1" + ds          // US default
+        case 11 where ds.hasPrefix("1"): return "+" + ds
+        case 12...15:                    return "+" + ds
+        default:                         return nil
+        }
+    }
+    // ^^ Connected to this
+    var canAdvanceFromCellphone: Bool
+    {
+        // phone required (email ignored for now)
+        return e164Phone != nil
+    }
+    
+    var emailValid: Bool
+    {
+        let pattern = #"^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$"#
+        return form.email.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
+    }
+    
+    var passwordScore: (ok: Bool, reasons: [String])
+    {
+        var reasons: [String] = []
+        if form.password.count < 8 { reasons.append("≥ 8 chars") }
+        if form.password.range(of: "\\d", options: .regularExpression) == nil { reasons.append("number") }
+        if form.password.range(of: "[A-Z]", options: .regularExpression) == nil { reasons.append("uppercase") }
+        if form.password.range(of: "[a-z]", options: .regularExpression) == nil { reasons.append("lowercase") }
+        if form.password.range(of: #"^\S+.*\S+$"#, options: .regularExpression) == nil { reasons.append("no edge spaces") }
+        return (reasons.isEmpty, reasons)
+    }
+    
+    private var principal: String?
+    {
+        if emailValid { return form.email }
+        if let p = e164Phone { return p }
+        return nil
+    }
+    
+    var inputsForCreateOK: Bool
+    {
+        principal != nil
+        && passwordScore.ok
+        && !form.displayName.trimmingCharacters(in: .whitespaces).isEmpty
+        && !form.username.trimmingCharacters(in: .whitespaces).isEmpty
+        && is13OrOlder(form.dob)
+    }
+
+    private func is13OrOlder(_ dob: Date) -> Bool
+    {
+        let years = Calendar(identifier: .gregorian).dateComponents([.year], from: dob, to: Date()).year ?? 0
+        return years >= 13
+    }
+
+    // MARK: - Navigation / Reducer-ish methods
+
+    func back()
+    {
+        switch flow {
+        case .collecting(let step):
+            switch step {
+            case .cellphone: break
+            case .verifyPhone: flow = .collecting(.cellphone)
+            case .password: flow = .collecting(.cellphone)
+            case .display: flow = .collecting(.password)
+            case .username: flow = .collecting(.display)
+            case .dob: flow = .collecting(.display)
+            case .agree: flow = .collecting(.dob)
+            case .done: break
+            }
+        case .signingIn, .signedIn, .failed:
+            break
+        }
+    }
+
+    func advanceFromCellphone()
+    {
+        if canAdvanceFromCellphone {
+            // Skip directly to verification during sign-up
+            Task { await createAccount() }
+        }
+    }
+    
+    func advanceFromIdChooser()
+    {
+        if self.canAdvanceFromCellphone {
+            // Create a temporary account to get verification code sent
+            Task { await sendVerificationCode() }
+        } else {
+            Log.auth.debug("advanceFromIdChooser: invalid phone \(self.form.phoneRaw, privacy: .private)")
+        }
+    }
+    
+    func sendVerificationCode() async
+    {
+        guard let phone = e164Phone else { return }
+        
+        // We need a temporary username and password to trigger verification
+        let tempUsername = "temp_\(UUID().uuidString.prefix(8))"
+        let tempPassword = "TempPass123!"
+        
+        isBusy = true
+        defer { isBusy = false }
+        
+        do {
+            let result = try await auth.signUp(
+                username: tempUsername,
+                password: tempPassword,
+                attributes: [.init(.phoneNumber, value: phone)]
+            )
+            
+            if !result.isSignUpComplete {
+                // Store the temp credentials for later use
+                form.username = tempUsername
+                form.password = tempPassword
+                
+                flow = .collecting(.verifyPhone(phone: phone))
+                banner = .info("Verification code sent to \(phone)")
+            } else {
+                banner = .error("Phone verification not required")
+            }
+            
+        } catch {
+            Log.auth.error("Send verification failed: \(explainAuth(error))")
+            banner = .error("Failed to send verification code: " + explainAuth(error))
+        }
+    }
+    
+    func advanceFromPassword()
+    {
+        guard passwordScore.ok else { Log.auth.debug("Weak password") ; return }
+        flow = .collecting(.display)
+    }
+
+    func advanceFromDisplay()
+    {
+        guard !form.displayName.trimmingCharacters(in: .whitespaces).isEmpty else { Log.auth.debug("Missing displayName") ; return }
+        flow = .collecting(.username)
+    }
+
+    func advanceFromUsername()
+    {
+        guard !form.username.trimmingCharacters(in: .whitespaces).isEmpty else { Log.auth.debug("Missing username") ; return }
+        flow = .collecting(.dob)
+    }
+
+    func advanceFromDob()
+    {
+        guard is13OrOlder(form.dob) else { Log.auth.warning("DOB under 13") ; return }
+        flow = .collecting(.agree)
+    }
+    
+    // Put this in RegisterVM
+    private func dobStringUTC(_ d: Date) -> String
+    {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(secondsFromGMT: 0)!         // pin UTC
+        let parts = cal.dateComponents([.year,.month,.day], from: d)
+        let noonUTC = cal.date(from: .init(year: parts.year, month: parts.month, day: parts.day, hour: 12))!
+        return df.string(from: noonUTC)                     // df = "yyyy-MM-dd", tz UTC (as you already set)
+    }
+
+
+    // MARK: - Effects
+
+    private func normalizedHandle() -> String
+    {
+        form.username.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+    
+    private func handleLooksLikeAlias(_ s: String) -> Bool
+    {
+        let s = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        if s.contains("@") { return true }                            // email-like
+        let allDigits = s.allSatisfy(\.isNumber)
+        let plusDigits = s.hasPrefix("+") && s.dropFirst().allSatisfy(\.isNumber)
+        return allDigits || plusDigits                                // phone-like
+    }
+
+    
+    // SIGN UP
+    func createAccount() async
+    {
         guard inputsForCreateOK else { return }
         guard let phone = e164Phone else { return }
 
@@ -165,8 +371,8 @@ private final class RegisterVM: ObservableObject
         }
     }
     
-    // Add phone verification method
-    func verifyPhone() async {
+    func verifyPhone() async
+    {
         guard case .collecting(.verifyPhone(_)) = flow else { return }
         guard !verificationCode.isEmpty else {
             banner = .error("Enter the verification code")
@@ -184,7 +390,11 @@ private final class RegisterVM: ObservableObject
             )
             
             if result.isSignUpComplete {
-                await postSignUpAutoFlow()
+                // Clear temp credentials and go to password step
+                form.username = ""
+                form.password = ""
+                flow = .collecting(.password)  // ← Go to password step after verification
+                banner = .success("Phone verified! Now create your password.")
             } else {
                 banner = .error("Verification failed. Please try again.")
             }
@@ -194,9 +404,10 @@ private final class RegisterVM: ObservableObject
             banner = .error("Verification failed: " + explainAuth(error))
         }
     }
-    
-    // Add resend code method
-    func resendVerificationCode() async {
+        
+        // Add resend code method
+    func resendVerificationCode() async
+    {
         guard case .collecting(.verifyPhone(_)) = flow else { return }
         
         isResending = true
@@ -210,16 +421,61 @@ private final class RegisterVM: ObservableObject
             banner = .error("Failed to resend code")
         }
     }
-    
-    // Update navigation methods
-    func advanceFromCellphone() {
-        if canAdvanceFromCellphone {
-            // Skip directly to verification during sign-up
-            Task { await createAccount() }
+
+    // SIGN IN immediately after sign-up
+    private func postSignUpAutoFlow() async
+    {
+        do {
+            let uname = normalizedHandle()
+            let res = try await self.auth.signIn(username: uname, password: self.form.password)
+            await self.handleSignInResult(res)
+        } catch {
+            Log.auth.error("postSignUpAutoFlow signIn failed: \(explainAuth(error), privacy: .private)")
+            banner = .error("Sign in failed: " + explainAuth(error))
         }
     }
-}
 
+
+    @MainActor
+    private func handleSignInResult(_ res: AuthSignInResult) async
+    {
+        if res.isSignedIn {
+            guard let tok = try? await self.auth.fetchTokens() else {
+                Log.auth.error("fetchTokens failed")
+                return
+            }
+            self.flow = .signedIn(idToken: tok)
+
+            Task {
+                do {
+                    try await self.registerBackend(idToken: tok)
+                    Log.auth.debug("Backend register OK")
+                } catch {
+                    Log.auth.error("Backend register failed: \(error.localizedDescription, privacy: .private)")
+                }
+            }
+            return
+        }
+        Log.auth.warning("Additional verification required: \(String(describing: res.nextStep))")
+    }
+
+
+
+    private func registerBackend(idToken: String) async throws
+    {
+        // Uses your existing AuthAPI + UserRegisterModel types
+        let payload = UserRegisterModel(
+            username: form.username,
+            display_name: form.displayName,
+            cellphone: e164Phone,
+            email: emailValid ? form.email : nil,
+            dob: dobStringUTC(form.dob),
+            first_name: nil,
+            last_name: nil
+        )
+        _ = try await AuthAPI.register(baseURL: baseURL, token: idToken, payload: payload)
+    }
+}
 
 // MARK: - Views
 
@@ -267,6 +523,7 @@ struct UserRegisterFlow: View
                 onNext: vm.advanceFromIdChooser,
                 canContinue: vm.canAdvanceFromCellphone
             )
+            // In UserRegisterFlow content computed property
             case .verifyPhone(let phone): VerifyPhoneStep(
                 phone: phone,
                 verificationCode: $vm.verificationCode,
@@ -295,7 +552,7 @@ struct UserRegisterFlow: View
             case .agree: AgreeStep(
                 isBusy: vm.isBusy,
                 canCreate: vm.inputsForCreateOK,
-                onCreate: { Task { await vm.createAccount() } }
+                onCreate: { Task { await vm.createAccount() } }  // ← This is correct
             )
             case .done:
                 EmptyView()
@@ -386,7 +643,6 @@ private struct CellphoneStep: View
 
                 Text(.init("""
                 By continuing, you agree to our [Terms](https://mrfoxco.com/terms) and [Privacy Policy](https://mrfoxco.com/privacy).
-                **Note:** We aren’t sending verification codes in this release.
                 """))
                 .font(.subheadline)
                 .foregroundStyle(AppPalette.Text.tertiary)
@@ -404,7 +660,6 @@ private struct CellphoneStep: View
     }
 }
 
-// Add new verification step view
 private struct VerifyPhoneStep: View
 {
     let phone: String
@@ -697,7 +952,7 @@ private struct AgreeStep: View
             Text(.init("""
             By tapping **I agree** you agree to create an account and to Rangley's [Terms](https://mrfoxco.com/terms) & [Privacy Policy](https://mrfoxco.com/privacy).
 
-            We use your phone and (if enabled) location to show whether you’re **near** an event or **at** it using a geofence. Other users see only “checked in”, never your exact location unless you check in. We don’t use your info for ads. No verification codes are sent in this release.
+            We use your phone and (if enabled) location to show whether you're **near** an event or **at** it using a geofence. Other users see only "checked in", never your exact location unless you check in. We don't use your info for ads.
             """))
             .font(.subheadline)
             .foregroundStyle(AppPalette.Text.tertiary)

@@ -397,7 +397,7 @@ struct LogInPageView: View
 
                     Divider().background(Color.white.opacity(0.12)).padding(.vertical, 8)
 
-                    NavigationLink { UserRegisterNoCodeFlow() } label: {
+                    NavigationLink { UserRegisterFlow() } label: {
                         Text("Create new account")
                     }
                     .buttonStyle(CreateNewAccountCapsuleButton(font: FontStyles.headline))
@@ -474,6 +474,27 @@ struct LogInPageView: View
                 .animation(.easeInOut(duration: 0.2), value: vm.showUsernameChip)
             }
         }
+    }
+}
+
+struct ForgotPasswordView: View
+{
+    @State private var phoneOrEmail = ""
+    @State private var resetCode = ""
+    @State private var newPassword = ""
+    @State private var step: ForgotPasswordStep = .enterContact
+    @State private var isBusy = false
+    @State private var banner: BannerState = .none
+    
+    enum ForgotPasswordStep {
+        case enterContact
+        case enterCode
+        case enterNewPassword
+    }
+    
+    var body: some View {
+        // Implementation similar to your registration flow
+        // Use Amplify.Auth.resetPassword() and confirmResetPassword()
     }
 }
 
