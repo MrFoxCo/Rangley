@@ -48,6 +48,7 @@ private enum Step: Hashable {
     case username
     case dob
     case agree
+    case saveCredentials
     case done
 }
 
@@ -122,9 +123,12 @@ private final class RegisterVM: ObservableObject
     @Published var flow: FlowState = .collecting(.cellphone)
     @Published var banner: BannerState = .none
     @Published var isBusy = false
-
     @Published var verificationCode = ""
     @Published var isResending = false
+    @Published var rememberPassword = true
+    @Published var useBiometrics = true
+    @Published var isSavingCredentials = false
+    @Published var pendingIdToken: String?
     
     // config
     let baseURL = URL(string: "https://api.mrfoxco.com")! // move to config as needed
@@ -206,18 +210,24 @@ private final class RegisterVM: ObservableObject
 
     // MARK: - Navigation / Reducer-ish methods
 
-    func back()
-    {
+    func back() {
         switch flow {
         case .collecting(let step):
             switch step {
             case .cellphone: break
             case .verifyPhone: flow = .collecting(.cellphone)
-            case .password: flow = .collecting(.cellphone)
+            case .password:
+                // After phone verification, go back to verify step, not cellphone
+                if let phone = e164Phone {
+                    flow = .collecting(.verifyPhone(phone: phone))
+                } else {
+                    flow = .collecting(.cellphone)
+                }
             case .display: flow = .collecting(.password)
             case .username: flow = .collecting(.display)
-            case .dob: flow = .collecting(.display)
+            case .dob: flow = .collecting(.username)  // Fixed: was going to .display
             case .agree: flow = .collecting(.dob)
+            case .saveCredentials: flow = .collecting(.agree)  // NEW
             case .done: break
             }
         case .signingIn, .signedIn, .failed:
@@ -237,44 +247,54 @@ private final class RegisterVM: ObservableObject
     {
         if self.canAdvanceFromCellphone {
             // Create a temporary account to get verification code sent
-            Task { await sendVerificationCode() }
+            Task { await sendPhoneVerification() }
         } else {
             Log.auth.debug("advanceFromIdChooser: invalid phone \(self.form.phoneRaw, privacy: .private)")
         }
     }
     
-    func sendVerificationCode() async
-    {
+    // Replace the placeholder sendPhoneVerification method in RegisterVM
+    func sendPhoneVerification() async {
         guard let phone = e164Phone else { return }
-        
-        // We need a temporary username and password to trigger verification
-        let tempUsername = "temp_\(UUID().uuidString.prefix(8))"
-        let tempPassword = "TempPass123!"
         
         isBusy = true
         defer { isBusy = false }
         
         do {
-            let result = try await auth.signUp(
-                username: tempUsername,
-                password: tempPassword,
-                attributes: [.init(.phoneNumber, value: phone)]
+            try await AuthAPI.sendVerificationCode(baseURL: baseURL, phone: phone)
+            flow = .collecting(.verifyPhone(phone: phone))
+            banner = .info("Verification code sent to \(phone)")
+        } catch {
+            banner = .error("Failed to send code: \(error.localizedDescription)")
+        }
+    }
+
+    // And update your verifyPhone method to use the new API
+    func verifyPhone() async {
+        guard case .collecting(.verifyPhone(let phone)) = flow else { return }
+        guard !verificationCode.isEmpty else {
+            banner = .error("Enter the verification code")
+            return
+        }
+        
+        isBusy = true
+        defer { isBusy = false }
+        
+        do {
+            let response = try await AuthAPI.verifyPhoneCode(
+                baseURL: baseURL,
+                phone: phone,
+                code: verificationCode
             )
             
-            if !result.isSignUpComplete {
-                // Store the temp credentials for later use
-                form.username = tempUsername
-                form.password = tempPassword
-                
-                flow = .collecting(.verifyPhone(phone: phone))
-                banner = .info("Verification code sent to \(phone)")
+            if response.verified {
+                flow = .collecting(.password)
+                banner = .success("Phone verified!")
             } else {
-                banner = .error("Phone verification not required")
+                banner = .error("Verification failed")
             }
-            
         } catch {
-            Log.auth.error("Send verification failed: \(explainAuth(error))")
-            banner = .error("Failed to send verification code: " + explainAuth(error))
+            banner = .error("Verification failed: \(error.localizedDescription)")
         }
     }
     
@@ -371,40 +391,6 @@ private final class RegisterVM: ObservableObject
         }
     }
     
-    func verifyPhone() async
-    {
-        guard case .collecting(.verifyPhone(_)) = flow else { return }
-        guard !verificationCode.isEmpty else {
-            banner = .error("Enter the verification code")
-            return
-        }
-        
-        isBusy = true
-        defer { isBusy = false }
-        
-        do {
-            let handle = normalizedHandle()
-            let result = try await auth.confirmSignUp(
-                for: handle,
-                confirmationCode: verificationCode
-            )
-            
-            if result.isSignUpComplete {
-                // Clear temp credentials and go to password step
-                form.username = ""
-                form.password = ""
-                flow = .collecting(.password)  // ← Go to password step after verification
-                banner = .success("Phone verified! Now create your password.")
-            } else {
-                banner = .error("Verification failed. Please try again.")
-            }
-            
-        } catch {
-            Log.auth.error("Phone verification failed: \(explainAuth(error))")
-            banner = .error("Verification failed: " + explainAuth(error))
-        }
-    }
-        
         // Add resend code method
     func resendVerificationCode() async
     {
@@ -435,7 +421,6 @@ private final class RegisterVM: ObservableObject
         }
     }
 
-
     @MainActor
     private func handleSignInResult(_ res: AuthSignInResult) async
     {
@@ -444,8 +429,12 @@ private final class RegisterVM: ObservableObject
                 Log.auth.error("fetchTokens failed")
                 return
             }
-            self.flow = .signedIn(idToken: tok)
-
+            
+            // Store token and show credential saving screen
+            pendingIdToken = tok
+            flow = .collecting(.saveCredentials)
+            
+            // Do backend registration in background
             Task {
                 do {
                     try await self.registerBackend(idToken: tok)
@@ -458,8 +447,39 @@ private final class RegisterVM: ObservableObject
         }
         Log.auth.warning("Additional verification required: \(String(describing: res.nextStep))")
     }
+    
 
+    func saveCredentialsAndComplete() async
+    {
+        let username = normalizedHandle()
+        
+        if rememberPassword {
+            do {
+                try KeychainAuth.save(
+                    username: username,
+                    password: form.password,
+                    protectWithBiometrics: useBiometrics
+                )
+                Log.auth.info("Credentials saved successfully")
+            } catch {
+                Log.auth.error("Failed to save credentials: \(error)")
+                // Don't block registration completion on keychain failure
+            }
+        }
+        
+        // Complete the flow using stored token
+        if let token = pendingIdToken {
+            flow = .signedIn(idToken: token)
+        }
+    }
 
+    func skipCredentialSaving()
+    {
+        // Complete without saving
+        if let token = pendingIdToken {
+            flow = .signedIn(idToken: token)
+        }
+    }
 
     private func registerBackend(idToken: String) async throws
     {
@@ -554,6 +574,13 @@ struct UserRegisterFlow: View
                 canCreate: vm.inputsForCreateOK,
                 onCreate: { Task { await vm.createAccount() } }  // ← This is correct
             )
+            case .saveCredentials: SaveCredentialsStep(
+                rememberPassword: $vm.rememberPassword,
+                useBiometrics: $vm.useBiometrics,
+                isBusy: vm.isSavingCredentials,
+                onSave: { Task { await vm.saveCredentialsAndComplete() } },
+                onSkip: vm.skipCredentialSaving
+            )
             case .done:
                 EmptyView()
             }
@@ -576,7 +603,7 @@ struct UserRegisterFlow: View
     {
         switch vm.flow {
         case .collecting(let step):
-            return step != .cellphone
+            return step != .cellphone && step != .saveCredentials  // Can't go back from save step
         default:
             return false
         }
@@ -964,6 +991,81 @@ private struct AgreeStep: View
             }
             .buttonStyle(PrimaryCapsuleButton())
             .disabled(isBusy || !canCreate)
+
+            Spacer(minLength: 0)
+        }
+        .padding(16)
+    }
+}
+
+private struct SaveCredentialsStep: View
+{
+    @Binding var rememberPassword: Bool
+    @Binding var useBiometrics: Bool
+    let isBusy: Bool
+    let onSave: () -> Void
+    let onSkip: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            Text("Save your login?")
+                .font(.title2.bold())
+                .foregroundStyle(AppPalette.Text.primary)
+
+            Text("We can securely save your login details for faster access next time.")
+                .font(.subheadline)
+                .foregroundStyle(AppPalette.Text.secondary)
+
+            VStack(alignment: .leading, spacing: 16) {
+                Toggle(isOn: $rememberPassword) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Remember me")
+                            .foregroundStyle(AppPalette.Text.primary)
+                        Text("Save username and password")
+                            .font(.caption)
+                            .foregroundStyle(AppPalette.Text.secondary)
+                    }
+                }
+                .tint(AppPalette.Brand.neonPink)
+
+                Toggle(isOn: $useBiometrics) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Protect with Face ID")
+                            .foregroundStyle(AppPalette.Text.primary)
+                        Text("Require biometric authentication")
+                            .font(.caption)
+                            .foregroundStyle(AppPalette.Text.secondary)
+                    }
+                }
+                .tint(AppPalette.Brand.neonPink)
+                .disabled(!rememberPassword)
+                .opacity(rememberPassword ? 1.0 : 0.6)
+            }
+            .padding(.vertical, 8)
+
+            VStack(spacing: 12) {
+                Button(action: onSave) {
+                    HStack {
+                        if isBusy {
+                            ProgressView()
+                                .progressViewStyle(.circular)
+                                .tint(.black)
+                                .scaleEffect(0.8)
+                        }
+                        Text(rememberPassword ? (isBusy ? "Saving..." : "Save & Continue") : "Continue")
+                            .bold()
+                    }
+                }
+                .buttonStyle(PrimaryCapsuleButton())
+                .disabled(isBusy)
+
+                Button("Skip for now") {
+                    onSkip()
+                }
+                .font(.footnote)
+                .foregroundColor(AppPalette.Brand.neonPink)
+                .disabled(isBusy)
+            }
 
             Spacer(minLength: 0)
         }

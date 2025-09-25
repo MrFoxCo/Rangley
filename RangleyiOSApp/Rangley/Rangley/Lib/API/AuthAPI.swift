@@ -170,6 +170,86 @@ struct AuthAPI
         }
     }
 
+    // Add these methods to your AuthAPI struct
+
+
+        
+    // MARK: - Phone Verification API
+        
+    /// POST /auth/send-verification - Send SMS verification code
+    static func sendVerificationCode(baseURL: URL, phone: String) async throws -> Void
+    {
+        let body = SendVerificationRequest(phone: phone)
+        
+        var req = URLRequest(url: makeURL(baseURL, ["auth", "send-verification"]))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        
+        do {
+            req.httpBody = try isoEncoder.encode(body)
+        } catch {
+            throw AuthAPIError.encode
+        }
+        
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else {
+            throw AuthAPIError.http(-1, "No HTTPURLResponse")
+        }
+        
+        guard (200..<300).contains(http.statusCode) else {
+            #if DEBUG
+            print("=== Send Verification Failed ===")
+            print("Status Code: \(http.statusCode)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        }
+        
+        // Success - no response body expected for 200 OK
+    }
+    
+    /// POST /auth/verify-phone - Verify SMS code
+    static func verifyPhoneCode(baseURL: URL, phone: String, code: String) async throws -> VerifyPhoneResponse
+    {
+        let body = VerifyPhoneRequest(phone: phone, code: code)
+        
+        var req = URLRequest(url: makeURL(baseURL, ["auth", "verify-phone"]))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        
+        do {
+            req.httpBody = try isoEncoder.encode(body)
+        } catch {
+            throw AuthAPIError.encode
+        }
+        
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else {
+            throw AuthAPIError.http(-1, "No HTTPURLResponse")
+        }
+        
+        guard (200..<300).contains(http.statusCode) else {
+            #if DEBUG
+            print("=== Verify Phone Failed ===")
+            print("Status Code: \(http.statusCode)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        }
+        
+        do {
+            return try isoDecoder.decode(VerifyPhoneResponse.self, from: data)
+        } catch {
+            #if DEBUG
+            print("=== Decode Error in verifyPhoneCode ===")
+            print("Error: \(error)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.decode(error.localizedDescription)
+        }
+    }
     
     // GET /auth/whoami  (protected; Bearer ID token)
     static func whoAmI(baseURL: URL, token: String) async throws -> WhoAmI

@@ -10,16 +10,10 @@ import Foundation
 
 // Simple, concurrency-safe verification code store
 actor VerificationCodeStore {
-    static let shared: VerificationCodeStore = {
-        let store = VerificationCodeStore()
-        Task {
-            await store.startCleanup()
-        }
-        return store
-    }()
+    static let shared = VerificationCodeStore()
     
     private var codes: [String: CodeEntry] = [:]
-    private var cleanupTask: Task<Void, Never>?
+    private var lastCleanup = Date()
     
     private struct CodeEntry {
         let code: String
@@ -27,24 +21,17 @@ actor VerificationCodeStore {
     }
     
     private init() {
-        // Empty initializer
-    }
-    
-    private func startCleanup() {
-        cleanupTask = Task { [unowned self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 60_000_000_000) // 60 seconds
-                await self.cleanupExpired()
-            }
-        }
+        // Empty init - cleanup happens on-demand
     }
     
     func store(phone: String, code: String, expiryMinutes: Int = 5) {
+        cleanupIfNeeded()
         let expires = Date().addingTimeInterval(TimeInterval(expiryMinutes * 60))
         codes[phone] = CodeEntry(code: code, expires: expires)
     }
     
     func verify(phone: String, code: String) -> Bool {
+        cleanupIfNeeded()
         guard let stored = codes[phone],
               stored.expires > Date(),
               stored.code == code else {
@@ -55,13 +42,13 @@ actor VerificationCodeStore {
         return true
     }
     
-    private func cleanupExpired() async {
+    // Clean up expired codes if it's been more than 5 minutes since last cleanup
+    private func cleanupIfNeeded() {
         let now = Date()
-        codes = codes.filter { $0.value.expires > now }
-    }
-    
-    deinit {
-        cleanupTask?.cancel()
+        if now.timeIntervalSince(lastCleanup) > 300 { // 5 minutes
+            codes = codes.filter { $0.value.expires > now }
+            lastCleanup = now
+        }
     }
 }
 

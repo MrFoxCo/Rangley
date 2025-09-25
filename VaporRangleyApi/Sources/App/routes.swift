@@ -47,7 +47,9 @@ public func routes(_ app: Application) throws
 {
     app.get("health") { _ in "ok" }
 
-
+    // Public auth endpoints (no authentication required)
+    let publicAuth = app.grouped("auth")
+    
     // ===== Routing groups =====
     // MARK: - ROUTING GROUPS
     
@@ -245,8 +247,10 @@ public func routes(_ app: Application) throws
 //        
 //    }
 
-    // Send verification code
-    auth.post("send-verification")
+
+    // Send verification code with rate limiting
+    // Enhanced send verification route with IP protection
+    publicAuth.post("send-verification")
     {
         req -> HTTPStatus in
         let body = try req.content.decode(PhoneVerificationRequest.self)
@@ -255,43 +259,93 @@ public func routes(_ app: Application) throws
             throw Abort(.badRequest, reason: "Invalid phone number format")
         }
         
+        // Get client IP address
+        let clientIP = req.headers.forwarded.first?.for ??
+                       req.remoteAddress?.hostname ??
+                       "unknown"
+        // Normalize phone format for consistent rate limiting
+        let normalizedPhone = body.phone.replacingOccurrences(of: " ", with: "")
+                                         .replacingOccurrences(of: "-", with: "")
+                                         .replacingOccurrences(of: "(", with: "")
+                                         .replacingOccurrences(of: ")", with: "")
+        // Check rate limits (both phone and IP)
+        let rateCheck = await SMSRateLimiter.shared.canSend(to: normalizedPhone, from: clientIP)
+        guard rateCheck.allowed else {
+            if let waitInfo = await SMSRateLimiter.shared.getRemainingTime(for: normalizedPhone, from: clientIP) {
+                let minutes = Int(waitInfo.timeUntilReset / 60) + 1
+                let message: String
+                
+                switch waitInfo.reason {
+                case "phone_hourly":
+                    message = "Too many verification attempts for this phone. Try again in \(minutes) minutes."
+                case "phone_daily":
+                    let hours = Int(waitInfo.timeUntilReset / 3600) + 1
+                    message = "Daily verification limit reached for this phone. Try again in \(hours) hours."
+                case "ip_hourly":
+                    message = "Too many verification requests from your location. Try again in \(minutes) minutes."
+                case "ip_daily":
+                    let hours = Int(waitInfo.timeUntilReset / 3600) + 1
+                    message = "Daily verification limit reached from your location. Try again in \(hours) hours."
+                default:
+                    message = "Rate limit exceeded. Please try again later."
+                }
+                
+                req.logger.warning("Rate limit hit - Phone: •••\(normalizedPhone.suffix(4)), IP: \(clientIP), Reason: \(waitInfo.reason)")
+                throw Abort(.tooManyRequests, reason: message)
+            } else {
+                req.logger.warning("Rate limit hit - Phone: •••\(normalizedPhone.suffix(4)), IP: \(clientIP)")
+                throw Abort(.tooManyRequests, reason: "Rate limit exceeded. Please try again later.")
+            }
+        }
+        
         let code = String(format: "%06d", Int.random(in: 100000...999999))
         
-        // Store in memory
-        await VerificationCodeStore.shared.store(phone: body.phone, code: code)
+        // Store code using normalized phone
+        await VerificationCodeStore.shared.store(phone: normalizedPhone, code: code)
         
-        // Send SMS
+        // Send SMS to original phone format (preserves user's formatting)
         do {
-            let message = "\(code) is your Rangley verification code is. Don't share it."
+            let message = "\(code) is your Rangley verification code. Don't share it."
             try await req.smsService.sendText(
-                to: body.phone,
+                to: body.phone,  // Use original format for SMS delivery
                 body: message
             )
             
-            req.logger.info("Verification code sent to \(body.phone)")
+            // Record the attempt AFTER successful send
+            await SMSRateLimiter.shared.recordAttempt(for: normalizedPhone, from: clientIP)
+            
+            req.logger.info("Verification code sent to •••\(normalizedPhone.suffix(4)) from IP: \(clientIP)")
             return .ok
             
         } catch {
-            req.logger.error("Failed to send SMS: \(error)")
+            req.logger.error("Failed to send SMS to •••\(normalizedPhone.suffix(4)) from IP: \(clientIP): \(error)")
             throw Abort(.internalServerError, reason: "Failed to send verification code")
         }
     }
     
-    // Verify phone code
-    auth.post("verify-phone")
+    // Verify phone code (with attempt limiting too)
+    // Verify phone code with phone normalization
+    publicAuth.post("verify-phone")
     {
         req -> VerificationResponse in
         let body = try req.content.decode(VerifyCodeRequest.self)
         
-        guard await VerificationCodeStore.shared.verify(phone: body.phone, code: body.code) else {
+        // Normalize phone format to match stored format
+        let normalizedPhone = body.phone.replacingOccurrences(of: " ", with: "")
+                                         .replacingOccurrences(of: "-", with: "")
+                                         .replacingOccurrences(of: "(", with: "")
+                                         .replacingOccurrences(of: ")", with: "")
+        
+        guard await VerificationCodeStore.shared.verify(phone: normalizedPhone, code: body.code) else {
+            req.logger.warning("Invalid verification attempt for •••\(normalizedPhone.suffix(4))")
             throw Abort(.badRequest, reason: "Invalid or expired verification code")
         }
         
-        req.logger.info("Phone \(body.phone) verified successfully")
+        req.logger.info("Phone •••\(normalizedPhone.suffix(4)) verified successfully")
         
         return VerificationResponse(
             verified: true,
-            token: "phone_verified_\(body.phone.suffix(4))",
+            token: "phone_verified_\(normalizedPhone.suffix(4))",
             message: "Phone number verified successfully"
         )
     }
@@ -304,17 +358,6 @@ public func routes(_ app: Application) throws
     
     
     // MARK: - System INSERTS (s*) or POST ROUTES
-    
-    // POST /s/sms/send  { "to": "+13125551234", "body": "hi" }
-    struct SendSMSReq: Content { let to: String; let body: String }
-
-    s.post("sms", "send")
-    { req async throws -> HTTPStatus in
-        let p = try req.content.decode(SendSMSReq.self)
-        _ = try await req.smsService.sendText(to: p.to, body: p.body)
-        return .ok
-    }
-
 
     s.post("meet")
     {
