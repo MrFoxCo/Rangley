@@ -1033,13 +1033,14 @@ struct ControlsView: View
     }
 }
 
+// TODO: - we need to add the hiide everything 
 // TODO: - FIX THIS IT HAS NO DESIGN
 // MARK: - Loading Overlay
 struct LoadingOverlay: View
 {
     var body: some View
     {
-        Color.black.opacity(0.3)
+        Color(AppPalette.Brand.japPurple)
             .ignoresSafeArea()
         
         VStack {

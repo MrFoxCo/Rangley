@@ -9,24 +9,6 @@ import Amplify
 import AWSPluginsCore
 import UIKit
 
-// MARK: - Error explainer (Amplify 2.x)
-fileprivate func explainAuth(_ error: Error) -> String
-{
-    if let ae = error as? AuthError {
-        var parts = [ae.errorDescription]
-        let rs = ae.recoverySuggestion; if !rs.isEmpty { parts.append(rs) }
-        if let underlying = ae.underlyingError as NSError? {
-            let type = (underlying.userInfo["__type"] as? String)
-                ?? (underlying.userInfo["code"] as? String) ?? underlying.domain
-            let msg  = (underlying.userInfo["message"] as? String)
-                ?? underlying.localizedDescription
-            parts.append("underlying: \(type) \(msg)")
-        }
-        return parts.joined(separator: " | ")
-    }
-    return String(describing: error)
-}
-
 // MARK: - Form & Flow State
 
 private struct FormState: Equatable
@@ -50,14 +32,6 @@ private enum Step: Hashable {
     case agree
     case saveCredentials
     case done
-}
-
-private enum BannerState: Equatable
-{
-    case none
-    case info(String)
-    case error(String)
-    case success(String)
 }
 
 private enum FlowState: Equatable
@@ -121,7 +95,10 @@ private final class RegisterVM: ObservableObject
 {
     @Published var form = FormState()
     @Published var flow: FlowState = .collecting(.cellphone)
-    @Published var banner: BannerState = .none
+    @Published var phoneStatus      : StatusMessage = .none
+    @Published var verifyStatus     : StatusMessage = .none
+    @Published var passwordStatus   : StatusMessage = .none
+    @Published var signUpStatus     : StatusMessage = .none
     @Published var isBusy = false
     @Published var verificationCode = ""
     @Published var isResending = false
@@ -254,30 +231,33 @@ private final class RegisterVM: ObservableObject
     }
     
     // Replace the placeholder sendPhoneVerification method in RegisterVM
-    func sendPhoneVerification() async {
+    func sendPhoneVerification() async
+    {
         guard let phone = e164Phone else { return }
         
         isBusy = true
+        phoneStatus = .none
         defer { isBusy = false }
         
         do {
             try await AuthAPI.sendVerificationCode(baseURL: baseURL, phone: phone)
             flow = .collecting(.verifyPhone(phone: phone))
-            banner = .info("Verification code sent to \(phone)")
+            verifyStatus = .info("Code sent to \(phone)")
         } catch {
-            banner = .error("Failed to send code: \(error.localizedDescription)")
+            phoneStatus = .error("Couldn't send the code. Please try again")
         }
     }
 
-    // And update your verifyPhone method to use the new API
-    func verifyPhone() async {
+    func verifyPhone() async
+    {
         guard case .collecting(.verifyPhone(let phone)) = flow else { return }
         guard !verificationCode.isEmpty else {
-            banner = .error("Enter the verification code")
+            verifyStatus = .error("Enter the verification code")
             return
         }
         
         isBusy = true
+        verifyStatus = .none
         defer { isBusy = false }
         
         do {
@@ -289,12 +269,33 @@ private final class RegisterVM: ObservableObject
             
             if response.verified {
                 flow = .collecting(.password)
-                banner = .success("Phone verified!")
+                verifyStatus = .success("Phone verified!")
+                // Clear the success after transition
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    self.verifyStatus = .none
+                }
             } else {
-                banner = .error("Verification failed")
+                verifyStatus = .error("Invalid code. Please check and try again")
             }
         } catch {
-            banner = .error("Verification failed: \(error.localizedDescription)")
+            verifyStatus = .error("Verification failed")
+        }
+    }
+    
+    func resendVerificationCode() async
+    {
+        guard case .collecting(.verifyPhone(_)) = flow else { return }
+        
+        isResending = true
+        verifyStatus = .none
+        defer { isResending = false }
+        
+        do {
+            let handle = normalizedHandle()
+            _ = try await auth.resendSignUpCode(for: handle)
+            verifyStatus = .info("New code sent")
+        } catch {
+            verifyStatus = .error("Couldn't resend the code. Please try again")
         }
     }
     
@@ -358,11 +359,12 @@ private final class RegisterVM: ObservableObject
 
         let handle = normalizedHandle()
         guard !handle.isEmpty, !handleLooksLikeAlias(handle) else {
-            banner = .error("Pick a handle that isn't an email or phone.")
+            signUpStatus = .error("Pick a handle that isn't an email or phone.")
             return
         }
 
         isBusy = true
+        signUpStatus = .none
         defer { isBusy = false }
 
         do {
@@ -377,34 +379,16 @@ private final class RegisterVM: ObservableObject
                 attributes: attrs
             )
             
-            // Check if confirmation is needed
             if !result.isSignUpComplete {
                 flow = .collecting(.verifyPhone(phone: phone))
-                banner = .info("Verification code sent to \(phone)")
+                verifyStatus = .info("Verification code sent to \(phone)")
             } else {
                 await postSignUpAutoFlow()
             }
             
         } catch {
-            Log.auth.error("SignUp failed: \(explainAuth(error))")
-            banner = .error("Sign up failed: " + explainAuth(error))
-        }
-    }
-    
-        // Add resend code method
-    func resendVerificationCode() async
-    {
-        guard case .collecting(.verifyPhone(_)) = flow else { return }
-        
-        isResending = true
-        defer { isResending = false }
-        
-        do {
-            let handle = normalizedHandle()
-            _ = try await auth.resendSignUpCode(for: handle)
-            banner = .info("New code sent")
-        } catch {
-            banner = .error("Failed to resend code")
+            Log.auth.error("SignUp failed: \(error)")
+            signUpStatus = .error(userFriendlyAuthError(error))
         }
     }
 
@@ -416,8 +400,7 @@ private final class RegisterVM: ObservableObject
             let res = try await self.auth.signIn(username: uname, password: self.form.password)
             await self.handleSignInResult(res)
         } catch {
-            Log.auth.error("postSignUpAutoFlow signIn failed: \(explainAuth(error), privacy: .private)")
-            banner = .error("Sign in failed: " + explainAuth(error))
+            Log.auth.error("postSignUpAutoFlow signIn failed: \(error, privacy: .private)")
         }
     }
 
@@ -497,6 +480,52 @@ private final class RegisterVM: ObservableObject
     }
 }
 
+// MARK: - Status Message Types
+private enum StatusMessage: Equatable
+{
+    case none
+    case info(String)
+    case error(String)
+    case success(String)
+}
+
+// MARK: - Inline Status View Component
+private struct InlineStatus: View
+{
+    let status: StatusMessage
+    
+    var body: some View {
+        switch status {
+        case .none:
+            EmptyView()
+        case .info(let message):
+            statusView(message: message, color: .blue, icon: "info.circle.fill")
+        case .success(let message):
+            statusView(message: message, color: .green, icon: "checkmark.circle.fill")
+        case .error(let message):
+            statusView(message: message, color: .red, icon: "exclamationmark.triangle.fill")
+        }
+    }
+    
+    private func statusView(message: String, color: Color, icon: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.caption)
+            Text(message)
+                .font(.footnote)
+        }
+        .foregroundColor(color.opacity(0.9))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(color.opacity(0.15))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .transition(.opacity.combined(with: .scale(scale: 0.95)))
+        .animation(.easeInOut(duration: 0.2), value: status)
+    }
+}
+
+
+
 // MARK: - Views
 
 struct UserRegisterFlow: View
@@ -506,27 +535,30 @@ struct UserRegisterFlow: View
 
     var body: some View
     {
-       NavigationStack {
-           VStack(spacing: 0) {
-               bannerView(vm.banner)
-               content
-           }
-           .toolbar {
-               ToolbarItem(placement: .topBarLeading) {
-                   if canGoBack { Button(action: vm.back) { Image(systemName: "chevron.left") } }
-               }
-           }
-           .background(AppPalette.bgGradient.ignoresSafeArea())
-       }
-       // NEW: iOS 17+ boolean destination
-       .fullScreenCover(isPresented: $goToMap) {
-           PublicMapView()
-               .interactiveDismissDisabled(true)   // prevents swipe-to-dismiss
-       }
-       // Flip when VM reaches signed-in
-       .onChange(of: vm.flow) { _, newValue in
-           if case .signedIn = newValue { goToMap = true }
-       }
+        content
+            .toolbar {
+                ToolbarItem(placement: .bottomBar) {
+                    if canGoBack {
+                        HStack {
+                            Button(action: vm.back) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "chevron.left")
+                                    Text("Previous")
+                                }
+                            }
+                            Spacer()
+                        }
+                    }
+                }
+            }
+            .background(AppPalette.bgGradient.ignoresSafeArea())
+            .fullScreenCover(isPresented: $goToMap) {
+                PublicMapView()
+                    .interactiveDismissDisabled(true)
+            }
+            .onChange(of: vm.flow) { _, newValue in
+                if case .signedIn = newValue { goToMap = true }
+            }
    }
 
     @ViewBuilder
@@ -540,13 +572,14 @@ struct UserRegisterFlow: View
                 email: $vm.form.email,
                 emailValid: vm.emailValid,
                 e164Phone: vm.e164Phone,
+                phoneStatus: vm.phoneStatus,
                 onNext: vm.advanceFromIdChooser,
                 canContinue: vm.canAdvanceFromCellphone
             )
-            // In UserRegisterFlow content computed property
             case .verifyPhone(let phone): VerifyPhoneStep(
                 phone: phone,
                 verificationCode: $vm.verificationCode,
+                verifyStatus: vm.verifyStatus,
                 isBusy: vm.isBusy,
                 isResending: vm.isResending,
                 onVerify: { Task { await vm.verifyPhone() } },
@@ -572,7 +605,8 @@ struct UserRegisterFlow: View
             case .agree: AgreeStep(
                 isBusy: vm.isBusy,
                 canCreate: vm.inputsForCreateOK,
-                onCreate: { Task { await vm.createAccount() } }  // ← This is correct
+                signUpStatus: vm.signUpStatus,
+                onCreate: { Task { await vm.createAccount() } }
             )
             case .saveCredentials: SaveCredentialsStep(
                 rememberPassword: $vm.rememberPassword,
@@ -593,7 +627,7 @@ struct UserRegisterFlow: View
 
         case .failed(let msg):
             VStack(spacing: 16) {
-                Text("Couldn’t complete sign in.").font(.title3.bold())
+                Text("Couldn't complete sign in.").font(.title3.bold())
                 Text(msg).font(.footnote).foregroundStyle(.secondary)
             }.padding()
         }
@@ -603,35 +637,12 @@ struct UserRegisterFlow: View
     {
         switch vm.flow {
         case .collecting(let step):
-            return step != .cellphone && step != .saveCredentials  // Can't go back from save step
+            return step != .cellphone && step != .saveCredentials
         default:
             return false
         }
     }
-
-    private var tokenPreview: String
-    {
-        if case let .signedIn(idToken) = vm.flow {
-            return String(idToken.prefix(32)) + "…"
-        }
-        return ""
-    }
-
-    @ViewBuilder
-    private func bannerView(_ b: BannerState) -> some View
-    {
-        switch b {
-        case .none: EmptyView()
-        case .info(let s):
-            Text(s).font(.footnote).padding(10).frame(maxWidth: .infinity).background(.blue.opacity(0.15))
-        case .success(let s):
-            Text(s).font(.footnote).padding(10).frame(maxWidth: .infinity).background(.green.opacity(0.15))
-        case .error(let s):
-            Text(s).font(.footnote).padding(10).frame(maxWidth: .infinity).background(.red.opacity(0.15))
-        }
-    }
 }
-
 // MARK: - Step Subviews
 
 private struct CellphoneStep: View
@@ -640,32 +651,40 @@ private struct CellphoneStep: View
     @Binding var email: String
     let emailValid: Bool
     let e164Phone: String?
+    let phoneStatus: StatusMessage
     let onNext: () -> Void
-    let canContinue : Bool
+    let canContinue: Bool
 
     @FocusState private var phoneFocused: Bool
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 16) {
                 Text("Please Enter Phone")
                     .font(.title2.bold())
                     .foregroundStyle(AppPalette.Text.primary)
 
-                TextField("Mobile Number (+13125551234)", text: $phoneRaw)
-                    .keyboardType(.phonePad)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .textFieldStyle(.plain)
-                    .focused($phoneFocused)
-                    .darkField(focused: phoneFocused)
+                VStack(alignment: .leading, spacing: 8) {
+                    TextField("Mobile Number (+13125551234)", text: $phoneRaw)
+                        .keyboardType(.phonePad)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .textFieldStyle(.plain)
+                        .focused($phoneFocused)
+                        .darkField(focused: phoneFocused)
 
-                if let p = e164Phone, !p.isEmpty {
-                    Text("Formatted as \(p)").font(.footnote)
-                        .foregroundStyle(AppPalette.Text.secondary)
-                } else if !phoneRaw.isEmpty {
-                    Text("Tip: use + and digits only").font(.footnote)
-                        .foregroundStyle(AppPalette.Text.secondary)
+                    if let p = e164Phone, !p.isEmpty {
+                        Text("Formatted as \(p)")
+                            .font(.footnote)
+                            .foregroundStyle(AppPalette.Text.secondary)
+                    } else if !phoneRaw.isEmpty {
+                        Text("Tip: use + and digits only")
+                            .font(.footnote)
+                            .foregroundStyle(AppPalette.Text.secondary)
+                    }
+                    
+                    // Seamless status integration
+                    InlineStatus(status: phoneStatus)
                 }
 
                 Text(.init("""
@@ -673,7 +692,7 @@ private struct CellphoneStep: View
                 """))
                 .font(.subheadline)
                 .foregroundStyle(AppPalette.Text.tertiary)
-                .tint(AppPalette.Brand.neonPink)          // link color
+                .tint(AppPalette.Brand.neonPink)
 
                 Button(action: onNext) { Text("Next") }
                     .buttonStyle(PrimaryCapsuleButton())
@@ -691,6 +710,7 @@ private struct VerifyPhoneStep: View
 {
     let phone: String
     @Binding var verificationCode: String
+    let verifyStatus: StatusMessage
     let isBusy: Bool
     let isResending: Bool
     let onVerify: () -> Void
@@ -708,13 +728,17 @@ private struct VerifyPhoneStep: View
                 .font(.subheadline)
                 .foregroundStyle(AppPalette.Text.secondary)
             
-            // Custom 6-digit code input
-            DigitCodeInput(
-                code: $verificationCode,
-                digitCount: 6,
-                focused: $codeFocused
-            )
-            .onAppear { codeFocused = true }
+            VStack(spacing: 12) {
+                DigitCodeInput(
+                    code: $verificationCode,
+                    digitCount: 6,
+                    focused: $codeFocused
+                )
+                .onAppear { codeFocused = true }
+                
+                // Status integrated right below the input
+                InlineStatus(status: verifyStatus)
+            }
             
             Button(action: onVerify) {
                 HStack {
@@ -746,6 +770,49 @@ private struct VerifyPhoneStep: View
             .foregroundColor(AppPalette.Brand.neonPink)
             .disabled(isResending)
             
+            Spacer(minLength: 0)
+        }
+        .padding(16)
+    }
+}
+
+private struct AgreeStep: View
+{
+    let isBusy: Bool
+    let canCreate: Bool
+    let signUpStatus: StatusMessage
+    let onCreate: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Agree to Rangley's terms and policies")
+                .font(.title2.bold())
+                .foregroundStyle(AppPalette.Text.primary)
+
+            Text(.init("""
+            By tapping **I agree** you agree to create an account and to Rangley's [Terms](https://mrfoxco.com/terms) & [Privacy Policy](https://mrfoxco.com/privacy).
+
+            We use your phone and (if enabled) location to show whether you're **near** an event or **at** it using a geofence. Other users see only "checked in", never your exact location unless you check in. We don't use your info for ads.
+            """))
+            .font(.subheadline)
+            .foregroundStyle(AppPalette.Text.tertiary)
+            .tint(AppPalette.Brand.neonPink)
+
+            VStack(spacing: 12) {
+                Button(action: onCreate) {
+                    HStack {
+                        if isBusy { ProgressView() }
+                        Text(isBusy ? "Creating…" : "I Agree").bold()
+                    }
+                    .frame(maxWidth: .infinity).padding(.vertical, 16)
+                }
+                .buttonStyle(PrimaryCapsuleButton())
+                .disabled(isBusy || !canCreate)
+                
+                // Status appears right after the button
+                InlineStatus(status: signUpStatus)
+            }
+
             Spacer(minLength: 0)
         }
         .padding(16)
@@ -1044,40 +1111,6 @@ private struct DobStep: View
     }
 }
 
-private struct AgreeStep: View
-{
-    let isBusy: Bool
-    let canCreate: Bool
-    let onCreate: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Agree to Rangley's terms and policies")
-                .font(.title2.bold())
-                .foregroundStyle(AppPalette.Text.primary)
-
-            Text(.init("""
-            By tapping **I agree** you agree to create an account and to Rangley's [Terms](https://mrfoxco.com/terms) & [Privacy Policy](https://mrfoxco.com/privacy).
-
-            We use your phone and (if enabled) location to show whether you're **near** an event or **at** it using a geofence. Other users see only "checked in", never your exact location unless you check in. We don't use your info for ads.
-            """))
-            .font(.subheadline)
-            .foregroundStyle(AppPalette.Text.tertiary)
-            .tint(AppPalette.Brand.neonPink)
-
-            Button(action: onCreate) {
-                HStack { if isBusy { ProgressView() }; Text(isBusy ? "Creating…" : "I Agree").bold() }
-                    .frame(maxWidth: .infinity).padding(.vertical, 16)
-            }
-            .buttonStyle(PrimaryCapsuleButton())
-            .disabled(isBusy || !canCreate)
-
-            Spacer(minLength: 0)
-        }
-        .padding(16)
-    }
-}
-
 private struct SaveCredentialsStep: View
 {
     @Binding var rememberPassword: Bool
@@ -1172,4 +1205,39 @@ private struct DoneStep: View
         }
         .padding(16)
     }
+}
+
+// MARK: - User-friendly error messages
+fileprivate func userFriendlyAuthError(_ error: Error) -> String {
+    if let ae = error as? AuthError {
+        // Log the full technical details for debugging
+        Log.auth.error("Auth error: \(ae.errorDescription) | \(ae.recoverySuggestion)")
+        if let underlying = ae.underlyingError {
+            Log.auth.error("Underlying error: \(underlying)")
+        }
+        
+        // Return simple, user-friendly messages
+        switch ae.errorDescription {
+        case let desc where desc.contains("UsernameExistsException"):
+            return "This username is already taken"
+        case let desc where desc.contains("InvalidPasswordException"):
+            return "Password doesn't meet requirements"
+        case let desc where desc.contains("CodeMismatchException"):
+            return "Invalid verification code"
+        case let desc where desc.contains("ExpiredCodeException"):
+            return "Verification code has expired"
+        case let desc where desc.contains("NotAuthorizedException"):
+            return "Incorrect username or password"
+        case let desc where desc.contains("UserNotConfirmedException"):
+            return "Account needs verification"
+        case let desc where desc.contains("TooManyRequestsException"):
+            return "Too many attempts. Please try again later"
+        default:
+            return "Something went wrong. Please try again"
+        }
+    }
+    
+    // Log non-auth errors too
+    Log.auth.error("Non-auth error: \(error)")
+    return "Something went wrong. Please try again"
 }
