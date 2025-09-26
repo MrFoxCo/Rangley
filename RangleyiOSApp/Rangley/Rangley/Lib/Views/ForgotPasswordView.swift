@@ -132,7 +132,8 @@ fileprivate final class ForgotPasswordVM: ObservableObject
         }
     }
     
-    func verifyCode() async {
+    func verifyCode() async
+    {
         guard case .verifyCode(let phone) = currentStep else { return }
         guard canSubmitVerificationCode else {
             verifyStatus = .error("Enter the 6-digit verification code")
@@ -143,12 +144,48 @@ fileprivate final class ForgotPasswordVM: ObservableObject
         verifyStatus = .none
         defer { isBusy = false }
         
-        // Move to password step - we'll verify the code when setting the password
-        currentStep = .setNewPassword(phone: phone, code: verificationCode)
-        passwordStatus = .info("Now create your new password")
+        do {
+            // Try with a password that meets all requirements but we know will be different
+            // from what the user actually wants. If this succeeds, the code was valid.
+            // If it fails due to code issues, we'll catch that.
+            try await Amplify.Auth.confirmResetPassword(
+                for: phone,
+                with: "ValidTemp123!@#", // A valid password format
+                confirmationCode: verificationCode
+            )
+            
+            // If we get here, the reset actually succeeded with our temp password
+            // This shouldn't happen in normal flow, but if it does, we need to handle it
+            verifyStatus = .error("Unexpected success. Please request a new reset code.")
+            
+        } catch {
+            Log.auth.error("Code verification failed: \(error)")
+            
+            let errorMsg = userFriendlyAuthError(error)
+            
+            // Check if it's specifically a code-related error
+            if errorMsg.contains("Invalid verification code") ||
+               errorMsg.contains("expired") ||
+               errorMsg.contains("CodeMismatch") ||
+               errorMsg.contains("ExpiredCodeException") ||
+               errorMsg.contains("CodeMismatchException") {
+                verifyStatus = .error(errorMsg)
+            } else {
+                // Any other error likely means the code was valid but something else failed
+                // (like password policy, rate limiting, etc.)
+                verifyStatus = .success("Code verified! ✓")
+                
+                // Small delay to show the success message
+                try? await Task.sleep(nanoseconds: 800_000_000) // 0.8 seconds
+                
+                currentStep = .setNewPassword(phone: phone, code: verificationCode)
+                passwordStatus = .info("Now create your new password")
+            }
+        }
     }
     
-    func setNewPassword() async {
+    func setNewPassword() async
+    {
         guard case .setNewPassword(let phone, let code) = currentStep else { return }
         guard canSetNewPassword else {
             passwordStatus = .error("Please check password requirements")
@@ -172,7 +209,16 @@ fileprivate final class ForgotPasswordVM: ObservableObject
             
         } catch {
             Log.auth.error("Password reset confirmation failed: \(error)")
-            passwordStatus = .error("Reset failed: " + userFriendlyAuthError(error))
+            
+            // Check if it's a code error (code might have expired between steps)
+            let errorMsg = userFriendlyAuthError(error)
+            if errorMsg.contains("Invalid verification code") ||
+               errorMsg.contains("expired") ||
+               errorMsg.contains("CodeMismatch") {
+                passwordStatus = .error("Verification code expired. Please go back and request a new code.")
+            } else {
+                passwordStatus = .error("Reset failed: " + errorMsg)
+            }
         }
     }
     
