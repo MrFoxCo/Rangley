@@ -65,7 +65,7 @@ public struct SearchView: View
                 
                 Spacer()
             }
-            .background(AppPalette.Brand.russianViolet)
+            .background(AppPalette.Brand.japDarkerPurple)
             .navigationBarHidden(true)
         }
         .alert("Search Error", isPresented: $showError) {
@@ -123,7 +123,7 @@ public struct SearchView: View
             .padding(.vertical, 12)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(AppPalette.Brand.russianViolet))
+                    .fill(Color(AppPalette.Brand.japDarkerPurple))
                     .overlay(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
                             .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1)
@@ -450,11 +450,13 @@ private enum SearchScope: String, CaseIterable
     }
 }
 
-private struct SearchResults {
+private struct SearchResults
+{
     var meets: [ViewMeetsModel] = []
     var users: [ViewUsersModel] = []
     
-    var isEmpty: Bool {
+    var isEmpty: Bool
+    {
         meets.isEmpty && users.isEmpty
     }
 }
@@ -466,7 +468,8 @@ struct MeetSearchResultCard: View
     let meet: ViewMeetsModel
     let onTap: () -> Void
     
-    var body: some View {
+    var body: some View
+    {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
@@ -578,7 +581,7 @@ struct UserSearchResultCard: View
             .padding(16)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(AppPalette.Brand.japDarkerPurple))
+                    .fill(Color(AppPalette.Brand.russianViolet))
                     .overlay(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
                             .stroke(AppPalette.Brand.neonPink.opacity(0.2), lineWidth: 1)
