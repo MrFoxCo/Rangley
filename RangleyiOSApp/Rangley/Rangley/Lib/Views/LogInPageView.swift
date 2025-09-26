@@ -249,9 +249,12 @@ private final class SignInVM: ObservableObject
 struct LogInPageView: View
 {
     @EnvironmentObject private var auth: AuthStateStore
+    
     @StateObject private var vm = SignInVM()
     @FocusState private var userFocused: Bool
     @FocusState private var passFocused: Bool
+    
+    @State private var showForgotPassword = false
     
     var body: some View
     {
@@ -394,6 +397,13 @@ struct LogInPageView: View
                     }
                     .font(.caption)
                     .foregroundColor(.white.opacity(0.7))
+                    
+                    Button("Forgot password?") {
+                        showForgotPassword = true
+                    }
+                    .font(.footnote)
+                    .foregroundColor(AppPalette.Brand.neonPink)
+                    .padding(.top, 8)
 
                     Divider().background(Color.white.opacity(0.12)).padding(.vertical, 8)
 
@@ -474,35 +484,681 @@ struct LogInPageView: View
                 .animation(.easeInOut(duration: 0.2), value: vm.showUsernameChip)
             }
         }
+        .sheet(isPresented: $showForgotPassword) {
+            ForgotPasswordView()
+        }
     }
 }
+// MARK: - Forgot Password Flow Implementation
+
+// Add these enums and state management to your LoginPageView.swift
+
+private enum ForgotPasswordStep: Hashable
+{
+    case enterContact
+    case verifyCode(contact: String)
+    case enterNewPassword
+    case complete
+}
+
+private enum ForgotPasswordFlowState: Equatable
+{
+    case collecting(ForgotPasswordStep)
+    case resetting
+    case completed
+    case failed(String)
+}
+
+// MARK: - Forgot Password ViewModel
+
+@MainActor
+private final class ForgotPasswordVM: ObservableObject
+{
+    @Published var contactRaw: String = ""  // phone or email
+    @Published var verificationCode: String = ""
+    @Published var newPassword: String = ""
+    @Published var confirmPassword: String = ""
+    @Published var flow: ForgotPasswordFlowState = .collecting(.enterContact)
+    
+    // Status messages
+    @Published var contactStatus: StatusMessage = .none
+    @Published var verifyStatus: StatusMessage = .none
+    @Published var passwordStatus: StatusMessage = .none
+    
+    // UI state
+    @Published var isBusy = false
+    @Published var isResending = false
+    
+    // Derived properties
+    private var contactDigits: String { contactRaw.filter(\.isNumber) }
+    
+    private var normalizedContact: String {
+        let trimmed = contactRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // If it looks like a phone number, normalize it
+        let digits = trimmed.filter(\.isNumber)
+        if digits.count >= 10 {
+            switch digits.count {
+            case 10: return "+1" + digits
+            case 11 where digits.hasPrefix("1"): return "+" + digits
+            case 12...15: return "+" + digits
+            default: break
+            }
+        }
+        
+        // Otherwise return as-is (email or username)
+        return trimmed
+    }
+    
+    var canAdvanceFromContact: Bool {
+        let contact = normalizedContact
+        return !contact.isEmpty && (isValidEmail(contact) || isValidPhone(contact))
+    }
+    
+    private func isValidEmail(_ email: String) -> Bool {
+        let pattern = #"^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$"#
+        return email.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
+    }
+    
+    private func isValidPhone(_ phone: String) -> Bool {
+        return phone.hasPrefix("+") && phone.dropFirst().allSatisfy(\.isNumber) && phone.count >= 11
+    }
+    
+    var passwordScore: (ok: Bool, reasons: [String]) {
+        var reasons: [String] = []
+        if newPassword.count < 8 { reasons.append("≥ 8 chars") }
+        if newPassword.range(of: "\\d", options: .regularExpression) == nil { reasons.append("number") }
+        if newPassword.range(of: "[A-Z]", options: .regularExpression) == nil { reasons.append("uppercase") }
+        if newPassword.range(of: "[a-z]", options: .regularExpression) == nil { reasons.append("lowercase") }
+        if newPassword.range(of: #"^\S+.*\S+$"#, options: .regularExpression) == nil { reasons.append("no edge spaces") }
+        return (reasons.isEmpty, reasons)
+    }
+    
+    private var passwordsMatch: Bool {
+        !confirmPassword.isEmpty && confirmPassword == newPassword
+    }
+    
+    var canCompleteReset: Bool {
+        passwordScore.ok && passwordsMatch
+    }
+    
+    // MARK: - Navigation
+    
+    func back() {
+        switch flow {
+        case .collecting(let step):
+            switch step {
+            case .enterContact:
+                break
+            case .verifyCode:
+                flow = .collecting(.enterContact)
+            case .enterNewPassword:
+                if let contact = getCurrentContact() {
+                    flow = .collecting(.verifyCode(contact: contact))
+                } else {
+                    flow = .collecting(.enterContact)
+                }
+            case .complete:
+                break
+            }
+        case .resetting, .completed, .failed:
+            break
+        }
+    }
+    
+    private func getCurrentContact() -> String? {
+        if case .collecting(.verifyCode(let contact)) = flow {
+            return contact
+        }
+        return canAdvanceFromContact ? normalizedContact : nil
+    }
+    
+    // MARK: - Flow Actions
+    
+    func initiatePasswordReset() async {
+        guard canAdvanceFromContact else {
+            contactStatus = .error("Enter a valid phone number or email address")
+            return
+        }
+        
+        isBusy = true
+        contactStatus = .none
+        defer { isBusy = false }
+        
+        let contact = normalizedContact
+        
+        do {
+            _ = try await Amplify.Auth.resetPassword(for: contact)
+            flow = .collecting(.verifyCode(contact: contact))
+            verifyStatus = .info("Reset code sent to \(maskContact(contact))")
+        } catch {
+            Log.auth.error("Password reset initiation failed: \(error)")
+            contactStatus = .error(userFriendlyAuthError(error))
+        }
+    }
+    
+    func verifyCodeAndProceed() async {
+        guard case .collecting(.verifyCode(let contact)) = flow else { return }
+        guard !verificationCode.isEmpty else {
+            verifyStatus = .error("Enter the verification code")
+            return
+        }
+        
+        // Just advance to password step - we'll confirm the reset when they submit the new password
+        flow = .collecting(.enterNewPassword)
+        verifyStatus = .success("Code verified!")
+        
+        // Clear success message after transition
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            self.verifyStatus = .none
+        }
+    }
+    
+    func resendResetCode() async {
+        guard case .collecting(.verifyCode(let contact)) = flow else { return }
+        
+        isResending = true
+        verifyStatus = .none
+        defer { isResending = false }
+        
+        do {
+            _ = try await Amplify.Auth.resetPassword(for: contact)
+            verifyStatus = .info("New reset code sent")
+        } catch {
+            Log.auth.error("Resend reset code failed: \(error)")
+            verifyStatus = .error("Couldn't resend the code. Please try again")
+        }
+    }
+    
+    func completePasswordReset() async {
+        guard case .collecting(.enterNewPassword) = flow else { return }
+        guard canCompleteReset else {
+            passwordStatus = .error("Password requirements not met")
+            return
+        }
+        
+        // We need to get the contact from our stored state
+        let contact: String
+        if let currentContact = getCurrentContact() {
+            contact = currentContact
+        } else {
+            contact = normalizedContact
+        }
+        
+        isBusy = true
+        passwordStatus = .none
+        flow = .resetting
+        defer { isBusy = false }
+        
+        do {
+            _ = try await Amplify.Auth.confirmResetPassword(
+                for: contact,
+                with: newPassword,
+                confirmationCode: verificationCode
+            )
+            
+            flow = .completed
+            passwordStatus = .success("Password reset successfully!")
+        } catch {
+            Log.auth.error("Password reset confirmation failed: \(error)")
+            flow = .collecting(.enterNewPassword)
+            passwordStatus = .error(userFriendlyAuthError(error))
+        }
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func maskContact(_ contact: String) -> String {
+        if contact.hasPrefix("+") {
+            // Phone number
+            return "••••\(contact.suffix(4))"
+        } else if contact.contains("@") {
+            // Email
+            let parts = contact.split(separator: "@")
+            if parts.count == 2 {
+                let localPart = String(parts[0])
+                let domain = String(parts[1])
+                let maskedLocal = localPart.count > 3 ? "\(localPart.prefix(2))••••" : "••••"
+                return "\(maskedLocal)@\(domain)"
+            }
+        }
+        return contact
+    }
+}
+
+// MARK: - Forgot Password View
 
 struct ForgotPasswordView: View
 {
-    @State private var phoneOrEmail = ""
-    @State private var resetCode = ""
-    @State private var newPassword = ""
-    @State private var step: ForgotPasswordStep = .enterContact
-    @State private var isBusy = false
-    @State private var banner: BannerState = .none
-    
-    enum ForgotPasswordStep {
-        case enterContact
-        case enterCode
-        case enterNewPassword
-    }
+    @StateObject private var vm = ForgotPasswordVM()
+    @Environment(\.dismiss) private var dismiss
     
     var body: some View {
-        // Implementation similar to your registration flow
-        // Use Amplify.Auth.resetPassword() and confirmResetPassword()
+        NavigationView {
+            content
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button("Cancel") {
+                            dismiss()
+                        }
+                        .foregroundColor(AppPalette.Brand.neonPink)
+                    }
+                    
+                    ToolbarItem(placement: .bottomBar) {
+                        if canGoBack {
+                            HStack {
+                                Button(action: vm.back) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "chevron.left")
+                                        Text("Previous")
+                                    }
+                                }
+                                Spacer()
+                            }
+                        }
+                    }
+                }
+                .background(AppPalette.bgGradient.ignoresSafeArea())
+        }
+    }
+    
+    @ViewBuilder
+    private var content: some View {
+        switch vm.flow {
+        case .collecting(let step):
+            switch step {
+            case .enterContact:
+                ContactStep(
+                    contactRaw: $vm.contactRaw,
+                    contactStatus: vm.contactStatus,
+                    isBusy: vm.isBusy,
+                    canContinue: vm.canAdvanceFromContact,
+                    onNext: { Task { await vm.initiatePasswordReset() } }
+                )
+            case .verifyCode(let contact):
+                VerifyResetCodeStep(
+                    contact: contact,
+                    verificationCode: $vm.verificationCode,
+                    verifyStatus: vm.verifyStatus,
+                    isBusy: vm.isBusy,
+                    isResending: vm.isResending,
+                    onVerify: { Task { await vm.verifyCodeAndProceed() } },
+                    onResend: { Task { await vm.resendResetCode() } }
+                )
+            case .enterNewPassword:
+                NewPasswordStep(
+                    newPassword: $vm.newPassword,
+                    confirmPassword: $vm.confirmPassword,
+                    passwordScore: vm.passwordScore,
+                    passwordsMatch: vm.passwordsMatch,
+                    passwordStatus: vm.passwordStatus,
+                    isBusy: vm.isBusy,
+                    canComplete: vm.canCompleteReset,
+                    onComplete: { Task { await vm.completePasswordReset() } }
+                )
+            case .complete:
+                ResetCompleteStep {
+                    dismiss()
+                }
+            }
+            
+        case .resetting:
+            ProgressView("Resetting password...")
+                .padding()
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                
+        case .completed:
+            ResetCompleteStep {
+                dismiss()
+            }
+            
+        case .failed(let message):
+            VStack(spacing: 16) {
+                Text("Reset Failed")
+                    .font(.title3.bold())
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Button("Try Again") {
+                    vm.flow = .collecting(.enterContact)
+                }
+                .buttonStyle(PrimaryCapsuleButton())
+            }
+            .padding()
+        }
+    }
+    
+    private var canGoBack: Bool {
+        switch vm.flow {
+        case .collecting(let step):
+            return step != .enterContact
+        default:
+            return false
+        }
     }
 }
 
-/*
- 
- Critical Authentication UX Requirement: Single Face ID/Passcode Entry
- THE CARDINAL RULE: Under absolutely NO circumstances should a user EVER have to authenticate with Face ID or enter their iPhone passcode more than ONCE during the login flow. This is non-negotiable. When implementing saved credentials with biometric protection, the authentication must be triggered EXACTLY ONCE - when the user explicitly chooses to use saved credentials by tapping on a username chip. Any implementation that triggers Face ID/passcode when focusing the username field, when loading the list of saved usernames, or at any point before the user actively selects a saved account is COMPLETELY UNACCEPTABLE.
- What Must Happen: When the username field gains focus, the keyboard should appear immediately with saved username chips displayed above it (if any exist). Loading and displaying these chips must NEVER trigger biometric authentication - use methods that only retrieve account names without accessing protected data. The Face ID/passcode prompt should appear ONLY when the user taps on a specific saved username chip. At that single authentication moment, the system should retrieve BOTH the username and password, fill BOTH fields, and ideally auto-submit the login. One authentication, complete login - that's the only acceptable flow.
- What Must NOT Happen: Never trigger Face ID when the username field is focused. Never trigger it when loading the list of saved accounts. Never trigger it twice - once for username and once for password. Never use iOS's built-in "Passwords" autofill that takes users to a system list. The ONLY acceptable UI is custom username chips that appear above the keyboard, showing masked usernames (like "Mobile ••••1234"), that when tapped trigger a SINGLE biometric authentication to completely fill and submit the login form.
- Technical Implementation: Use separate Keychain methods - one that lists usernames WITHOUT requiring authentication (for displaying chips), and another that retrieves the password WITH authentication (when chip is tapped). The username list method should ONLY access the account attribute, never the protected password data. Store credentials per-username, not as a single "primary" entry. When the user taps a chip: trigger Face ID once, retrieve the password, fill both fields, and auto-submit. If Face ID fails or is cancelled, simply do nothing - don't prompt again unless the user taps another chip. This creates a seamless, single-authentication experience that respects both security and user sanity.
- */
+// MARK: - Step Views
+
+private struct ContactStep: View
+{
+    @Binding var contactRaw: String
+    let contactStatus: StatusMessage
+    let isBusy: Bool
+    let canContinue: Bool
+    let onNext: () -> Void
+    
+    @FocusState private var contactFocused: Bool
+    
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Reset your password")
+                    .font(.title2.bold())
+                    .foregroundStyle(AppPalette.Text.primary)
+                
+                Text("Enter the phone number or email address associated with your account.")
+                    .font(.subheadline)
+                    .foregroundStyle(AppPalette.Text.secondary)
+                
+                VStack(alignment: .leading, spacing: 12) {
+                    TextField(
+                        "",
+                        text: $contactRaw,
+                        prompt: Text("Phone number or email").foregroundStyle(.white.opacity(0.95))
+                    )
+                    .textFieldStyle(.plain)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .textContentType(.emailAddress)
+                    .keyboardType(.emailAddress)
+                    .foregroundColor(.white)
+                    .tint(AppPalette.Brand.neonPink)
+                    .focused($contactFocused)
+                    .darkField(focused: contactFocused)
+                    
+                    InlineStatus(status: contactStatus)
+                }
+                
+                Button(action: onNext) {
+                    HStack {
+                        if isBusy {
+                            ProgressView()
+                                .progressViewStyle(.circular)
+                                .tint(.black)
+                                .scaleEffect(0.8)
+                        }
+                        Text(isBusy ? "Sending..." : "Send Reset Code")
+                            .bold()
+                    }
+                }
+                .buttonStyle(PrimaryCapsuleButton())
+                .disabled(!canContinue || isBusy)
+                .opacity((canContinue && !isBusy) ? 1 : 0.45)
+                
+                Spacer(minLength: 0)
+            }
+            .padding(16)
+        }
+    }
+}
+
+private struct VerifyResetCodeStep: View
+{
+    let contact: String
+    @Binding var verificationCode: String
+    let verifyStatus: StatusMessage
+    let isBusy: Bool
+    let isResending: Bool
+    let onVerify: () -> Void
+    let onResend: () -> Void
+    
+    @FocusState private var codeFocused: Bool
+    
+    private var maskedContact: String {
+        if contact.hasPrefix("+") {
+            return "••••\(contact.suffix(4))"
+        } else if contact.contains("@") {
+            let parts = contact.split(separator: "@")
+            if parts.count == 2 {
+                let localPart = String(parts[0])
+                let domain = String(parts[1])
+                let maskedLocal = localPart.count > 3 ? "\(localPart.prefix(2))••••" : "••••"
+                return "\(maskedLocal)@\(domain)"
+            }
+        }
+        return contact
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            Text("Enter reset code")
+                .font(.title2.bold())
+                .foregroundStyle(AppPalette.Text.primary)
+            
+            Text("We sent a 6-digit reset code to \(maskedContact)")
+                .font(.subheadline)
+                .foregroundStyle(AppPalette.Text.secondary)
+            
+            VStack(spacing: 12) {
+                DigitCodeInput(
+                    code: $verificationCode,
+                    digitCount: 6,
+                    focused: $codeFocused
+                )
+                .onAppear { codeFocused = true }
+                
+                InlineStatus(status: verifyStatus)
+            }
+            
+            Button(action: onVerify) {
+                HStack {
+                    if isBusy {
+                        ProgressView()
+                            .progressViewStyle(.circular)
+                            .tint(.black)
+                            .scaleEffect(0.8)
+                    }
+                    Text(isBusy ? "Verifying..." : "Continue")
+                        .bold()
+                }
+            }
+            .buttonStyle(PrimaryCapsuleButton())
+            .disabled(verificationCode.count != 6 || isBusy)
+            .opacity((verificationCode.count == 6 && !isBusy) ? 1 : 0.45)
+            
+            Button(action: onResend) {
+                HStack {
+                    if isResending {
+                        ProgressView()
+                            .progressViewStyle(.circular)
+                            .scaleEffect(0.7)
+                    }
+                    Text(isResending ? "Sending..." : "Send new code")
+                }
+            }
+            .font(.footnote)
+            .foregroundColor(AppPalette.Brand.neonPink)
+            .disabled(isResending)
+            
+            Spacer(minLength: 0)
+        }
+        .padding(16)
+    }
+}
+
+private struct NewPasswordStep: View
+{
+    @Binding var newPassword: String
+    @Binding var confirmPassword: String
+    let passwordScore: (ok: Bool, reasons: [String])
+    let passwordsMatch: Bool
+    let passwordStatus: StatusMessage
+    let isBusy: Bool
+    let canComplete: Bool
+    let onComplete: () -> Void
+    
+    @FocusState private var newPasswordFocused: Bool
+    @FocusState private var confirmPasswordFocused: Bool
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Create new password")
+                .font(.title2.bold())
+                .foregroundStyle(AppPalette.Text.primary)
+            
+            Text("Choose a strong password for your account.")
+                .font(.subheadline)
+                .foregroundStyle(AppPalette.Text.secondary)
+            
+            // New Password
+            SecureField(
+                "",
+                text: $newPassword,
+                prompt: Text("New password").foregroundStyle(.white.opacity(0.95))
+            )
+            .textFieldStyle(.plain)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .textContentType(.newPassword)
+            .foregroundColor(.white)
+            .tint(AppPalette.Brand.neonPink)
+            .focused($newPasswordFocused)
+            .darkField(focused: newPasswordFocused)
+            .submitLabel(.next)
+            .onSubmit { confirmPasswordFocused = true }
+            
+            // Confirm Password
+            SecureField(
+                "",
+                text: $confirmPassword,
+                prompt: Text("Confirm new password").foregroundStyle(.white.opacity(0.95))
+            )
+            .textFieldStyle(.plain)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .textContentType(.newPassword)
+            .foregroundColor(.white)
+            .tint(AppPalette.Brand.neonPink)
+            .focused($confirmPasswordFocused)
+            .darkField(focused: confirmPasswordFocused)
+            .submitLabel(.done)
+            .onSubmit { if canComplete { onComplete() } }
+            
+            if !confirmPassword.isEmpty && !passwordsMatch {
+                Text("Passwords don't match")
+                    .font(.footnote)
+                    .foregroundStyle(.red.opacity(0.9))
+            }
+            
+            // Password requirements
+            VStack(alignment: .leading, spacing: 6) {
+                passwordRule("≥ 8 characters", newPassword.count >= 8)
+                passwordRule("1 lowercase (a–z)", newPassword.range(of: "[a-z]", options: .regularExpression) != nil)
+                passwordRule("1 uppercase (A–Z)", newPassword.range(of: "[A-Z]", options: .regularExpression) != nil)
+                passwordRule("1 number (0–9)", newPassword.range(of: "\\d", options: .regularExpression) != nil)
+                passwordRule("1 special (!@#…)", newPassword.range(of: #"[^A-Za-z0-9]"#, options: .regularExpression) != nil)
+                passwordRule("No leading/trailing spaces", newPassword.range(of: #"^\S+.*\S+$"#, options: .regularExpression) != nil)
+                passwordRule("Passwords match", passwordsMatch)
+            }
+            
+            VStack(spacing: 12) {
+                Button(action: onComplete) {
+                    HStack {
+                        if isBusy {
+                            ProgressView()
+                                .progressViewStyle(.circular)
+                                .tint(.black)
+                                .scaleEffect(0.8)
+                        }
+                        Text(isBusy ? "Resetting..." : "Reset Password")
+                            .bold()
+                    }
+                }
+                .buttonStyle(PrimaryCapsuleButton())
+                .disabled(!canComplete || isBusy)
+                .opacity((canComplete && !isBusy) ? 1 : 0.45)
+                
+                InlineStatus(status: passwordStatus)
+            }
+            .padding(.top, 10)
+            
+            Spacer(minLength: 0)
+        }
+        .padding(16)
+    }
+    
+    @ViewBuilder
+    private func passwordRule(_ text: String, _ isValid: Bool) -> some View {
+        HStack {
+            Image(systemName: isValid ? "checkmark.circle.fill" : "xmark.circle")
+            Text(text)
+        }
+        .foregroundStyle(isValid ? .green : AppPalette.Text.secondary)
+        .font(.footnote)
+    }
+}
+
+private struct ResetCompleteStep: View
+{
+    let onDismiss: () -> Void
+    
+    var body: some View {
+        VStack(alignment: .center, spacing: 20) {
+            Spacer()
+            
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 60))
+                .foregroundColor(.green)
+            
+            Text("Password Reset!")
+                .font(.title2.bold())
+                .foregroundStyle(AppPalette.Text.primary)
+            
+            Text("Your password has been successfully reset. You can now sign in with your new password.")
+                .font(.subheadline)
+                .foregroundStyle(AppPalette.Text.secondary)
+                .multilineTextAlignment(.center)
+            
+            Button("Return to Sign In") {
+                onDismiss()
+            }
+            .buttonStyle(PrimaryCapsuleButton())
+            .padding(.top, 20)
+            
+            Spacer()
+        }
+        .padding(16)
+    }
+}
+
+// MARK: - Update LogInPageView
+
+// Add this to your existing LogInPageView struct - add the state and sheet presentation:
+
+struct LogInPageView: View {
+    @EnvironmentObject private var auth: AuthStateStore
+    @StateObject private var vm = SignInVM()
+    @FocusState private var userFocused: Bool
+    @FocusState private var passFocused: Bool
+    @State private var showForgotPassword = false  // Add this state
+    
+    var body: some View {
+        // ... existing body code ...
+        
+        // Add this after the "Clear Form" button and before the Divider:
+        Button("Forgot password?") {
+            showForgotPassword = true
+        }
+        .font(.footnote)
+        .foregroundColor(AppPalette.Brand.neonPink)
+        .padding(.top, 8)
+        
+        // ... rest of existing code ...
+        
+        // Add this modifier to present the forgot password sheet:
+        .sheet(isPresented: $showForgotPassword) {
+            ForgotPasswordView()
+        }
+    }
+}

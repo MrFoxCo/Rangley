@@ -9,26 +9,43 @@
 // ==========================================================================================================
 // ==========================================================================================================
 // MARK: - IGNORE THE BELOW TODOs FOR NOW
-// TODO: - Fix the rotating screen view -- probably should look to be vertical
+// MARK: - V2
+// TODO: - Anyone can join a group if a link is sent?
+// TODO: - Joinable public groups by request to join
 // TODO: - Create UNDO for deletes and updates
-// TODO: - Fix recenter compass top right
 // TODO: - Fix return to user button only appears when not centered
-// TODO: - Remeber User when Create New Account
 // TODO: - NEED TO ADD categories and max capacties as options
-// TODO: - FIX THE leave meet refresh
-// TODO: - add remove user if owner functionality
 // TODO: - add count for people inside radius to the meet bubble button
-// TODO: - meet invitaiton should be single repsonsiblity (maybe give leaveMeet or left meet new one
-// TODO: - AWS SHIT verify with auth code, reset password, username, ...
-// TODO: - wire the account settings to have all of that shit
 // TODO: - start planning version two features (filter by date, public join, friends, .etc, caching etc. etc.
-// TODO: - fix loading screen so it's the fucking rangley pig and not the black wheel bullshit that's
-// TODO: -  ^^^^this is for first download or simply reopening the app... an ANYTIME open of the app load
+// MARK: - V2
 // MARK: - IGNORE THE ABOVE TODOs FOR NOW
 // ==========================================================================================================
 // ==========================================================================================================
 // ==========================================================================================================
 
+// ==========================================================================================================
+// ==========================================================================================================
+// ==========================================================================================================
+// MARK: - IGNORE THE BELOW TODOs FOR NOW
+// MARK: - V1
+// TODO: - Banner Notificaitons from outside the app
+// TODO: - Color Scheme needs to be set
+// TODO: - Fix the rotating screen view -- probably should look to be vertical
+// TODO: - Create UNDO for deletes and updates
+// TODO: - Fix recenter compass top right
+// TODO: - Remeber User when Create New Account
+// TODO: - meet invitaiton should be single repsonsiblity (maybe give leaveMeet or left meet new one
+// TODO: - Cleanup jump from MyMeetsView to meetscard overlay
+// TODO: - Need to be able to add participants to existing meet .. make similar to delete participant
+// TODO: - AWS SHIT verify with auth code, reset password, username, ...
+// TODO: - wire the account settings to have all of that shit
+// TODO: - fix loading screen so it's the fucking rangley pig and not the black wheel bullshit that's
+// TODO: -  ^^^^this is for first download or simply reopening the app... an ANYTIME open of the app load
+// MARK: - V1
+// MARK: - IGNORE THE ABOVE TODOs FOR NOW
+// ==========================================================================================================
+// ==========================================================================================================
+// ==========================================================================================================
 
 import CoreLocation
 import Combine
