@@ -138,14 +138,15 @@ struct MeetCardOverlay: View
 // MARK: - Updated MeetCardView with Overlay Implementation
 private struct MeetCardView: View
 {
-    let meet            : ViewMeetsModel
-    let currentUserUUID : UUID?
-    let onClose         : () -> Void
-    let onEdit          : (ViewMeetsModel) -> Void
-    let onDelete        : (ViewMeetsModel) -> Void
-    let onLeave         : (ViewMeetsModel) -> Void
-    let onRemoveParticipant: (ViewMeetsModel, ParticipantDetail) -> Void  // NEW
-
+    let meet                : ViewMeetsModel
+    let currentUserUUID     : UUID?
+    let onClose             : () -> Void
+    let onEdit              : (ViewMeetsModel) -> Void
+    let onDelete            : (ViewMeetsModel) -> Void
+    let onLeave             : (ViewMeetsModel) -> Void
+    let onRemoveParticipant : (ViewMeetsModel, ParticipantDetail) -> Void  // NEW
+    
+    @State private var showDirectionOptions      = false
     @State private var showDeleteConfirm         = false
     @State private var showLeaveConfirm          = false
     @State private var addressText      : String = "Loading address..."
@@ -342,70 +343,59 @@ private struct MeetCardView: View
                     Chip(text: meet.category_name, systemImage: "figure.run")
                 }
                 
-                // Location Information
+                // MARK: Location Information
+
                 VStack(alignment: .leading, spacing: 8)
                 {
-                    Label {
-                        VStack(alignment: .leading, spacing: 4) {
-                            if !displayAddressName.isEmpty {
-                                Text(displayAddressName)
+                    Button(action: openInMaps) {
+                        HStack(spacing: 12) {
+                            // Location icon
+                            Image(systemName: "location.fill")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundStyle(AppPalette.Brand.neonPink)
+                                .frame(width: 20)
+                            
+                            VStack(alignment: .leading, spacing: 2) {
+                                // Primary location name
+                                Text(!displayAddressName.isEmpty ? displayAddressName : "Location")
                                     .font(.system(size: 15, weight: .semibold))
                                     .foregroundStyle(AppPalette.Text.primary)
                                     .lineLimit(1)
+                                
+                                // Condensed address line
+                                HStack(spacing: 4) {
+                                    if !displayAddress.isEmpty || !displayCityAndState.isEmpty {
+                                        let addressParts = [displayAddress, displayCityAndState]
+                                            .filter { !$0.isEmpty }
+                                        
+                                        Text(addressParts.joined(separator: " • "))
+                                            .font(.system(size: 13))
+                                            .foregroundStyle(AppPalette.Text.secondary)
+                                            .lineLimit(1)
+                                    }
+                                }
                             }
                             
-                            if !displayAddress.isEmpty {
-                                Text(displayAddress)
-                                    .font(.system(size: 14))
-                                    .foregroundStyle(AppPalette.Text.secondary)
-                                    .lineLimit(1)
-                            }
+                            Spacer()
                             
-                            if !displaySubLocality.isEmpty {
-                                Text(displaySubLocality)
-                                    .font(.system(size: 13))
-                                    .foregroundStyle(AppPalette.Text.tertiary)
-                                    .lineLimit(1)
-                            }
-                            
-                            if !displayCityAndState.isEmpty {
-                                Text(displayCityAndState)
-                                    .font(.system(size: 13))
-                                    .foregroundStyle(AppPalette.Text.secondary)
-                                    .lineLimit(1)
-                            }
-                            
-                            // "Tap for directions" hint
-                            HStack(spacing: 4) {
-                                Image(systemName: "arrow.triangle.turn.up.right.circle")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(AppPalette.Brand.neonPink.opacity(0.7))
-                                Text("Tap for directions")
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundStyle(AppPalette.Brand.neonPink.opacity(0.7))
-                            }
-                            .padding(.top, 4)
+                            // Subtle navigation hint
+                            Image(systemName: "arrow.up.right")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(AppPalette.Brand.neonPink.opacity(0.6))
                         }
-                    } icon: {
-                        Image(systemName: "location.fill")
-                            .foregroundStyle(AppPalette.Brand.neonPink)
-                            .frame(width: 20)
+                        .padding(.vertical, 14)
+                        .padding(.horizontal, 14)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(AppPalette.Surface.fieldFill.opacity(0.4))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(AppPalette.Surface.fieldStroke.opacity(0.8), lineWidth: 1)
+                                )
+                        )
+                        .contentShape(Rectangle())
                     }
-                    .padding(.vertical, 12)
-                    .padding(.horizontal, 12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(AppPalette.Surface.fieldFill.opacity(0.5))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
-                            )
-                    )
-                    .contentShape(Rectangle()) // Make the entire area tappable
-                    .onTapGesture {
-                        openInMaps()
-                    }
+                    .buttonStyle(.plain)
                 }
                 
                 // Description (if exists)
@@ -857,6 +847,183 @@ private struct ParticipantDetailOverlay: View
         } message: {
             if let participant = participant {
                 Text("Remove \(participant.display_name) from this meet?")
+            }
+        }
+    }
+}
+
+// notused
+private struct DirectionsSelectionOverlay: View {
+    @Binding var showDirections: Bool
+    let onDriving: () -> Void
+    let onWalking: () -> Void
+    let onTransit: () -> Void
+    let onShowLocation: () -> Void
+    
+    var body: some View {
+        ZStack {
+            // Background blur
+            Color.black.opacity(0.3)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        showDirections = false
+                    }
+                }
+            
+            VStack(spacing: 0) {
+                // Header
+                VStack(spacing: 8) {
+                    Text("Get Directions")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(AppPalette.Text.primary)
+                    
+                    Text("Choose how you'd like to get to this location")
+                        .font(.system(size: 14))
+                        .foregroundStyle(AppPalette.Text.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.top, 20)
+                .padding(.horizontal, 20)
+                
+                // Direction options
+                VStack(spacing: 0) {
+                    DirectionOptionButton(
+                        title: "Driving Directions",
+                        icon: "car.fill",
+                        color: AppPalette.Brand.neonPink,
+                        action: {
+                            onDriving()
+                            withAnimation(.easeOut(duration: 0.2)) {
+                                showDirections = false
+                            }
+                        }
+                    )
+                    
+                    DirectionOptionButton(
+                        title: "Walking Directions",
+                        icon: "figure.walk",
+                        color: .green,
+                        action: {
+                            onWalking()
+                            withAnimation(.easeOut(duration: 0.2)) {
+                                showDirections = false
+                            }
+                        }
+                    )
+                    
+                    DirectionOptionButton(
+                        title: "Transit Directions",
+                        icon: "bus.fill",
+                        color: .blue,
+                        action: {
+                            onTransit()
+                            withAnimation(.easeOut(duration: 0.2)) {
+                                showDirections = false
+                            }
+                        }
+                    )
+                    
+                    DirectionOptionButton(
+                        title: "Just Show Location",
+                        icon: "location.circle.fill",
+                        color: .orange,
+                        showDivider: false,
+                        action: {
+                            onShowLocation()
+                            withAnimation(.easeOut(duration: 0.2)) {
+                                showDirections = false
+                            }
+                        }
+                    )
+                }
+                .padding(.top, 16)
+                
+                // Cancel button
+                Button {
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        showDirections = false
+                    }
+                } label: {
+                    Text("Cancel")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(AppPalette.Text.primary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(AppPalette.Surface.fieldFill.opacity(0.3))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
+                                )
+                        )
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 16)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 20)
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(AppPalette.Brand.japDarkerPurple)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
+                    )
+            )
+            .frame(maxWidth: 320)
+            .scaleEffect(showDirections ? 1.0 : 0.8)
+            .opacity(showDirections ? 1.0 : 0)
+        }
+        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: showDirections)
+    }
+}
+
+private struct DirectionOptionButton: View {
+    let title: String
+    let icon: String
+    let color: Color
+    var showDivider: Bool = true
+    let action: () -> Void
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            Button(action: action) {
+                HStack(spacing: 16) {
+                    // Icon background
+                    ZStack {
+                        Circle()
+                            .fill(color.opacity(0.15))
+                            .frame(width: 40, height: 40)
+                        
+                        Image(systemName: icon)
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundStyle(color)
+                    }
+                    
+                    // Title
+                    Text(title)
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(AppPalette.Text.primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    
+                    // Arrow
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(AppPalette.Text.tertiary)
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 16)
+                .background(Color.clear)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            
+            if showDivider {
+                Divider()
+                    .background(AppPalette.Surface.fieldStroke.opacity(0.5))
+                    .padding(.leading, 76) // Align with text start
             }
         }
     }

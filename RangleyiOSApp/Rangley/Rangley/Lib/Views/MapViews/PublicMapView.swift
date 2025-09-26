@@ -503,11 +503,13 @@ class AuthStateStore: ObservableObject
 @MainActor
 class UIStateStore: ObservableObject
 {
-    @Published var showLocationPopup = false
-    @Published var showMeetOverlay = false
-    @Published var showCreateForm = false
-    @Published var showEditSheet = false
-    @Published var selectedLocation: LocationInfo?
+    @Published var showLocationPopup    = false
+    @Published var showMeetOverlay      = false
+    @Published var showCreateForm       = false
+    @Published var showUpdateOverlay    = false
+    @Published var meetToEdit       : ViewMeetsModel?
+    @Published var selectedLocation : LocationInfo?
+
     
     // Day/Night theme
     @Published var isDaylight = true
@@ -533,10 +535,10 @@ class UIStateStore: ObservableObject
     private var cancellables = Set<AnyCancellable>()
     
     func dismissAllOverlays() {
-        showLocationPopup = false
-        showMeetOverlay = false
-        showCreateForm = false
-        showEditSheet = false
+        showLocationPopup   = false
+        showMeetOverlay     = false
+        showCreateForm      = false
+        showUpdateOverlay   = false
     }
 }
 
@@ -776,6 +778,7 @@ struct MapView: View
 // MARK: - Overlays View Component
 struct OverlaysView: View
 {
+    
     @ObservedObject var mapData: MapDataStore
     @ObservedObject var locationData: LocationDataStore
     @ObservedObject var uiState: UIStateStore
@@ -784,7 +787,8 @@ struct OverlaysView: View
     let authToken: String
     @Binding var meetCreationMode: MeetCreationEntryMode?
     
-    var body: some View {
+    var body: some View
+    {
         ZStack {
             // Meet Creation Overlay (Unified)
             MeetCreationUnifiedOverlay(
@@ -797,6 +801,8 @@ struct OverlaysView: View
                 }
             )
             
+            
+            
             // MARK: Meet Card Overlay - Fixed with authState parameter
             // MARK: In OverlaysView body, update the MeetCardOverlay call to:
             MeetCardOverlay(
@@ -806,7 +812,9 @@ struct OverlaysView: View
                 currentUserUUID: authState.currentUser?.user_uuid,
                 // Remove this line: authState: authState,
                 onEdit: { meet in
-                    uiState.showEditSheet = true
+                    uiState.meetToEdit = meet
+                    uiState.showUpdateOverlay = true
+                    uiState.showMeetOverlay = false  // Close the meet card
                 },
                 onDelete: { meet in
                     Task {
@@ -831,28 +839,24 @@ struct OverlaysView: View
                     }
                 }
             )
-            
+            // Add this to the ZStack in OverlaysView body
+           MeetUpdateUnifiedOverlay(
+            showOverlay: $uiState.showUpdateOverlay,
+            meetToEdit: $uiState.meetToEdit,
+               onUpdate: { body in
+                   try await mapData.updateMeet(body)
+               },
+               onLoadMeets: { await mapData.loadMeets() }
+           )
             // Loading Overlay
             if mapData.isLoading {
                 LoadingOverlay()
             }
         }
-        .sheet(isPresented: $uiState.showEditSheet) {
-            if let editing = mapData.selectedMeet {
-                MeetFormView(
-                    mode: .update(existing: editing),
-                    onUpdate: { body in
-                        try await mapData.updateMeet(body)
-                    },
-                    onClose: { uiState.showEditSheet = false },
-                    onPickLocation: nil,
-                    onLoadMeets: { await mapData.loadMeets() }
-                )
-            }
-        }
     }
     
-    private func seedForCreate() -> LocationInfo? {
+    private func seedForCreate() -> LocationInfo?
+    {
         if let sel = uiState.selectedLocation { return sel }
         if let user = seedFromUser() { return user }
         
@@ -866,7 +870,8 @@ struct OverlaysView: View
         )
     }
     
-    private func seedFromUser() -> LocationInfo? {
+    private func seedFromUser() -> LocationInfo?
+    {
         guard let c = locationData.userLocation?.coordinate else { return nil }
         let coord = Coordinate(c.latitude, c.longitude)
         return LocationInfo(
@@ -879,12 +884,9 @@ struct OverlaysView: View
     }
     
     private func handleMeetCreation(
-        _ location: LocationInfo,
-        _ name: String,
-        _ start: Date,
-        _ end: Date,
-        _ invitedUsers: [ViewUsersModel]
-    ) async {
+        _ location: LocationInfo,_ name: String,
+        _ start: Date,_ end: Date,_ invitedUsers: [ViewUsersModel]) async
+    {
         do {
             let invitedUUIDs = invitedUsers.map(\.user_uuid)
             
@@ -937,7 +939,7 @@ struct ControlsView: View
     {
         uiState.showLocationPopup ||
         uiState.showMeetOverlay ||
-        uiState.showEditSheet
+        uiState.showUpdateOverlay
     }
     
     var body: some View
@@ -1031,6 +1033,7 @@ struct ControlsView: View
     }
 }
 
+// TODO: - FIX THIS IT HAS NO DESIGN
 // MARK: - Loading Overlay
 struct LoadingOverlay: View
 {
