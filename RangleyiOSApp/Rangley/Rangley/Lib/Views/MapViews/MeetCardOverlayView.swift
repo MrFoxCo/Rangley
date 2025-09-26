@@ -138,6 +138,10 @@ struct MeetCardOverlay: View
 // MARK: - Updated MeetCardView with Overlay Implementation
 private struct MeetCardView: View
 {
+    private var hasConfirmedMapsAccess: Bool {
+        UserDefaults.standard.bool(forKey: "hasConfirmedMapsAccess")
+    }
+    
     let meet                : ViewMeetsModel
     let currentUserUUID     : UUID?
     let onClose             : () -> Void
@@ -146,6 +150,7 @@ private struct MeetCardView: View
     let onLeave             : (ViewMeetsModel) -> Void
     let onRemoveParticipant : (ViewMeetsModel, ParticipantDetail) -> Void  // NEW
     
+    @State private var showDirectionConfirm      = false
     @State private var showDirectionOptions      = false
     @State private var showDeleteConfirm         = false
     @State private var showLeaveConfirm          = false
@@ -347,7 +352,13 @@ private struct MeetCardView: View
 
                 VStack(alignment: .leading, spacing: 8)
                 {
-                    Button(action: openInMaps) {
+                    Button(action: {
+                        if hasConfirmedMapsAccess {
+                            openInMaps()
+                        } else {
+                            showDirectionConfirm = true
+                        }
+                    }) {
                         HStack(spacing: 12) {
                             // Location icon
                             Image(systemName: "location.fill")
@@ -506,6 +517,16 @@ private struct MeetCardView: View
         } message: {
             Text("Are you sure you want to leave this meet?")
         }
+        .alert("Open in Maps?", isPresented: $showDirectionConfirm) {
+            Button("Get Directions") {
+                UserDefaults.standard.set(true, forKey: "hasConfirmedMapsAccess")
+                openInMaps()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will open Apple Maps with driving directions to the location.")
+        }
+        //message: {Text("This will open Apple Maps.")}
     }
 }
 
