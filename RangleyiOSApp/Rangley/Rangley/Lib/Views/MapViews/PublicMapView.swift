@@ -17,6 +17,7 @@
 // TODO: - NEED TO ADD categories and max capacties as options
 // TODO: - add count for people inside radius to the meet bubble button
 // TODO: - start planning version two features (filter by date, public join, friends, .etc, caching etc. etc.
+// TODO: - AWS change username, change display name,
 // MARK: - V2
 // MARK: - IGNORE THE ABOVE TODOs FOR NOW
 // ==========================================================================================================
@@ -36,7 +37,7 @@
 // TODO: - Remeber User when Create New Account
 // TODO: - meet invitaiton should be single repsonsiblity (maybe give leaveMeet or left meet new one
 // TODO: - Need to be able to add participants to existing meet .. make similar to delete participant
-// TODO: - AWS SHIT verify with auth code, reset password, change username, change display name, delete account ...
+// TODO: - AWS delete account ...
 // TODO: - wire the account settings to have all of that shit
 // TODO: - fix loading screen so it's the fucking rangley pig and not the black wheel bullshit that's
 // TODO: -  ^^^^this is for first download or simply reopening the app... an ANYTIME open of the app load
