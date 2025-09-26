@@ -64,6 +64,11 @@ fileprivate final class ForgotPasswordVM: ObservableObject
     @Published var isBusy = false
     @Published var isResending = false
     
+    // Add rate limit tracking
+    @Published var isRateLimited = false
+    @Published var rateLimitMessage: String = ""
+    @Published var retryAfter: Date?
+    
     // MARK: - Computed Properties
     
     private var phoneDigits: String { phoneRaw.filter(\.isNumber) }
@@ -106,31 +111,60 @@ fileprivate final class ForgotPasswordVM: ObservableObject
     
     // MARK: - Actions
     
-    func sendResetCode() async {
-        guard let phone = e164Phone else {
-            phoneStatus = .error("Please enter a valid phone number")
-            return
-        }
-        
-        isBusy = true
-        phoneStatus = .none
-        defer { isBusy = false }
-        
-        do {
-            // Use Amplify's resetPassword to initiate the flow
-            let resetResult = try await Amplify.Auth.resetPassword(for: phone)
-            
-            if case .confirmResetPasswordWithCode = resetResult.nextStep {
-                currentStep = .verifyCode(phone: phone)
-                verifyStatus = .info("Reset code sent to \(phone)")
-            } else {
-                phoneStatus = .error("Unexpected reset flow. Please try again")
+    func sendResetCode() async
+    {
+            guard let phone = e164Phone else {
+                phoneStatus = .error("Please enter a valid phone number")
+                return
             }
-        } catch {
-            Log.auth.error("Password reset initiation failed: \(error)")
-            phoneStatus = .error("Couldn't send reset code: " + userFriendlyAuthError(error))
+            
+            // Check if we're still in a rate limit period
+            if let retryTime = retryAfter, retryTime > Date() {
+                let remaining = Int(retryTime.timeIntervalSinceNow / 60) + 1
+                phoneStatus = .error("Please wait \(remaining) more minutes before trying again")
+                return
+            }
+            
+            isBusy = true
+            phoneStatus = .none
+            isRateLimited = false
+            defer { isBusy = false }
+            
+            do {
+                let resetResult = try await Amplify.Auth.resetPassword(for: phone)
+                
+                if case .confirmResetPasswordWithCode = resetResult.nextStep {
+                    currentStep = .verifyCode(phone: phone)
+                    verifyStatus = .info("Reset code sent to \(phone)")
+                    // Clear any previous rate limit state on success
+                    retryAfter = nil
+                    rateLimitMessage = ""
+                } else {
+                    phoneStatus = .error("Unexpected reset flow. Please try again")
+                }
+            } catch {
+                Log.auth.error("Password reset initiation failed: \(error)")
+                let errorMsg = userFriendlyAuthError(error)
+                
+                // Check if this is a rate limit error and set retry time
+                if errorMsg.contains("wait") || errorMsg.contains("limit") {
+                    isRateLimited = true
+                    rateLimitMessage = errorMsg
+                    
+                    // Set retry time based on error type
+                    if errorMsg.contains("15 minutes") {
+                        retryAfter = Date().addingTimeInterval(15 * 60)
+                    } else if errorMsg.contains("5 minutes") {
+                        retryAfter = Date().addingTimeInterval(5 * 60)
+                    } else if errorMsg.contains("after") {
+                        // Try to extract specific time or default to 15 minutes
+                        retryAfter = Date().addingTimeInterval(15 * 60)
+                    }
+                }
+                
+                phoneStatus = .error(errorMsg)
+            }
         }
-    }
     
     func verifyCode() async
     {
@@ -224,25 +258,65 @@ fileprivate final class ForgotPasswordVM: ObservableObject
     
     func resendVerificationCode() async
     {
-        guard case .verifyCode(let phone) = currentStep else { return }
+           guard case .verifyCode(let phone) = currentStep else { return }
+           
+           // Check rate limit for resending too
+           if let retryTime = retryAfter, retryTime > Date() {
+               let remaining = Int(retryTime.timeIntervalSinceNow / 60) + 1
+               verifyStatus = .error("Please wait \(remaining) more minutes before requesting a new code")
+               return
+           }
+           
+           isResending = true
+           verifyStatus = .none
+           defer { isResending = false }
+           
+           do {
+               let resetResult = try await Amplify.Auth.resetPassword(for: phone)
+               
+               if case .confirmResetPasswordWithCode = resetResult.nextStep {
+                   verifyStatus = .info("New reset code sent to \(phone)")
+                   retryAfter = nil // Clear rate limit on success
+               } else {
+                   verifyStatus = .error("Unexpected reset flow. Please try again")
+               }
+           } catch {
+               Log.auth.error("Password reset resend failed: \(error)")
+               let errorMsg = userFriendlyAuthError(error)
+               
+               // Handle rate limiting for resend
+               if errorMsg.contains("wait") || errorMsg.contains("limit") {
+                   if errorMsg.contains("15 minutes") {
+                       retryAfter = Date().addingTimeInterval(15 * 60)
+                   } else if errorMsg.contains("5 minutes") {
+                       retryAfter = Date().addingTimeInterval(5 * 60)
+                   }
+               }
+               
+               verifyStatus = .error(errorMsg)
+           }
+       }
+    
+    
+    // MARK: - Rate Limit Status Methods
         
-        isResending = true
-        verifyStatus = .none
-        defer { isResending = false }
+    var timeUntilRetry: String? {
+        guard let retryTime = retryAfter, retryTime > Date() else { return nil }
         
-        do {
-            // Resend using Amplify's reset flow
-            let resetResult = try await Amplify.Auth.resetPassword(for: phone)
-            
-            if case .confirmResetPasswordWithCode = resetResult.nextStep {
-                verifyStatus = .info("New reset code sent to \(phone)")
-            } else {
-                verifyStatus = .error("Unexpected reset flow. Please try again")
-            }
-        } catch {
-            Log.auth.error("Password reset resend failed: \(error)")
-            verifyStatus = .error("Couldn't resend code: " + userFriendlyAuthError(error))
+        let remaining = retryTime.timeIntervalSinceNow
+        let minutes = Int(remaining / 60)
+        let seconds = Int(remaining.truncatingRemainder(dividingBy: 60))
+        
+        if minutes > 0 {
+            return "\(minutes)m \(seconds)s"
+        } else {
+            return "\(seconds)s"
         }
+    }
+    
+    var canAttemptReset: Bool {
+        guard let retryTime = retryAfter else { return true }
+        return retryTime <= Date()
     }
     
     func startOver() {
@@ -254,6 +328,11 @@ fileprivate final class ForgotPasswordVM: ObservableObject
         phoneStatus = .none
         verifyStatus = .none
         passwordStatus = .none
+        
+        // Clear rate limit state
+        isRateLimited = false
+        rateLimitMessage = ""
+        retryAfter = nil
     }
     
     func goBack()
@@ -748,27 +827,61 @@ fileprivate struct DigitBlock: View
 
 // MARK: - Helper Functions
 
-// Reuse user-friendly error messages
-fileprivate func userFriendlyAuthError(_ error: Error) -> String {
+// MARK: - Enhanced Error Handling for Rate Limits
+fileprivate func userFriendlyAuthError(_ error: Error) -> String
+{
     if let ae = error as? AuthError {
         Log.auth.error("Auth error: \(ae.errorDescription) | \(ae.recoverySuggestion)")
         if let underlying = ae.underlyingError {
             Log.auth.error("Underlying error: \(underlying)")
         }
         
+        // Check for rate limiting scenarios with specific timing
+        if let underlying = ae.underlyingError as NSError? {
+            let errorCode = underlying.userInfo["__type"] as? String ??
+                           underlying.userInfo["code"] as? String ??
+                           underlying.domain
+            let message = underlying.userInfo["message"] as? String ?? underlying.localizedDescription
+            
+            // Handle different types of rate limiting
+            switch errorCode {
+            case "TooManyRequestsException":
+                // Parse retry time from message if available
+                if let retryTime = extractRetryTime(from: message) {
+                    return "Too many password reset attempts. Please wait \(retryTime) before trying again."
+                }
+                return "Too many password reset attempts. Please wait 15 minutes before trying again."
+                
+            case "LimitExceededException":
+                // Daily limit typically resets at midnight
+                let formatter = DateFormatter()
+                formatter.timeStyle = .short
+                let midnight = Calendar.current.startOfDay(for: Date().addingTimeInterval(86400))
+                let resetTime = formatter.string(from: midnight)
+                return "Daily password reset limit reached. Try again after \(resetTime)."
+                
+            case "ThrottlingException":
+                return "Too many requests. Please wait 5 minutes before trying again."
+                
+            default:
+                break
+            }
+        }
+        
+        // Handle other auth errors
         switch ae.errorDescription {
         case let desc where desc.contains("UserNotFoundException"):
             return "No account found with this phone number"
         case let desc where desc.contains("CodeMismatchException"):
             return "Invalid verification code"
         case let desc where desc.contains("ExpiredCodeException"):
-            return "Verification code has expired"
+            return "Verification code has expired. Please request a new one."
         case let desc where desc.contains("InvalidPasswordException"):
             return "Password doesn't meet requirements"
         case let desc where desc.contains("TooManyRequestsException"):
-            return "Too many attempts. Please try again later"
+            return "Too many attempts. Please wait 15 minutes before trying again."
         case let desc where desc.contains("LimitExceededException"):
-            return "Password reset limit exceeded. Please try again later"
+            return "Password reset limit exceeded. Please try again later."
         default:
             return "Something went wrong. Please try again"
         }
@@ -776,4 +889,27 @@ fileprivate func userFriendlyAuthError(_ error: Error) -> String {
     
     Log.auth.error("Non-auth error: \(error)")
     return "Something went wrong. Please try again"
+}
+
+// MARK: - Helper function to extract retry time from error messages
+fileprivate func extractRetryTime(from message: String) -> String?
+{
+    // Try to extract minutes from common AWS error message patterns
+    let patterns = [
+        #"wait (\d+) minutes?"#,
+        #"try again in (\d+) minutes?"#,
+        #"(\d+) minutes? remaining"#,
+        #"retry after (\d+)m"#
+    ]
+    
+    for pattern in patterns {
+        if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+           let match = regex.firstMatch(in: message, range: NSRange(message.startIndex..., in: message)),
+           let minutesRange = Range(match.range(at: 1), in: message) {
+            let minutes = String(message[minutesRange])
+            return "\(minutes) minutes"
+        }
+    }
+    
+    return nil
 }

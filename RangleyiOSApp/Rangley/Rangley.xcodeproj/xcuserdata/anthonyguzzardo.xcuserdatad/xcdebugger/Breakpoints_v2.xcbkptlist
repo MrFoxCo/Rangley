@@ -82,6 +82,36 @@
             endingLineNumber = "74"
             landmarkName = "Surface"
             landmarkType = "14">
+            <Locations>
+               <Location
+                  uuid = "D4063F05-1E60-451C-8BF3-D3B9A8D07153 - bca9ed6e8870b301"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "one-time initialization function for invitationCard"
+                  moduleName = "Rangley.debug.dylib"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/anthonyguzzardo/Developer/Personal/GitHub/Rangley/RangleyiOSApp/Rangley/Rangley/Lib/Styles/AppPalette.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "74"
+                  endingLineNumber = "74">
+               </Location>
+               <Location
+                  uuid = "D4063F05-1E60-451C-8BF3-D3B9A8D07153 - d82845c7badf43b3"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "Rangley.AppPalette.Surface.invitationCard.unsafeMutableAddressor : SwiftUI.Color"
+                  moduleName = "Rangley.debug.dylib"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/anthonyguzzardo/Developer/Personal/GitHub/Rangley/RangleyiOSApp/Rangley/Rangley/Lib/Styles/AppPalette.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "74"
+                  endingLineNumber = "74">
+               </Location>
+            </Locations>
          </BreakpointContent>
       </BreakpointProxy>
    </Breakpoints>
