@@ -17,7 +17,8 @@
 // TODO: - NEED TO ADD categories and max capacties as options
 // TODO: - add count for people inside radius to the meet bubble button
 // TODO: - start planning version two features (filter by date, public join, friends, .etc, caching etc. etc.
-// TODO: - AWS change username, change display name,
+// TODO: - AWS change username, change display name, wire the account settings to have all of that shit
+// TODO: - meet invitaiton should be single repsonsiblity (maybe give leaveMeet or left meet new one
 // MARK: - V2
 // MARK: - IGNORE THE ABOVE TODOs FOR NOW
 // ==========================================================================================================
@@ -32,13 +33,10 @@
 // TODO: - Cleanup jump from MyMeetsView to meetscard overlay
 // TODO: - Banner Notificaitons from outside the app
 // TODO: - Color Scheme needs to be set.. especially on search friends in create meet
-// TODO: - Fix the rotating screen view -- probably should look to be vertical
 // TODO: - Fix recenter compass top right
-// TODO: - Remeber User when Create New Account
-// TODO: - meet invitaiton should be single repsonsiblity (maybe give leaveMeet or left meet new one
+// TODO: - Remeber User when Create New Account .. think this is good need check with dad's phone
 // TODO: - Need to be able to add participants to existing meet .. make similar to delete participant
 // TODO: - AWS delete account ...
-// TODO: - wire the account settings to have all of that shit
 // TODO: - fix loading screen so it's the fucking rangley pig and not the black wheel bullshit that's
 // TODO: -  ^^^^this is for first download or simply reopening the app... an ANYTIME open of the app load
 // MARK: - V1
@@ -168,6 +166,11 @@ class MapDataStore: ObservableObject
             selectedMeet = nil
         }
     }
+    
+    func inviteUsersToMeet(meetId: UUID, userIds: [UUID]) async throws {
+        try await apiService.inviteUsersToMeet(meetId: meetId, userIds: userIds)
+        await forceRefresh()
+    }
 }
 
 // MARK: - API Service Protocol
@@ -180,6 +183,7 @@ protocol APIServiceProtocol
     func deleteMeet(_ body: DeletedMeetInsertBody) async throws
     func leaveMeet(_ meetId: UUID) async throws
     func removeParticipant(meetId: UUID, participantId: UUID) async throws
+    func inviteUsersToMeet(meetId: UUID, userIds: [UUID]) async throws
 }
 
 
@@ -236,6 +240,11 @@ class APIService: APIServiceProtocol
             new_status_id: 9
         )
         _ = try await AuthAPI.updateParticipantStatus(baseURL: Env.apiBaseURL, token: token, body: body)
+    }
+    func inviteUsersToMeet(meetId: UUID, userIds: [UUID]) async throws {
+        let token = try await getAuthToken()
+        // TODO: Replace with actual API call to stored procedure for inviting users
+        print("TODO: Implement API call to invite users \(userIds) to meet \(meetId)")
     }
 }
 
@@ -827,7 +836,8 @@ struct OverlaysView: View
                 isPresented: $uiState.showMeetOverlay,
                 ns: meetNS,
                 currentUserUUID: authState.currentUser?.user_uuid,
-                // Remove this line: authState: authState,
+                baseURL: Env.apiBaseURL,
+                token: authToken,
                 onEdit: { meet in
                     uiState.meetToEdit = meet
                     uiState.showUpdateOverlay = true
@@ -853,6 +863,17 @@ struct OverlaysView: View
                     
                     Task {
                         try? await mapData.removeParticipant(meetId: meet.meet_id_uuid, participantId: participant.user_uuid)
+                    }
+                },
+                onInviteUsers: { meet, users in 
+                    Task {
+                        do {
+                            let userIds = users.map { $0.user_uuid }
+                            try await mapData.inviteUsersToMeet(meetId: meet.meet_id_uuid, userIds: userIds)
+                            print("Successfully invited \(users.count) users to meet: \(meet.name)")
+                        } catch {
+                            print("Failed to invite users to meet: \(error)")
+                        }
                     }
                 }
             )

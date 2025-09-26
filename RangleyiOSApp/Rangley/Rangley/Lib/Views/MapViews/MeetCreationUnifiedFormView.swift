@@ -174,7 +174,7 @@ struct MeetCreationUnifiedFormView: View
         .frame(maxWidth: 400, maxHeight: 650)
         .background(
             RoundedRectangle(cornerRadius: 24)
-                .fill(AppPalette.Brand.russianViolet)
+                .fill(AppPalette.Brand.japDarkerPurple)
                 .overlay(
                     RoundedRectangle(cornerRadius: 24)
                         .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1)

@@ -44,8 +44,8 @@ struct AccountView: View
                 LinearGradient(
                     colors: [
                         AppPalette.Brand.russianViolet,
-                        AppPalette.Brand.violetMid,
-                        AppPalette.Brand.nearBlack
+                        AppPalette.Brand.japPurple,
+                        AppPalette.Brand.japDarkerPurple
                     ],
                     startPoint: .top,
                     endPoint: .bottom

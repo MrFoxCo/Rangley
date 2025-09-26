@@ -81,13 +81,19 @@ struct MeetCardOverlay: View
 {
     @Binding var selectedMeet   : ViewMeetsModel?
     @Binding var isPresented    : Bool
-    let ns                  : Namespace.ID
-    let currentUserUUID     : UUID?
+    let ns                      : Namespace.ID
+    let currentUserUUID         : UUID?
+    let baseURL                 : URL
+    let token                   : String
+    
     var onEdit              :   (ViewMeetsModel) -> Void = { _ in }
     var onDelete            :   (ViewMeetsModel) -> Void = { _ in }
     var onLeave             :   (ViewMeetsModel) -> Void = { _ in }
     var onRemoveParticipant : (ViewMeetsModel, ParticipantDetail) -> Void = { _, _ in }  // NEW
+    var onInviteUsers       : (ViewMeetsModel, [ViewUsersModel]) -> Void = { _, _ in }
 
+    
+    
     var body: some View
     {
         ZStack
@@ -104,7 +110,10 @@ struct MeetCardOverlay: View
                     onEdit: onEdit,
                     onDelete: onDelete,
                     onLeave: onLeave,
-                    onRemoveParticipant: onRemoveParticipant  // NEW: Pass the callback
+                    onRemoveParticipant: onRemoveParticipant,
+                    baseURL: baseURL,
+                    token: token,
+                    onInviteUsers: onInviteUsers
                 )
                 .frame(maxWidth: 420, maxHeight: 490)
                 .background(
@@ -148,7 +157,11 @@ private struct MeetCardView: View
     let onEdit              : (ViewMeetsModel) -> Void
     let onDelete            : (ViewMeetsModel) -> Void
     let onLeave             : (ViewMeetsModel) -> Void
-    let onRemoveParticipant : (ViewMeetsModel, ParticipantDetail) -> Void  // NEW
+    let onRemoveParticipant : (ViewMeetsModel, ParticipantDetail) -> Void
+    let baseURL: URL
+    let token: String
+    let onInviteUsers: (ViewMeetsModel, [ViewUsersModel]) -> Void
+
     
     @State private var showDirectionConfirm      = false
     @State private var showDirectionOptions      = false
@@ -172,6 +185,12 @@ private struct MeetCardView: View
     @State private var displayAddress      : String = ""
     @State private var displayCityAndState : String = ""
     @State private var displaySubLocality  : String = ""
+    
+    @State private var showInviteSheet = false // Replace showInviteOverlay
+    @State private var selectedInviteUsers: [ViewUsersModel] = []
+    private var canInvite: Bool {
+        meet.is_owner || isAcceptedParticipant
+    }
 
     private var dateRangeText: String
     {
@@ -279,6 +298,23 @@ private struct MeetCardView: View
                     
                     HStack(spacing: 8)
                     {
+                        
+                        // In the header HStack with action buttons, add this before the existing buttons:
+                        // Direct invite button - opens UserSearchView sheet immediately
+                        if canInvite {
+                            Button {
+                                showInviteSheet = true
+                            } label: {
+                                Image(systemName: "person.badge.plus")
+                                    .font(.system(size: 14, weight: .bold))
+                                    .padding(8)
+                                    .background(AppPalette.Surface.fieldFill, in: Circle())
+                                    .overlay(Circle().stroke(AppPalette.Surface.fieldStroke, lineWidth: 1))
+                                    .foregroundStyle(AppPalette.Brand.neonPink)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        
                         if meet.is_owner {
                             Button { onEdit(meet) } label: {
                                 Image(systemName: "pencil")
@@ -495,10 +531,26 @@ private struct MeetCardView: View
                     }
                 )
             }
+
         }
         .task { loadAddress() }
         .onDisappear { geocodingTask?.cancel() }
         .onReceive(timer) { now = $0 }
+        .sheet(isPresented: $showInviteSheet) {
+            UserSearchView(
+                baseURL: baseURL,
+                token: token,
+                selectedUsers: $selectedInviteUsers,
+                onDismiss: {
+                    showInviteSheet = false
+                    // If users were selected, send the invites
+                    if !selectedInviteUsers.isEmpty {
+                        onInviteUsers(meet, selectedInviteUsers)
+                        selectedInviteUsers.removeAll()
+                    }
+                }
+            )
+        }
         .alert("Delete this meet?", isPresented: $showDeleteConfirm) {
             Button("Delete", role: .destructive) {
                 onDelete(meet)
@@ -1048,4 +1100,226 @@ private struct DirectionOptionButton: View {
             }
         }
     }
+}
+
+private struct InviteUsersOverlay: View
+{
+    let meet: ViewMeetsModel
+    let baseURL: URL
+    let token: String
+    @Binding var showingInvite: Bool
+    let onInvite: ([ViewUsersModel]) -> Void
+    
+    @State private var selectedUsers: [ViewUsersModel] = []
+    @State private var showUserSearch = false // Direct to UserSearchView
+    
+    var body: some View
+    {
+        ZStack {
+            // Dark backdrop
+            Color.black.opacity(0.6)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    withAnimation(.easeOut(duration: 0.3)) {
+                        showingInvite = false
+                    }
+                }
+            
+            VStack(spacing: 24) {
+                // Header
+                VStack(spacing: 16) {
+                    HStack {
+                        Button {
+                            withAnimation(.easeOut(duration: 0.3)) {
+                                showingInvite = false
+                            }
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(AppPalette.Text.secondary)
+                                .frame(width: 28, height: 28)
+                                .background(
+                                    Circle()
+                                        .fill(AppPalette.Surface.fieldFill.opacity(0.3))
+                                )
+                        }
+                        
+                        Spacer()
+                        
+                        Text("Invite Friends")
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundColor(AppPalette.Text.primary)
+                        
+                        Spacer()
+                        
+                        // Placeholder for symmetry
+                        Circle()
+                            .fill(Color.clear)
+                            .frame(width: 28, height: 28)
+                    }
+                    .padding(.horizontal, 24)
+                    
+                    // Meet context card
+                    VStack(spacing: 12) {
+                        Text("Inviting friends to:")
+                            .font(.system(size: 14))
+                            .foregroundColor(AppPalette.Text.secondary)
+                        
+                        VStack(spacing: 8) {
+                            Text(meet.name)
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundColor(AppPalette.Text.primary)
+                                .lineLimit(2)
+                                .multilineTextAlignment(.center)
+                            
+                            HStack(spacing: 6) {
+                                Image(systemName: "calendar")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(AppPalette.Brand.neonPink)
+                                
+                                Text(DateFormatter.shortDateTime.string(from: meet.dttm_start_utc))
+                                    .font(.system(size: 13))
+                                    .foregroundColor(AppPalette.Text.secondary)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 16)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(AppPalette.Surface.fieldFill.opacity(0.3))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
+                            )
+                    )
+                    .padding(.horizontal, 24)
+                }
+                
+                // Selected users preview (if any)
+                if !selectedUsers.isEmpty {
+                    VStack(spacing: 12) {
+                        HStack {
+                            Text("Selected (\(selectedUsers.count))")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(AppPalette.Text.primary)
+                            Spacer()
+                        }
+                        .padding(.horizontal, 24)
+                        
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 12) {
+                                ForEach(selectedUsers, id: \.user_uuid) { user in
+                                    SelectedUserChip(
+                                        user: user,
+                                        onRemove: {
+                                            selectedUsers.removeAll { $0.user_uuid == user.user_uuid }
+                                        }
+                                    )
+                                }
+                            }
+                            .padding(.horizontal, 24)
+                        }
+                    }
+                }
+                
+                // Main action button - DIRECTLY opens UserSearchView
+                Button {
+                    showUserSearch = true
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "person.badge.plus")
+                            .font(.system(size: 16, weight: .semibold))
+                        
+                        Text(selectedUsers.isEmpty ? "Search Friends to Invite" : "Add More Friends")
+                            .font(.system(size: 16, weight: .semibold))
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(AppPalette.Brand.neonPink)
+                    )
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 24)
+                
+                // Send invites button (only show if users selected)
+                if !selectedUsers.isEmpty {
+                    Button {
+                        sendInvites()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "paperplane.fill")
+                                .font(.system(size: 14, weight: .semibold))
+                            
+                            Text("Send \(selectedUsers.count) Invite\(selectedUsers.count == 1 ? "" : "s")")
+                                .font(.system(size: 16, weight: .semibold))
+                        }
+                        .foregroundColor(AppPalette.Brand.neonPink)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(AppPalette.Brand.neonPink.opacity(0.1))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(AppPalette.Brand.neonPink, lineWidth: 2)
+                                )
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 24)
+                }
+                
+                Spacer(minLength: 20)
+            }
+            .frame(maxWidth: 380, maxHeight: 500)
+            .background(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(AppPalette.Brand.japDarkerPurple)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
+                    )
+            )
+            .scaleEffect(showingInvite ? 1.0 : 0.8)
+            .opacity(showingInvite ? 1.0 : 0)
+        }
+        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: showingInvite)
+        .sheet(isPresented: $showUserSearch) {
+            UserSearchView(
+                baseURL: baseURL,
+                token: token,
+                selectedUsers: $selectedUsers,
+                onDismiss: {
+                    showUserSearch = false
+                }
+            )
+        }
+    }
+    
+    private func sendInvites() {
+        guard !selectedUsers.isEmpty else { return }
+        
+        onInvite(selectedUsers)
+        
+        withAnimation(.easeOut(duration: 0.3)) {
+            showingInvite = false
+        }
+        
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+    }
+}
+
+
+// MARK: - DateFormatter Extension
+extension DateFormatter {
+    static let shortDateTime: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        return formatter
+    }()
 }

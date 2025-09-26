@@ -169,6 +169,9 @@ WHERE participant_status_id IN (1,3,6,7);
 CREATE INDEX IF NOT EXISTS ix_part_meet_user
   ON rangley.tb_meet_participants (meet_id, user_id);
 
+CREATE INDEX IF NOT EXISTS ix_part_meet_accepted_only 
+	ON rangley.tb_meet_participants (meet_id) 
+	WHERE participant_status_id IN (6,7);
 
 
 CREATE TABLE rangley.tb_meets

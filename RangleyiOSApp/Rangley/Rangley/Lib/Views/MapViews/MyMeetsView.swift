@@ -220,7 +220,7 @@ private extension MyMeetsOverlay
         .padding(.horizontal, 20)
         .padding(.top, 20)
         .padding(.bottom, 16)
-        .background(Color(AppPalette.Brand.russianViolet))
+        .background(Color(AppPalette.Brand.formBlack))
     }
     
     var loadingView: some View {
@@ -234,7 +234,7 @@ private extension MyMeetsOverlay
                 .foregroundStyle(AppPalette.Text.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(AppPalette.Brand.russianViolet))
+        .background(Color(AppPalette.Brand.formBlack))
     }
     
     private func errorView(_ message: String) -> some View
@@ -272,7 +272,7 @@ private extension MyMeetsOverlay
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 40)
-        .background(Color(AppPalette.Brand.russianViolet))
+        .background(Color(AppPalette.Brand.formBlack))
     }
 
     
@@ -295,7 +295,7 @@ private extension MyMeetsOverlay
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 40)
-        .background(Color(AppPalette.Brand.russianViolet))
+        .background(Color(AppPalette.Brand.formBlack))
     }
 }
 
@@ -364,7 +364,7 @@ struct MyMeetsContentView: View
             .padding(.top, 20)
             .padding(.bottom, 20)
         }
-        .background(Color(AppPalette.Brand.russianViolet))
+        .background(Color(AppPalette.Brand.formBlack))
     }
 }
 
@@ -905,7 +905,7 @@ struct EmptyMeetsSectionView  : View
         .padding(.vertical, 30)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(AppPalette.Brand.russianViolet))
+                .fill(Color(AppPalette.Brand.formBlack))
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .stroke(AppPalette.Text.quaternary, lineWidth: 1)

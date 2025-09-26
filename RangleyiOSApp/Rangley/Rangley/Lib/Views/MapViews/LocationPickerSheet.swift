@@ -33,7 +33,7 @@ public struct LocationPickerSheet: View
                 )
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(AppPalette.Brand.russianViolet.ignoresSafeArea())
+            .background(AppPalette.Brand.japDarkerPurple.ignoresSafeArea())
             .navigationBarHidden(true)
         }
         .navigationViewStyle(StackNavigationViewStyle())

@@ -65,7 +65,7 @@ public struct SearchView: View
                 
                 Spacer()
             }
-            .background(AppPalette.Brand.japDarkerPurple)
+            .background(AppPalette.Brand.formBlack)
             .navigationBarHidden(true)
         }
         .alert("Search Error", isPresented: $showError) {
@@ -123,7 +123,7 @@ public struct SearchView: View
             .padding(.vertical, 12)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(AppPalette.Brand.japDarkerPurple))
+                    .fill(Color(AppPalette.Brand.formBlack))
                     .overlay(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
                             .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1)
@@ -504,12 +504,13 @@ struct MeetSearchResultCard: View
                     Label(meet.display_name, systemImage: "person")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(AppPalette.Text.secondary)
-                    
-                    Spacer()
-                    
-                    Label("\(meet.max_capacity)", systemImage: "person.3")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(AppPalette.Text.secondary)
+                    // TODO: - unccoment when max capacity is a feature
+//
+//                    Spacer()
+//                    
+//                    Label("\(meet.max_capacity)", systemImage: "person.3")
+//                        .font(.system(size: 12, weight: .medium))
+//                        .foregroundStyle(AppPalette.Text.secondary)
                 }
             }
             .padding(16)
@@ -581,7 +582,7 @@ struct UserSearchResultCard: View
             .padding(16)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(AppPalette.Brand.russianViolet))
+                    .fill(Color(AppPalette.Brand.formBlack))
                     .overlay(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
                             .stroke(AppPalette.Brand.neonPink.opacity(0.2), lineWidth: 1)

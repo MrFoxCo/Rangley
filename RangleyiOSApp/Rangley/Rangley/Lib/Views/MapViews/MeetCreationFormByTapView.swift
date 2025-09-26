@@ -250,7 +250,7 @@ struct MeetCreationFormByTapView: View
                         .fill(AppPalette.Surface.fieldFill)
                         .overlay(
                             RoundedRectangle(cornerRadius: 12)
-                                .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
+                                .stroke(AppPalette.Surface.fieldStroke, lineWidth: 3)
                         )
                 )
             }
@@ -306,7 +306,7 @@ struct MeetCreationFormByTapView: View
                                         .fill(AppPalette.Surface.fieldFill)
                                         .overlay(
                                             RoundedRectangle(cornerRadius: 12)
-                                                .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
+                                                .stroke(AppPalette.Surface.fieldStroke, lineWidth: 3)
                                         )
                                 )
                         }
@@ -325,7 +325,7 @@ struct MeetCreationFormByTapView: View
                                         .fill(AppPalette.Surface.fieldFill)
                                         .overlay(
                                             RoundedRectangle(cornerRadius: 12)
-                                                .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
+                                                .stroke(AppPalette.Surface.fieldStroke, lineWidth: 3)
                                         )
                                 )
 
@@ -364,7 +364,7 @@ struct MeetCreationFormByTapView: View
                                     .fill(AppPalette.Surface.fieldFill)
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 12)
-                                            .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
+                                            .stroke(AppPalette.Surface.fieldStroke, lineWidth: 3)
                                     )
                             )
                         }
@@ -399,10 +399,10 @@ struct MeetCreationFormByTapView: View
         .frame(maxWidth: 360)   // <- keep it compact on iPhone/iPad
         .background(
             RoundedRectangle(cornerRadius: 24)
-                .fill(AppPalette.Brand.russianViolet)
+                .fill(AppPalette.Brand.japDarkerPurple)
                 .overlay(
                     RoundedRectangle(cornerRadius: 24)
-                        .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1)
+                        .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 3)
                 )
         )
         .padding(.horizontal, 20) // <- breathing room from screen edges
@@ -484,10 +484,10 @@ struct InviteFriendsEmbedded: View
                 .padding(.vertical, 12)
                 .background(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(AppPalette.Surface.fieldFill)
+                        .fill(AppPalette.Brand.japPurple)
                         .overlay(
                             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
+                                .stroke(AppPalette.Surface.fieldStroke, lineWidth: 3)
                         )
                 )
             }
@@ -570,7 +570,7 @@ struct CompactUserCard: View
                 .fill(AppPalette.Surface.fieldFill)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1)
+                        .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 3)
                 )
         )
     }
@@ -635,10 +635,10 @@ private struct FullScreenUserCard: View
             .padding(16)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(isSelected ? AppPalette.Brand.neonPink.opacity(0.05) : Color(.systemBackground))
+                    .fill(isSelected ? AppPalette.Brand.neonPink.opacity(0.05) : Color(AppPalette.Brand.japDarkerPurple))
                     .overlay(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(isSelected ? AppPalette.Brand.neonPink.opacity(0.5) : AppPalette.Brand.neonPink.opacity(0.2), lineWidth: 1)
+                            .stroke(isSelected ? AppPalette.Brand.neonPink.opacity(0.5) : AppPalette.Brand.neonPink.opacity(0.2), lineWidth: 3)
                     )
             )
         }
@@ -853,7 +853,7 @@ struct UserSearchView: View
                     selectedUsersBottomSection
                 }
             }
-            .background(AppPalette.Brand.russianViolet.opacity(0.05))
+            .background(AppPalette.Brand.japDarkerPurple)
             .navigationBarHidden(true)
         }
         .alert("Search Error", isPresented: $showError) {
@@ -889,7 +889,7 @@ struct UserSearchView: View
                 
                 TextField("Search by username...", text: $searchText)
                     .font(.system(size: 16))
-                    .foregroundStyle(Color.primary)
+                    .foregroundStyle(AppPalette.Surface.primary)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                 
@@ -905,10 +905,10 @@ struct UserSearchView: View
             .padding(.vertical, 12)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(.systemBackground))
+                    .fill(Color(AppPalette.Brand.japDarkerPurple))
                     .overlay(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1)
+                            .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 3)
                     )
             )
         }
@@ -926,7 +926,7 @@ struct UserSearchView: View
             
             Text("Searching users...")
                 .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(Color.secondary)
+                .foregroundStyle(AppPalette.Text.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -941,11 +941,11 @@ struct UserSearchView: View
             VStack(spacing: 8) {
                 Text("Find Friends")
                     .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(Color.primary)
+                    .foregroundStyle(AppPalette.Surface.primary)
                 
                 Text("Search by username to invite friends")
                     .font(.system(size: 16))
-                    .foregroundStyle(Color.secondary)
+                    .foregroundStyle(AppPalette.Text.secondary)
                     .multilineTextAlignment(.center)
             }
         }
@@ -963,11 +963,11 @@ struct UserSearchView: View
             VStack(spacing: 8) {
                 Text("No Users Found")
                     .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(Color.primary)
+                    .foregroundStyle(AppPalette.Surface.primary)
                 
                 Text("Try searching for the exact username")
                     .font(.system(size: 16))
-                    .foregroundStyle(Color.secondary)
+                    .foregroundStyle(AppPalette.Text.secondary)
                     .multilineTextAlignment(.center)
             }
         }
@@ -1028,7 +1028,7 @@ struct UserSearchView: View
                 }
             }
             .padding(16)
-            .background(Color(.systemBackground).opacity(0.95))
+            .background(Color(AppPalette.Brand.japPurple).opacity(0.95))
             // Add this to the bottom of selectedUsersBottomSection:
             Button(action: onDismiss) {
                 Text("Continue")
@@ -1150,12 +1150,12 @@ struct TapToAddUserCard: View
                 VStack(alignment: .leading, spacing: 4) {
                     Text(user.display_name)
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(Color.primary)
+                        .foregroundStyle(AppPalette.Text.primary)
                         .lineLimit(1)
                     
                     Text("@\(user.username)")
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(Color.secondary)
+                        .foregroundStyle(AppPalette.Text.secondary)
                         .lineLimit(1)
                 }
                 
@@ -1182,10 +1182,10 @@ struct TapToAddUserCard: View
             .padding(16)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(.systemBackground))
+                    .fill(Color(AppPalette.Brand.japPurple))
                     .overlay(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(AppPalette.Brand.neonPink.opacity(0.2), lineWidth: 1)
+                            .stroke(AppPalette.Brand.neonPink.opacity(0.2), lineWidth: 3)
                     )
             )
         }
@@ -1204,7 +1204,7 @@ struct TapToAddUserCard: View
                     .fill(color.opacity(0.2))
                     .overlay(
                         Circle()
-                            .stroke(color.opacity(0.5), lineWidth: 1)
+                            .stroke(color.opacity(0.5), lineWidth: 3)
                     )
             )
     }
@@ -1247,105 +1247,8 @@ struct SelectedUserChip: View
                 .fill(AppPalette.Surface.fieldFill)
                 .overlay(
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1)
+                        .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 3)
                 )
         )
     }
 }
-
-/// Garbage we don't use ranymore
-//// MARK: - Selectable User Search Result Card
-//struct SelectableUserSearchResultCard: View
-//{
-//    let user: ViewUsersModel
-//    let isSelected: Bool
-//    let onTap: () -> Void
-//
-//    var body: some View {
-//        Button(action: onTap) {
-//            HStack(spacing: 12) {
-//                // Avatar placeholder
-//                Circle()
-//                    .fill(AppPalette.Brand.neonPink.opacity(0.2))
-//                    .frame(width: 44, height: 44)
-//                    .overlay(
-//                        Text(user.display_name.prefix(1))
-//                            .font(.system(size: 18, weight: .semibold))
-//                            .foregroundStyle(AppPalette.Brand.neonPink)
-//                    )
-//
-//                VStack(alignment: .leading, spacing: 4) {
-//                    Text(user.display_name)
-//                        .font(.system(size: 16, weight: .semibold))
-//                        .foregroundStyle(Color.primary)
-//                        .lineLimit(1)
-//
-//                    Text("@\(user.username)")
-//                        .font(.system(size: 14, weight: .medium))
-//                        .foregroundStyle(Color.secondary)
-//                        .lineLimit(1)
-//                }
-//
-//                Spacer()
-//
-//                // Match badges (from original SearchView)
-//                HStack(spacing: 6) {
-//                    if user.matchedByUsername {
-//                        matchBadge(text: "U", color: AppPalette.Brand.neonPink)
-//                    }
-//                    if user.matchedByEmail {
-//                        matchBadge(text: "E", color: Color.blue)
-//                    }
-//                    if user.matchedByPhone {
-//                        matchBadge(text: "P", color: Color.green)
-//                    }
-//                }
-//
-//                // Selection indicator
-//                ZStack {
-//                    Circle()
-//                        .stroke(isSelected ? AppPalette.Brand.neonPink : AppPalette.Text.tertiary, lineWidth: 2)
-//                        .frame(width: 24, height: 24)
-//
-//                    if isSelected {
-//                        Circle()
-//                            .fill(AppPalette.Brand.neonPink)
-//                            .frame(width: 16, height: 16)
-//                            .overlay(
-//                                Image(systemName: "checkmark")
-//                                    .font(.system(size: 10, weight: .bold))
-//                                    .foregroundStyle(.white)
-//                            )
-//                    }
-//                }
-//            }
-//            .padding(16)
-//            .background(
-//                RoundedRectangle(cornerRadius: 12, style: .continuous)
-//                    .fill(isSelected ? AppPalette.Brand.neonPink.opacity(0.05) : Color(.systemBackground))
-//                    .overlay(
-//                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-//                            .stroke(isSelected ? AppPalette.Brand.neonPink.opacity(0.5) : AppPalette.Brand.neonPink.opacity(0.2), lineWidth: 1)
-//                    )
-//            )
-//        }
-//        .buttonStyle(PlainButtonStyle())
-//        .scaleEffect(isSelected ? 0.98 : 1.0)
-//        .animation(.easeInOut(duration: 0.1), value: isSelected)
-//    }
-//
-//    private func matchBadge(text: String, color: Color) -> some View {
-//        Text(text)
-//            .font(.system(size: 10, weight: .bold))
-//            .foregroundStyle(color)
-//            .frame(width: 18, height: 18)
-//            .background(
-//                Circle()
-//                    .fill(color.opacity(0.2))
-//                    .overlay(
-//                        Circle()
-//                            .stroke(color.opacity(0.5), lineWidth: 1)
-//                    )
-//            )
-//    }
-//}

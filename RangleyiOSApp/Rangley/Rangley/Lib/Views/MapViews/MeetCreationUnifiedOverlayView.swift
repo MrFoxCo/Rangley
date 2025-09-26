@@ -291,7 +291,7 @@ struct CreateMeetConfirmationPopup: View
         .padding(20)
         .background(
             RoundedRectangle(cornerRadius: 16)
-                .fill(AppPalette.Brand.russianViolet)
+                .fill(AppPalette.Brand.japDarkerPurple)
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
                         .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1)
