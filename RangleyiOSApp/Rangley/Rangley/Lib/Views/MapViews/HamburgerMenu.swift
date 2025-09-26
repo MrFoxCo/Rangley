@@ -17,11 +17,11 @@ public struct HamburgerMenu: View {
                 .frame(width: 48, height: 48)
                 .background(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(AppPalette.Brand.japPurple)
+                        .fill(AppPalette.Brand.neonPink.opacity(0.14))
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(AppPalette.Brand.neonPink.opacity(0.5), lineWidth: 1)
+                        .stroke(AppPalette.Brand.neonPink.opacity(0.55), lineWidth: 1)
                 )
         }
         .accessibilityLabel("Menu")

@@ -19,6 +19,7 @@
 // TODO: - start planning version two features (filter by date, public join, friends, .etc, caching etc. etc.
 // TODO: - AWS change username, change display name, wire the account settings to have all of that shit
 // TODO: - meet invitaiton should be single repsonsiblity (maybe give leaveMeet or left meet new one
+// TODO: - Out of App Notifcations???
 // MARK: - V2
 // MARK: - IGNORE THE ABOVE TODOs FOR NOW
 // ==========================================================================================================
@@ -39,6 +40,8 @@
 // TODO: - AWS delete account ...
 // TODO: - fix loading screen so it's the fucking rangley pig and not the black wheel bullshit that's
 // TODO: -  ^^^^this is for first download or simply reopening the app... an ANYTIME open of the app load
+// TODO: - REQUIRE FORCED UPDATES WHEN OPENING APP IF HAVEN'T UPDATED... ALSO ADD SCREEN INCASE SERVE CRASH
+// TODO: - ^^^ SAYING SOMETHING LIKE ADDING COMPUTE TOO MANY USERS ON RANGLEY
 // MARK: - V1
 // MARK: - IGNORE THE ABOVE TODOs FOR NOW
 // ==========================================================================================================
@@ -865,7 +868,7 @@ struct OverlaysView: View
                         try? await mapData.removeParticipant(meetId: meet.meet_id_uuid, participantId: participant.user_uuid)
                     }
                 },
-                onInviteUsers: { meet, users in 
+                onInviteUsers: { meet, users in
                     Task {
                         do {
                             let userIds = users.map { $0.user_uuid }

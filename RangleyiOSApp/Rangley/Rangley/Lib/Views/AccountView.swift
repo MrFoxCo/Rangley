@@ -40,17 +40,7 @@ struct AccountView: View
                     Spacer(minLength: 100) // Bottom padding
                 }
             }
-            .background(
-                LinearGradient(
-                    colors: [
-                        AppPalette.Brand.russianViolet,
-                        AppPalette.Brand.japPurple,
-                        AppPalette.Brand.japDarkerPurple
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
+            .background(AppPalette.Brand.japDarkerPurple)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -91,36 +81,14 @@ struct AccountView: View
                 // Aura rings
                 ForEach(0..<2, id: \.self) { index in
                     Circle()
-                        .stroke(
-                            LinearGradient(
-                                colors: [
-                                    AppPalette.Brand.neonPink,
-                                    AppPalette.Brand.electricViolet,
-                                    AppPalette.Brand.brightTeal,
-                                    AppPalette.Brand.neonPink
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            lineWidth: 2
-                        )
+                        .stroke(AppPalette.Brand.neonPink, lineWidth: 2)
                         .frame(width: 90 + CGFloat(index * 20), height: 90 + CGFloat(index * 20))
                         .opacity(0.6 - Double(index) * 0.2)
                 }
                 
                 // Avatar background
                 Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [
-                                AppPalette.Brand.neonPink.opacity(0.3),
-                                AppPalette.Brand.electricViolet.opacity(0.2)
-                            ],
-                            center: .center,
-                            startRadius: 20,
-                            endRadius: 45
-                        )
-                    )
+                    .fill(AppPalette.Brand.japPurple)
                     .frame(width: 80, height: 80)
                 
                 // Profile initials or icon
@@ -142,16 +110,7 @@ struct AccountView: View
             if let profile = profile {
                 Text(profile.display_name)
                     .font(.system(size: 24, weight: .bold))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [
-                                AppPalette.Brand.neonPink,
-                                AppPalette.Brand.electricViolet
-                            ],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
+                    .foregroundColor(AppPalette.Brand.neonPink)
                     .opacity(isAnimating ? 1.0 : 0.0)
                     .offset(y: isAnimating ? 0 : 20)
                     .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.2), value: isAnimating)
@@ -229,20 +188,10 @@ struct AccountView: View
             }
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(AppPalette.Surface.fieldFill)
+                    .fill(AppPalette.Brand.japPurple)
                     .overlay(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(
-                                LinearGradient(
-                                    colors: [
-                                        AppPalette.Brand.neonPink.opacity(0.3),
-                                        AppPalette.Brand.electricViolet.opacity(0.2)
-                                    ],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                lineWidth: 1
-                            )
+                            .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1)
                     )
             )
         }
@@ -275,20 +224,10 @@ struct AccountView: View
         .padding(20)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(AppPalette.Surface.fieldFill)
+                .fill(AppPalette.Brand.japPurple)
                 .overlay(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(
-                            LinearGradient(
-                                colors: [
-                                    AppPalette.Brand.neonPink.opacity(0.3),
-                                    AppPalette.Brand.electricViolet.opacity(0.2)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            lineWidth: 1
-                        )
+                        .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1)
                 )
         )
     }
@@ -538,7 +477,7 @@ struct ChangePasswordView: View
                     .padding(24)
                 }
             }
-            .background(AppPalette.bgGradient.ignoresSafeArea())
+            .background(AppPalette.Brand.japDarkerPurple)
             .navigationTitle("Change Password")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -549,7 +488,10 @@ struct ChangePasswordView: View
                     .foregroundColor(AppPalette.Brand.neonPink)
                 }
             }
-            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbarBackground(AppPalette.Brand.japDarkerPurple, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)   // light text/icons on dark bg
+            .tint(AppPalette.Brand.neonPink)                  // buttons/icons tint
             .onReceive(NotificationCenter.default.publisher(for: .passwordChangeSuccess)) { _ in
                 dismiss()
             }
