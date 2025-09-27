@@ -187,7 +187,7 @@ private struct MeetCardView: View
     @State private var showInviteSheet = false // Replace showInviteOverlay
     @State private var selectedInviteUsers: [ViewUsersModel] = []
     private var canInvite: Bool {
-        meet.is_owner || isAcceptedParticipant
+        meet.is_owner
     }
 
     private var dateRangeText: String

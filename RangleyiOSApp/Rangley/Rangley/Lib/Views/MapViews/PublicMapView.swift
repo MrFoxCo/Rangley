@@ -24,6 +24,12 @@
 // TODO: - Extermely important need to make sure we're not always refetching all the data... need to use cache
 // TODO: - Tweak on Update Screen
 // TODO: - ^^ and only grab the meet affected to what we were updating.
+// TODO: - add a user inbox
+// TODO: - Remeber User when Create New Account .. think this is good need check with dad's phone
+// TODO: - Make sure can't duplicate username or cellphone
+// TODO: - loading is kinda fixed
+// TODO: -  ^^^^this is for first download or simply reopening the app... an ANYTIME open of the app load
+// TODO: - Cleanup jump from MyMeetsView to meetscard overlay
 // MARK: - V2
 // MARK: - IGNORE THE ABOVE TODOs FOR NOW
 // ==========================================================================================================
@@ -35,13 +41,7 @@
 // ==========================================================================================================
 // MARK: - IGNORE THE BELOW TODOs FOR NOW
 // MARK: - V1
-// TODO: - Cleanup jump from MyMeetsView to meetscard overlay
 // TODO: - Make sure KEYBOARDS ARE ALL THE SAME COLOR
-// TODO: - Remeber User when Create New Account .. think this is good need check with dad's phone
-// TODO: - fix add particpatns button place next to participants list
-// TODO: - AWS delete account ... finish vapor and SQL
-// TODO: - loading is kinda fixed
-// TODO: -  ^^^^this is for first download or simply reopening the app... an ANYTIME open of the app load
 // MARK: - V1
 // MARK: - IGNORE THE ABOVE TODOs FOR NOW
 // ==========================================================================================================
