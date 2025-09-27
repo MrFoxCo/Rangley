@@ -270,6 +270,10 @@ private struct MeetCardView: View
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
 
+    private var existingParticipantUUIDs: [UUID] {
+        meet.participant_details?.map { $0.user_uuid } ?? []
+    }
+    
     var body: some View
     {
         ZStack {
@@ -556,6 +560,7 @@ private struct MeetCardView: View
                 baseURL: baseURL,
                 token: token,
                 selectedUsers: $selectedInviteUsers,
+                excludedUserUUIDs: existingParticipantUUIDs,
                 onDismiss: {
                     showInviteSheet = false
                     // If users were selected, send the invites
@@ -1308,6 +1313,7 @@ private struct InviteUsersOverlay: View
                 baseURL: baseURL,
                 token: token,
                 selectedUsers: $selectedUsers,
+                excludedUserUUIDs: [],
                 onDismiss: {
                     showUserSearch = false
                 }

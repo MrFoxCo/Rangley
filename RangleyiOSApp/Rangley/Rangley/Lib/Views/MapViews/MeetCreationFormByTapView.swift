@@ -499,6 +499,7 @@ struct InviteFriendsEmbedded: View
                 baseURL: baseURL,
                 token: token,
                 selectedUsers: $selectedUsers,
+                excludedUserUUIDs: [],
                 onDismiss: {
                     showUserSearch = false
                 }
@@ -819,6 +820,7 @@ struct UserSearchView: View
     let baseURL: URL
     let token: String
     @Binding var selectedUsers: [ViewUsersModel]
+    let excludedUserUUIDs: [UUID]
     let onDismiss: () -> Void
     
     @State private var searchText = ""
@@ -1050,7 +1052,10 @@ struct UserSearchView: View
     /// Filter out already selected users from search results
     private var filteredSearchResults: [ViewUsersModel] {
         let selectedUserIds = Set(selectedUsers.map { $0.id })
-        return searchResults.filter { !selectedUserIds.contains($0.id) }
+        let excludedIds = Set(excludedUserUUIDs)
+        return searchResults.filter {
+            !selectedUserIds.contains($0.id) && !excludedIds.contains($0.user_uuid)
+        }
     }
     
     // MARK: - User Selection Logic

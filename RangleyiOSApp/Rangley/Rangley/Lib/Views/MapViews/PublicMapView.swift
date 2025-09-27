@@ -1081,26 +1081,26 @@ struct ControlsView: View
     }
 }
 
+
 // MARK: - Minimal Loading Overlay
-struct LoadingOverlay: View
-{
+struct LoadingOverlay: View {
     var body: some View {
         VStack {
-            Spacer()
             HStack {
                 Spacer()
                 ProgressView()
-                    .scaleEffect(1.2)
+                    .scaleEffect(1.0)
                     .progressViewStyle(CircularProgressViewStyle(tint: AppPalette.Brand.neonPink))
-                    .padding()
+                    .padding(12)
                     .background(
                         Circle()
                             .fill(.regularMaterial)
-                            .shadow(radius: 4)
+                            .shadow(radius: 3)
                     )
-                Spacer()
             }
-            .padding(.bottom, 120) // Above dock
+            .padding(.top, 16)
+            .padding(.trailing, 16)
+            Spacer()
         }
     }
 }
