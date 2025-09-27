@@ -144,10 +144,16 @@ struct MeetUpdateFormView: View
             // Location card
             locationCard
             
-            // Current step content
-            stepContent
-            
-            Spacer(minLength: 0)
+            // Current step content - FIXED: Add ScrollView for review step
+            if currentStep == .review {
+                ScrollView {
+                    stepContent
+                        .padding(.bottom, 20) // Extra padding for scroll content
+                }
+            } else {
+                stepContent
+                Spacer(minLength: 0)
+            }
             
             // Action button
             actionButton
@@ -440,7 +446,7 @@ struct MeetUpdateFormView: View
     
     private var reviewStepContent: some View
     {
-        VStack(spacing: 20)
+        VStack(spacing: 24)
         {
             VStack(alignment: .leading, spacing: 16)
             {
@@ -456,39 +462,6 @@ struct MeetUpdateFormView: View
                 if let cap = vm.maxCapacity {
                     DetailRow(label: "Capacity", value: "\(cap)")
                 }
-                
-                // Show what has changed
-                if let updateBody = vm.makeUpdateBody() {
-                    Divider()
-                        .background(AppPalette.Surface.fieldStroke)
-                    
-                    Text("Changes Made:")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(AppPalette.Brand.neonPink)
-                    
-                    VStack(alignment: .leading, spacing: 4) {
-                        if updateBody.name != nil {
-                            Text("• Name updated")
-                                .font(.system(size: 12))
-                                .foregroundColor(AppPalette.Text.secondary)
-                        }
-                        if updateBody.dttm_start_utc != nil {
-                            Text("• Start time changed")
-                                .font(.system(size: 12))
-                                .foregroundColor(AppPalette.Text.secondary)
-                        }
-                        if updateBody.dttm_end_utc != nil {
-                            Text("• End time changed")
-                                .font(.system(size: 12))
-                                .foregroundColor(AppPalette.Text.secondary)
-                        }
-                        if updateBody.latitude != nil || updateBody.longitude != nil {
-                            Text("• Location updated")
-                                .font(.system(size: 12))
-                                .foregroundColor(AppPalette.Text.secondary)
-                        }
-                    }
-                }
             }
             .padding(20)
             .background(
@@ -499,9 +472,44 @@ struct MeetUpdateFormView: View
                             .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
                     )
             )
+            
+            // Changes Made section - SEPARATED for better spacing
+            if let updateBody = vm.makeUpdateBody() {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Changes Made:")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(AppPalette.Brand.neonPink)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    
+                    VStack(alignment: .leading, spacing: 8) {
+                        if updateBody.name != nil {
+                            ChangeRow(text: "Name updated")
+                        }
+                        if updateBody.dttm_start_utc != nil {
+                            ChangeRow(text: "Start time changed")
+                        }
+                        if updateBody.dttm_end_utc != nil {
+                            ChangeRow(text: "End time changed")
+                        }
+                        if updateBody.latitude != nil || updateBody.longitude != nil {
+                            ChangeRow(text: "Location updated")
+                        }
+                    }
+                }
+                .padding(20)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(AppPalette.Brand.neonPink.opacity(0.05))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(AppPalette.Brand.neonPink.opacity(0.2), lineWidth: 1)
+                        )
+                )
+            }
         }
         .padding(.horizontal, 24)
     }
+
     
     private var actionButton: some View
     {
@@ -859,5 +867,26 @@ struct MeetUpdateUnifiedOverlay: View
             }
         }
         UINotificationFeedbackGenerator().notificationOccurred(.success)
+    }
+}
+
+
+// MARK: New helper view for change items
+private struct ChangeRow: View
+{
+    let text: String
+    
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 14))
+                .foregroundColor(AppPalette.Brand.neonPink)
+            
+            Text(text)
+                .font(.system(size: 14))
+                .foregroundColor(AppPalette.Text.primary)
+            
+            Spacer()
+        }
     }
 }

@@ -623,7 +623,8 @@ public struct PublicMapView: View
 
     
     @ViewBuilder
-    private var content: some View {
+    private var content: some View
+    {
         ZStack {
             MapView(
                 mapData: mapData,
