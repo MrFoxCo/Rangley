@@ -427,7 +427,7 @@ public func routes(_ app: Application) throws
         let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
 
-        let body = try req.content.decode(HTTPDTO.MeetsWithInvites.InsertBody.self)
+        let body = try req.content.decode(HTTPDTO.MeetsWithInvites.InsertMeetBody.self)
 
         guard !body.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         else { throw Abort(.badRequest, reason: "name is required") }
@@ -548,6 +548,40 @@ public func routes(_ app: Application) throws
                 participant_id_out: result.participant_id_out,
                 old_status_id: result.old_status_id,
                 new_status_id: result.new_status_id
+            )
+            
+        } catch let error as PSQLError {
+            req.logger.error("Database error responding to invitation: \(error)")
+            throw Abort(.internalServerError, reason: "Failed to respond to invitation")
+        }
+    }
+    
+    s.post("insert-additional-participants-to-meet") // Fixed typo: "invitess" -> "invites"
+    {
+        req async throws -> HTTPDTO.MeetsWithInvites.InsertAdditionalParicipantsResponse in
+        
+        let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
+
+        let body = try req.content.decode(HTTPDTO.MeetsWithInvites.InsertAdditionalParicipantsBody.self)
+
+        guard let sql = req.db as? any SQLDatabase
+        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+
+        do {
+            let result = try await Func.InsertAdditionalParticipantsToMeet.call(on: sql, .init(
+                cognito_sub                     : sub,
+                meet_id_uuid                    : body.meet_id_uuid,
+                inviter_user_uuid               : body.inviter_user_uuid,
+                additional_invitee_user_uuids    : body.additional_invitee_user_uuids,
+                invitation_message              : body.invitation_message
+            ))
+            
+            return .init(
+                user_uuid: result.user_uuid,
+                username: result.username,
+                invitation_status: result.invitation_status,
+                returned_notification_id: result.returned_notification_id
             )
             
         } catch let error as PSQLError {

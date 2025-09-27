@@ -343,7 +343,7 @@ struct MyMeetsContentView: View
 
                 // If there are invitations, put them first.
                 if !invitationNotifications.isEmpty {
-                    InvitationsSection(
+                    CollapsibleInvitationsSection(
                         notifications: invitationNotifications,
                         meets: meets,
                         onInvitationResponse: onInvitationResponse
@@ -351,11 +351,11 @@ struct MyMeetsContentView: View
                 }
 
                 // My Meets always shows (possibly empty state)
-                OwnedMeetsSection(
+                CollapsibleOwnedMeetsSection(
                     meets: ownedMeets,
                     onMeetSelected: onMeetSelected
                 )
-                JoinedMeetsSection(
+                CollapsibleJoinedMeetsSection(
                     meets: joinedMeets,
                     onMeetSelected: onMeetSelected
                 )
@@ -365,6 +365,122 @@ struct MyMeetsContentView: View
             .padding(.bottom, 20)
         }
         .background(Color(AppPalette.Brand.formBlack))
+    }
+}
+
+
+
+// MARK: - Collapsible Owned Meets Section
+struct CollapsibleOwnedMeetsSection: View
+{
+    let meets: [ViewMeetsModel]
+    let onMeetSelected: ((ViewMeetsModel) -> Void)?
+    @State private var isExpanded = true
+    @State private var emptyMessage = EasterEggMessages.getRandomSelfMessage()
+    
+    var body: some View {
+        CollapsibleMeetsSectionView(
+            title: "My Meets",
+            icon: "crown.fill",
+            meets: meets,
+            emptyMessage: emptyMessage,
+            emptyIcon: "calendar.badge.plus",
+            isExpanded: $isExpanded,
+            onMeetSelected: onMeetSelected
+        )
+        .onAppear {
+            emptyMessage = EasterEggMessages.getRandomSelfMessage()
+        }
+    }
+}
+
+struct CollapsibleJoinedMeetsSection: View
+{
+    let meets: [ViewMeetsModel]
+    let onMeetSelected: ((ViewMeetsModel) -> Void)?
+    @State private var isExpanded = true
+    @State private var emptyMessage = EasterEggMessages.getRandomJoinedMessage()
+
+    var body: some View {
+        CollapsibleMeetsSectionView(
+            title: "Joined Meets",
+            icon: "person.2.fill",
+            meets: meets,
+            emptyMessage: emptyMessage,
+            emptyIcon: "person.2.slash",
+            isExpanded: $isExpanded,
+            onMeetSelected: onMeetSelected
+        )
+        .onAppear {
+            emptyMessage = EasterEggMessages.getRandomJoinedMessage()
+        }
+    }
+}
+
+struct CollapsibleInvitationsSection: View
+{
+    let notifications: [ViewNotificationsModel]
+    let meets: [ViewMeetsModel]
+    let onInvitationResponse: ((ViewNotificationsModel, Int16) -> Void)?
+    @State private var isExpanded = true
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionHeader
+            
+            if isExpanded {
+                if notifications.isEmpty {
+                    EmptyMeetsSectionView(
+                        message: "No pending invitations",
+                        icon: "envelope",
+                        isPlaceholder: false
+                    )
+                } else {
+                    invitationsContent
+                }
+            }
+        }
+    }
+    
+    private var sectionHeader: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "envelope")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(AppPalette.Brand.neonPink)
+            
+            Text("Invitations")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(AppPalette.Text.primary)
+            
+            Text("(\(notifications.count))")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(AppPalette.Text.secondary)
+            
+            Spacer()
+            
+            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(AppPalette.Brand.neonPink)
+        }
+        .padding(.horizontal, 4)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                isExpanded.toggle()
+            }
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        }
+    }
+    
+    private var invitationsContent: some View
+    {
+        ForEach(notifications) { notification in
+            InvitationDisclosureCard(
+                notification: notification,
+                onAccept: { onInvitationResponse?(notification, 6) },
+                onDecline: { onInvitationResponse?(notification, 5) }
+            )
+        }
     }
 }
 
@@ -562,11 +678,17 @@ struct InvitationCard: View
                 .cornerRadius(8)
             }
             HStack(spacing: 12) {
-                Button("Accept") { onResponse?(notification, 6) }
-                    .buttonStyle(.borderedProminent)
-                    .tint(AppPalette.Brand.neonPink)
+                Button(action: { onResponse?(notification, 6) }) {
+                    Text("Accept")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(.black) // set the text color
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(AppPalette.Brand.spearmintGreen)
+
                 Button("Decline") { onResponse?(notification, 5) }
                     .buttonStyle(.bordered)
+                    .tint(AppPalette.Brand.neonPink)
                 Spacer()
             }
         }
@@ -652,15 +774,23 @@ struct InvitationDisclosureCard: View
 
             // ACTIONS (always visible like your top card)
             HStack(spacing: 12) {
-                Button("Accept", action: onAccept)
-                    .buttonStyle(.borderedProminent)
-                    .tint(AppPalette.Brand.neonPink)
-                    .font(.system(size: 16, weight: .semibold))
-                    .frame(height: 44)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                Button {
+                    onAccept()
+                } label: {
+                    Text("Accept")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(.black)          // <- force text color
+                        // .foregroundStyle(AppPalette.Brand.russianViolet) // any color you want
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(AppPalette.Brand.spearmintGreen)
+                .frame(height: 44)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
 
                 Button("Decline", action: onDecline)
                     .buttonStyle(.bordered)
+                    .tint(AppPalette.Brand.neonPink)
                     .font(.system(size: 16, weight: .semibold))
                     .frame(height: 44)
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -915,6 +1045,262 @@ struct EmptyMeetsSectionView  : View
     }
 }
 
+struct CollapsibleMeetsSectionView: View
+{
+    let title: String
+    let icon: String
+    let meets: [ViewMeetsModel]
+    let emptyMessage: String
+    let emptyIcon: String
+    @Binding var isExpanded: Bool
+    let onMeetSelected: ((ViewMeetsModel) -> Void)?
+    let isPlaceholder: Bool
+    
+    init(
+        title: String,
+        icon: String,
+        meets: [ViewMeetsModel],
+        emptyMessage: String,
+        emptyIcon: String,
+        isExpanded: Binding<Bool>,
+        onMeetSelected: ((ViewMeetsModel) -> Void)?,
+        isPlaceholder: Bool = false
+    ) {
+        self.title = title
+        self.icon = icon
+        self.meets = meets
+        self.emptyMessage = emptyMessage
+        self.emptyIcon = emptyIcon
+        self._isExpanded = isExpanded
+        self.onMeetSelected = onMeetSelected
+        self.isPlaceholder = isPlaceholder
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionHeader
+            
+            if isExpanded {
+                if meets.isEmpty {
+                    EmptyMeetsSectionView(
+                        message: emptyMessage,
+                        icon: emptyIcon,
+                        isPlaceholder: isPlaceholder
+                    )
+                } else {
+                    meetsContent
+                }
+            }
+        }
+    }
+    
+    private var sectionHeader: some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(isPlaceholder ? AppPalette.Text.primary : AppPalette.Brand.neonPink)
+            
+            Text(title)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(AppPalette.Text.primary)
+            
+            if isPlaceholder {
+                Text("(Coming soon)")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(AppPalette.Text.secondary)
+            } else {
+                Text("(\(meets.count))")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(AppPalette.Text.secondary)
+            }
+            
+            Spacer()
+            
+            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(AppPalette.Brand.neonPink)
+        }
+        .padding(.horizontal, 4)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                isExpanded.toggle()
+            }
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        }
+    }
+    
+    private var meetsContent: some View {
+        ForEach(meets) { meet in
+            CollapsibleMeetCard(meet: meet, onTap: { onMeetSelected?(meet) })
+        }
+    }
+}
+
+
+struct CollapsibleMeetCard: View
+{
+    let meet: ViewMeetsModel
+    let onTap: () -> Void
+    @State private var isExpanded = false
+    
+    private var dateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Header Row - Always Visible
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(meet.name)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(AppPalette.Text.primary)
+                        .lineLimit(isExpanded ? nil : 2)
+                    
+                    Text(meet.category_name)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(AppPalette.Brand.neonPink)
+                    
+                    if !meet.is_owner {
+                        Text("Hosted by \(meet.display_name)")
+                            .font(.system(size: 12, weight: .regular))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+                
+                Spacer()
+                
+                VStack(alignment: .trailing, spacing: 4) {
+                    if meet.is_owner {
+                        Image(systemName: "crown.fill")
+                            .font(.system(size: 12))
+                            .foregroundStyle(Color.orange)
+                    }
+                    
+                    Image(systemName: categoryIcon(for: meet.category_name))
+                        .font(.system(size: 16))
+                        .foregroundStyle(AppPalette.Brand.neonPink.opacity(0.7))
+                    
+                    // Chevron for expansion
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(AppPalette.Brand.neonPink)
+                }
+            }
+            
+            // Quick Info Row - Always Visible
+            HStack {
+                Label(dateFormatter.string(from: meet.dttm_start_utc), systemImage: "calendar")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppPalette.Text.secondary)
+                
+                Spacer()
+            }
+            
+            // Expanded Content
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 8) {
+                    Divider()
+                        .background(AppPalette.Text.quaternary)
+                    
+                    if !meet.description.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Description")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(AppPalette.Text.secondary)
+                            
+                            Text(meet.description)
+                                .font(.system(size: 14))
+                                .foregroundStyle(AppPalette.Text.primary)
+                        }
+                    }
+                    
+                    // Additional details can go here
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Details")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(AppPalette.Text.secondary)
+                        
+                        HStack {
+                            Label("Start", systemImage: "clock")
+                                .font(.system(size: 12))
+                                .foregroundStyle(AppPalette.Text.secondary)
+                            
+                            Text(dateFormatter.string(from: meet.dttm_start_utc))
+                                .font(.system(size: 12))
+                                .foregroundStyle(AppPalette.Text.primary)
+                            
+                            Spacer()
+                        }
+                        
+                        HStack {
+                            Label("End", systemImage: "clock.badge.checkmark")
+                                .font(.system(size: 12))
+                                .foregroundStyle(AppPalette.Text.secondary)
+                            
+                            Text(dateFormatter.string(from: meet.dttm_end_utc))
+                                .font(.system(size: 12))
+                                .foregroundStyle(AppPalette.Text.primary)
+                            
+                            Spacer()
+                        }
+                    }
+                    
+                    // Action Button
+                    Button("View Details", action: onTap)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(AppPalette.Brand.neonPink)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(AppPalette.Brand.neonPink.opacity(0.1))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1)
+                                )
+                        )
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(AppPalette.Surface.joinedMeetsCard))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(AppPalette.Brand.neonPink.opacity(0.2), lineWidth: 1)
+                )
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                isExpanded.toggle()
+            }
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        }
+        .animation(.default, value: isExpanded)
+    }
+    
+    private func categoryIcon(for category: String) -> String {
+        switch category.lowercased() {
+        case "activity": return "figure.run"
+        case "sports": return "sportscourt"
+        case "outdoors": return "tree"
+        case "social": return "person.2"
+        case "music": return "music.note"
+        case "food": return "fork.knife"
+        case "planned trip": return "airplane"
+        default: return "calendar"
+        }
+    }
+}
 
 // MARK: - Meet Card
 struct MeetCard: View
@@ -1022,3 +1408,63 @@ struct MeetCard: View
         }
     }
 }
+
+
+// MARK: - Easter Egg Message Provider
+struct EasterEggMessages {
+    // Cheeky messages for empty "My Meets"
+    static let cheekySelfMessages = [
+        "Might be time to re-watch the first 7 seasons of Game of Thrones with your buds.",
+    ]
+    
+    // Cheeky messages for empty "Joined Meets"
+    static let cheekyJoinedMessages = [
+        "Make like a tomatoe, and catch up with some friends!",
+        "Do you also want to go play tennis right now?"
+    ]
+    
+    // Standard fallback messages
+    static let standardSelfMessage = "You haven't created any meets yet"
+    static let standardJoinedMessage = "You haven't joined any meets yet"
+    
+    // 20% chance for cheeky, 80% for standard
+    static func getRandomSelfMessage() -> String {
+        return Double.random(in: 0...1) < 0.2 ? cheekySelfMessages.randomElement()! : standardSelfMessage
+    }
+    
+    static func getRandomJoinedMessage() -> String {
+        return Double.random(in: 0...1) < 0.2 ? cheekyJoinedMessages.randomElement()! : standardJoinedMessage
+    }
+}
+
+// TODO: - O
+
+/*
+ 
+ "Your schedule is wide open, time for something fun"
+ 
+ "FOMO Alert NO JOined meets"
+ 
+ "Don't see anything planned, maybe it's time to hit up one of your pals"
+ 
+ "Working on yourself, I like it."
+ 
+ "Might be time to re-watch the first 7 season of Game of Thrones"
+ 
+ "Make like a tomatoe, and Ketchup with some friends!"
+ 
+ "I remember when I had no friends"
+ 
+ "Me time. That's what it's all about"
+ 
+ "Maybe time to read a book, go for a walk, fold the pile of clothes in the corner of your bedroom"
+ 
+ "What's your favorite movie? You should totally go invite some peopel to see it with you. Like right now."
+ 
+ "GOOOOOOOOD MORNING Meet.com."
+ 
+
+ 
+ 
+ 
+ */

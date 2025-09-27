@@ -91,8 +91,6 @@ struct MeetCardOverlay: View
     var onLeave             :   (ViewMeetsModel) -> Void = { _ in }
     var onRemoveParticipant : (ViewMeetsModel, ParticipantDetail) -> Void = { _, _ in }  // NEW
     var onInviteUsers       : (ViewMeetsModel, [ViewUsersModel]) -> Void = { _, _ in }
-
-    
     
     var body: some View
     {

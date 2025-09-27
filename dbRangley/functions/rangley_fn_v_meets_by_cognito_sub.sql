@@ -20,7 +20,8 @@ RETURNS TABLE
   display_name varchar(50),
   is_owner boolean,
   participant_details json,   -- stays json to match your signature
-  accepted_count int4
+  accepted_count int4,
+  ms.my_status AS current_user_participant_status
 )
 LANGUAGE sql
 STABLE

@@ -36,8 +36,9 @@
 // TODO: - Color Scheme needs to be set.. especially on search friends in create meet
 // TODO: - Fix recenter compass top right
 // TODO: - Remeber User when Create New Account .. think this is good need check with dad's phone
-// TODO: - Need to be able to add participants to existing meet .. make similar to delete participant
-// TODO: - AWS delete account ...
+// TODO: - fix add particpatns button place next to participants list
+// TODO: - AWS delete account ... finish vapor and SQL
+// TODO: - Collapse shit
 // TODO: - fix loading screen so it's the fucking rangley pig and not the black wheel bullshit that's
 // TODO: -  ^^^^this is for first download or simply reopening the app... an ANYTIME open of the app load
 // TODO: - REQUIRE FORCED UPDATES WHEN OPENING APP IF HAVEN'T UPDATED... ALSO ADD SCREEN INCASE SERVE CRASH
@@ -244,11 +245,26 @@ class APIService: APIServiceProtocol
         )
         _ = try await AuthAPI.updateParticipantStatus(baseURL: Env.apiBaseURL, token: token, body: body)
     }
-    func inviteUsersToMeet(meetId: UUID, userIds: [UUID]) async throws {
-        let token = try await getAuthToken()
-        // TODO: Replace with actual API call to stored procedure for inviting users
-        print("TODO: Implement API call to invite users \(userIds) to meet \(meetId)")
-    }
+    func inviteUsersToMeet(meetId: UUID, userIds: [UUID]) async throws
+    {
+            let token = try await getAuthToken()
+            
+            // Get current user UUID for the inviter_user_uuid field
+            let currentUser = try await AuthAPI.me(baseURL: Env.apiBaseURL, token: token)
+            
+            let body = InsertAddtionalParticpantsModelBody(
+                meet_id_uuid                    : meetId,
+                inviter_user_uuid               : currentUser.user_uuid,
+                additional_invitee_user_uuids   : userIds,
+                invitation_message               : nil
+            )
+            
+            _ = try await AuthAPI.insertAdditionalParticipantsToMeet(
+                baseURL: Env.apiBaseURL,
+                token: token,
+                body: body
+            )
+        }
 }
 
 
@@ -859,24 +875,14 @@ struct OverlaysView: View
                     }
                 },
                 onRemoveParticipant: { meet, participant in
-                    print("Attempting to remove participant:")
-                    print("  - participant.user_uuid: \(participant.user_uuid)")
-                    print("  - participant.display_name: \(participant.display_name)")
-                    print("  - meet.meet_id_uuid: \(meet.meet_id_uuid)")
-                    
                     Task {
                         try? await mapData.removeParticipant(meetId: meet.meet_id_uuid, participantId: participant.user_uuid)
                     }
                 },
                 onInviteUsers: { meet, users in
                     Task {
-                        do {
-                            let userIds = users.map { $0.user_uuid }
-                            try await mapData.inviteUsersToMeet(meetId: meet.meet_id_uuid, userIds: userIds)
-                            print("Successfully invited \(users.count) users to meet: \(meet.name)")
-                        } catch {
-                            print("Failed to invite users to meet: \(error)")
-                        }
+                        let userIds = users.map { $0.user_uuid }
+                        try? await mapData.inviteUsersToMeet(meetId: meet.meet_id_uuid, userIds: userIds)
                     }
                 }
             )

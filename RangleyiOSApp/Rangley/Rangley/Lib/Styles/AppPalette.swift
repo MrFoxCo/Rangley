@@ -45,6 +45,8 @@ struct AppPalette {
          static let electricGreen    = Color(hex: "#00FF00")
          static let emeraldGreen     = Color(hex: "#50C878")
          static let springGreen      = Color(hex: "#00FF7F")
+         static let spearmintGreen = Color(hex: "#2EE6A6") // minty, slightly blue-leaning
+
     }
     
     struct Text {

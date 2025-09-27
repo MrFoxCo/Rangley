@@ -98,7 +98,7 @@ enum HTTPDTO
     
     enum MeetsWithInvites
     {
-        struct InsertBody: Content, Sendable
+        struct InsertMeetBody: Content, Sendable
         {
             // Required
             let initial_invitee_uuids   : [UUID]
@@ -116,8 +116,26 @@ enum HTTPDTO
             let max_capacity            : Int32?
             let invitation_message      : String? 
         }
+
+        struct InsertMeetResponse: Content, Sendable
+        {
+            let num_inserted        : Int32
+            let new_meet_id_uuid    : UUID
+        }
         
 
+        
+        struct InsertDeletedBody: Content, Sendable
+        {
+            // Required - must know which meet to update
+            let meet_id_uuid    : UUID
+        }
+        
+        struct InsertDeleteResponse: Content, Sendable
+        {
+            let num_inserted: Int32
+        }
+        
         
         struct InsertUpdatedBody: Content, Sendable
         {
@@ -140,27 +158,28 @@ enum HTTPDTO
             let max_capacity    : Int32?
         }
         
-        struct InsertDeletedBody: Content, Sendable
-        {
-            // Required - must know which meet to update
-            let meet_id_uuid    : UUID
-        }
-        
-        struct InsertMeetResponse: Content, Sendable
-        {
-            let num_inserted        : Int32
-            let new_meet_id_uuid    : UUID
-        }
-        
-        struct InsertDeleteResponse: Content, Sendable
-        {
-            let num_inserted: Int32
-        }
-        
         struct InsertUpdateResponse: Content, Sendable
         {
             let num_inserted: Int32
         }
+        
+        struct InsertAdditionalParicipantsBody: Content, Sendable
+        {
+            // Required
+            let meet_id_uuid                    : UUID
+            let inviter_user_uuid               : UUID
+            let additional_invitee_user_uuids    : [UUID]
+            let invitation_message              : String?
+        }
+
+        struct InsertAdditionalParicipantsResponse: Content, Sendable
+        {
+            let user_uuid                   : UUID
+            let username                    : String
+            let invitation_status           : String?
+            let returned_notification_id    : Int64?
+        }
+        
         
         struct RespondToInviteBody: Content, Sendable
         {
@@ -315,3 +334,66 @@ enum HTTPDTO
 
  
  */
+/*
+ ADd this later
+ 
+ extension HTTPDTO.Users.SearchBody {
+     func sanitized() -> Self {
+         func clean(_ xs: [String]?) -> [String]? {
+             let r = xs?.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .filter { !$0.isEmpty }
+             return (r?.isEmpty == false) ? r : nil
+         }
+         return .init(usernames: clean(usernames), emails: clean(emails), phones: clean(phones))
+     }
+ }
+... then in routes
+ 
+ let body = try req.content.decode(HTTPDTO.Users.SearchBody.self).sanitized()
+ let q = (try? req.query.decode(HTTPDTO.Users.SearchBody.self))?.sanitized() ?? .init(usernames:nil, emails:nil, phones:nil)
+
+ 
+ to support browsing later
+ extension HTTPDTO.Users {
+     struct BrowseQuery: Content, Sendable {
+         let limit: Int?
+         let offset: Int?
+     }
+ }
+
+ 
+ */
+
+
+
+/*
+ ADd this later
+ 
+ extension HTTPDTO.Users.SearchBody {
+     func sanitized() -> Self {
+         func clean(_ xs: [String]?) -> [String]? {
+             let r = xs?.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .filter { !$0.isEmpty }
+             return (r?.isEmpty == false) ? r : nil
+         }
+         return .init(usernames: clean(usernames), emails: clean(emails), phones: clean(phones))
+     }
+ }
+... then in routes
+ 
+ let body = try req.content.decode(HTTPDTO.Users.SearchBody.self).sanitized()
+ let q = (try? req.query.decode(HTTPDTO.Users.SearchBody.self))?.sanitized() ?? .init(usernames:nil, emails:nil, phones:nil)
+
+ 
+ to support browsing later
+ extension HTTPDTO.Users {
+     struct BrowseQuery: Content, Sendable {
+         let limit: Int?
+         let offset: Int?
+     }
+ }
+
+ 
+ */
+
+

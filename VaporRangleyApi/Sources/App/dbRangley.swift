@@ -28,6 +28,7 @@ enum RangleyProcName: String
     case i_change_stamp                 = "rangley.rangley_i_change_stamp"
     case i_updated_meet                 = "rangley.rangley_i_updated_meet"
     case m_user                         = "rangley.rangley_m_user"
+    case d_user                         = "rangley.rangley_d_user_by_cognito_sub"
 }
 
 // Essentially these are views because postgres doesn't allow procedural views in an easy way
@@ -40,7 +41,7 @@ enum RangleyFunc: String
     case v_user_inbox_notifications_by_cognito_sub = "rangley.rangley_fn_v_user_inbox_notifications_by_cognito_sub"
     case m_respond_to_meet_invitation              = "rangley.rangley_fn_m_respond_to_meet_invitation"
     case m_update_participant_status               = "rangley.rangley_fn_m_update_participant_status"
-    case i_additional_participants_to_meet         = "rangley.rangley_fn_i_invite_users_to_meet_by_meet_id_uuid"
+    case i_additional_participants_to_meet         = "rangley.rangley_fn_i_additional_participants_to_meet_by_meet_id_uuid"
 }
 
 // MARK: - Generic call shapes
@@ -396,7 +397,37 @@ enum Proc
     // MARK: - END INSERT
     
 
-    
+    enum SystemDeleteUser: PgCallableRow
+    {
+        static let procName: RangleyProcName = .d_user  // ensure this resolves to schema-qualified "rangley.rangley_s_insert_meet" or your search_path includes 'rangley'
+        
+        struct Params: Content, Sendable {
+            // Required
+            let cognito_sub     : String
+        }
+
+        struct Result: Content, Sendable
+        {
+            let is_success    : Bool
+        }
+
+        static func query(_ i: Params, _ o: Result) -> SQLQueryString {
+            """
+            CALL \(unsafeRaw: procName.rawValue)
+            (
+                ,NULL::BOOLEAN -- OUT
+                ,\(bind: i.cognito_sub)::text
+            );
+            """
+        }
+
+        static func decode(_ row: any SQLRow) throws -> Result {
+            try .init(
+                is_success: row.decode(column: "is_success", as: Bool.self),
+
+            )
+        }
+    }
     
     
     // MARK: - MODIFY
@@ -780,34 +811,34 @@ enum Func
 
         struct In: Sendable
         {
-            let cognito_sub       : String
-            let meet_id_uuid        : UUID
-            let target_user_uuid    : UUID
-            let new_status_id       : Int16  // 3=Maybe, 5=Declined, 6=Accepted 8=Left 9 = removed
+            let cognito_sub                     : String
+            let meet_id_uuid                    : UUID
+            let inviter_user_uuid               : UUID
+            let additional_invitee_user_uuids    : [UUID]
+            let invitation_message              : String?
+            
         }
 
         struct Results: Content, Sendable
         {
-            let success             : Bool
-            let message             : String
-            let participant_id_out  : Int64?
-            let old_status_id       : Int16?
-            let new_status_id       : Int16?
+            let user_uuid                   : UUID
+            let username                    : String
+            let invitation_status           : String?
+            let returned_notification_id    : Int64?
         }
 
         static func query(_ input: In) -> SQLQueryString
         {
-            "SELECT * FROM \(unsafeRaw: funcName.rawValue)(\(bind: input.cognito_sub)::text, \(bind: input.meet_id_uuid)::uuid, \(bind: input.target_user_uuid)::uuid, \(bind: input.new_status_id)::int2);"
+            "SELECT * FROM \(unsafeRaw: funcName.rawValue)(\(bind: input.cognito_sub)::TEXT, \(bind: input.meet_id_uuid)::UUID, \(bind: input.inviter_user_uuid)::UUID,\(bind: input.additional_invitee_user_uuids)::UUID[], \(bind: input.invitation_message)::TEXT);"
         }
 
         static func decode(_ r: any SQLRow) throws -> Results
         {
             try .init(
-                success           : r.decode(column: "success"           , as: Bool.self),
-                message           : r.decode(column: "message"           , as: String.self),
-                participant_id_out: r.decode(column: "participant_id_out", as: Int64?.self),
-                old_status_id     : r.decode(column: "old_status_id"     , as: Int16?.self),
-                new_status_id     : r.decode(column: "new_status_id"     , as: Int16?.self)
+                user_uuid                   : r.decode(column: "user_uuid"                    ,as: UUID.self),
+                username                    : r.decode(column: "username"                     ,as: String.self),
+                invitation_status           : r.decode(column: "invitation_status"            ,as: String?.self),
+                returned_notification_id    : r.decode(column: "returned_notification_id"     ,as: Int64?.self)
             )
         }
 
