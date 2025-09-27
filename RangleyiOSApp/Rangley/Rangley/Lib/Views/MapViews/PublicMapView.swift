@@ -11,6 +11,7 @@
 // MARK: - IGNORE THE BELOW TODOs FOR NOW
 // MARK: - V2
 // TODO: - Anyone can join a group if a link is sent?
+// TODO: - Banner Notificaitons from outside the app
 // TODO: - Joinable public groups by request to join
 // TODO: - Create UNDO for deletes and updates
 // TODO: - Fix return to user button only appears when not centered
@@ -21,7 +22,7 @@
 // TODO: - meet invitaiton should be single repsonsiblity (maybe give leaveMeet or left meet new one
 // TODO: - Out of App Notifcations???
 // TODO: - Extermely important need to make sure we're not always refetching all the data... need to use cache
-// TODO: - ^^ and only grab the meet affected to what we were updating. 
+// TODO: - ^^ and only grab the meet affected to what we were updating.
 // MARK: - V2
 // MARK: - IGNORE THE ABOVE TODOs FOR NOW
 // ==========================================================================================================
@@ -34,17 +35,13 @@
 // MARK: - IGNORE THE BELOW TODOs FOR NOW
 // MARK: - V1
 // TODO: - Cleanup jump from MyMeetsView to meetscard overlay
-// TODO: - Banner Notificaitons from outside the app
-// TODO: - Color Scheme needs to be set.. especially on search friends in create meet
-// TODO: - Fix recenter compass top right
+// TODO: - Make sure KEYBOARDS ARE ALL THE SAME COLOR
 // TODO: - Remeber User when Create New Account .. think this is good need check with dad's phone
 // TODO: - fix add particpatns button place next to participants list
 // TODO: - AWS delete account ... finish vapor and SQL
-// TODO: - Collapse shit
-// TODO: - fix loading screen so it's the fucking rangley pig and not the black wheel bullshit that's
+// TODO: - loading is kinda fixed
 // TODO: -  ^^^^this is for first download or simply reopening the app... an ANYTIME open of the app load
-// TODO: - REQUIRE FORCED UPDATES WHEN OPENING APP IF HAVEN'T UPDATED... ALSO ADD SCREEN INCASE SERVE CRASH
-// TODO: - ^^^ SAYING SOMETHING LIKE ADDING COMPUTE TOO MANY USERS ON RANGLEY
+// TODO: - SETUP APp Version Gate
 // MARK: - V1
 // MARK: - IGNORE THE ABOVE TODOs FOR NOW
 // ==========================================================================================================
@@ -704,60 +701,43 @@ public struct PublicMapView: View
     
     @ViewBuilder
     private var content: some View {
-        if authState.isCheckingAuth {
-            VStack {
-                ProgressView().scaleEffect(1.5)
-                Text("Checking authentication...").padding(.top, 8)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.black)
-            .foregroundColor(.white)
+        ZStack {
+            MapView(
+                mapData: mapData,
+                locationData: locationData,
+                uiState: uiState,
+                meetNS: meetNS,
+                onMapTap: handleMapTap
+            )
 
-        } else if authState.isAuthenticated {
-            ZStack {
-                MapView(
-                    mapData: mapData,
-                    locationData: locationData,
-                    uiState: uiState,
-                    meetNS: meetNS,
-                    onMapTap: handleMapTap
-                )
+            OverlaysView(
+                mapData: mapData,
+                locationData: locationData,
+                uiState: uiState,
+                authState: authState,
+                meetNS: meetNS,
+                authToken: authState.currentToken,
+                meetCreationMode: $meetCreationMode
+            )
 
-                OverlaysView(
-                    mapData: mapData,
-                    locationData: locationData,
-                    uiState: uiState,
-                    authState: authState,
-                    meetNS: meetNS,
-                    authToken: authState.currentToken,
-                    meetCreationMode: $meetCreationMode
-                )
-
-                ControlsView(
-                    mapData: mapData,
-                    locationData: locationData,
-                    uiState: uiState,
-                    authState: authState,
-                    meetCreationMode: $meetCreationMode
-                )
-            }
-            .environment(\.colorScheme, uiState.isDaylight ? .light : .dark)
-            .task {
-                // Set up location-based refresh callback
-                locationData.onSignificantLocationChange = {
-                    await mapData.loadMeets()
-                }
+            ControlsView(
+                mapData: mapData,
+                locationData: locationData,
+                uiState: uiState,
+                authState: authState,
+                meetCreationMode: $meetCreationMode
+            )
+        }
+        .environment(\.colorScheme, uiState.isDaylight ? .light : .dark)
+        .task {
+            locationData.onSignificantLocationChange = {
                 await mapData.loadMeets()
-                uiState.startDayNightTimer()
             }
-            .task(id: authState.currentToken) { 
-                await inbox.setToken(authState.currentToken.isEmpty ? nil : authState.currentToken)
-            }
-
-        } else {
-            // No more onAuthenticated closure
-            StartScreenView()
-                .preferredColorScheme(.dark)
+            await mapData.loadMeets()
+            uiState.startDayNightTimer()
+        }
+        .task(id: authState.currentToken) {
+            await inbox.setToken(authState.currentToken.isEmpty ? nil : authState.currentToken)
         }
     }
     
@@ -821,6 +801,9 @@ struct MapView: View
                         }
                     }
                     UserAnnotation()
+                }
+                .mapControls {
+                    // Don't include MapCompass() - this removes it
                 }
                 .onMapCameraChange(frequency: .onEnd) { context in
                     locationData.updateRegion(context.region)

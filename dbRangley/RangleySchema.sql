@@ -26,6 +26,9 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- ===== LOOKUP / ENUM / DICTIONARY TABLES =====
 
+-- "1.2.3" becomes 10203 (major*10000 + minor*100 + patch)
+-- "2.0.1" becomes 20001
+
 CREATE TABLE rangley.te_version_features
 (
      version     INT4 NOT NULL
@@ -35,12 +38,16 @@ CREATE TABLE rangley.te_version_features
 );
 
 
-
 CREATE TABLE rangley.td_features
 (
      feature_id  INT4		  PRIMARY KEY
     ,name        VARCHAR(100) NOT NULL DEFAULT ''
 );
+
+select * from rangley.te_version_features;
+
+select * from rangley.td_features;
+
 
 CREATE TABLE rangley.td_participant_status
 (

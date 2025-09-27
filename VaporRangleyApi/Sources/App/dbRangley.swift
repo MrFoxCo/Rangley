@@ -42,6 +42,7 @@ enum RangleyFunc: String
     case m_respond_to_meet_invitation              = "rangley.rangley_fn_m_respond_to_meet_invitation"
     case m_update_participant_status               = "rangley.rangley_fn_m_update_participant_status"
     case i_additional_participants_to_meet         = "rangley.rangley_fn_i_additional_participants_to_meet_by_meet_id_uuid"
+    case v_app_version                             = "rangley.rangley_fn_v_app_version"
 }
 
 // MARK: - Generic call shapes
@@ -397,33 +398,34 @@ enum Proc
     // MARK: - END INSERT
     
 
+    //TODO: - FINISH DELETE USER
     enum SystemDeleteUser: PgCallableRow
     {
         static let procName: RangleyProcName = .d_user  // ensure this resolves to schema-qualified "rangley.rangley_s_insert_meet" or your search_path includes 'rangley'
         
-        struct Params: Content, Sendable {
+        struct In: Content, Sendable {
             // Required
             let cognito_sub     : String
         }
 
-        struct Result: Content, Sendable
+        struct Out: Content, Sendable
         {
             let is_success    : Bool
         }
 
-        static func query(_ i: Params, _ o: Result) -> SQLQueryString {
+        static func query(_ i: In, _ o: Out) -> SQLQueryString {
             """
             CALL \(unsafeRaw: procName.rawValue)
             (
-                ,NULL::BOOLEAN -- OUT
+                 NULL::BOOLEAN -- OUT
                 ,\(bind: i.cognito_sub)::text
             );
             """
         }
 
-        static func decode(_ row: any SQLRow) throws -> Result {
+        static func decode(_ row: any SQLRow) throws -> Out {
             try .init(
-                is_success: row.decode(column: "is_success", as: Bool.self),
+                is_success: row.decode(column: "is_success", as: Bool.self)
 
             )
         }
@@ -964,6 +966,40 @@ enum Func
         static func fetchAll(on db: any SQLDatabase) async throws -> [Results] {
             try await fetchAll(on: db, In())
         }
+    }
+    
+    enum ViewAppVersion : PgFunctionRows
+    {
+        
+        static let funcName: RangleyFunc = .v_app_version
+        
+        struct In: Sendable
+        {
+            let app_version : Int32
+        }
+
+        struct Results: Content, Sendable
+        {
+            let is_supported           : Bool
+            let latest_version         : Int32
+            let supported_features     : [Int32]?
+        }
+        
+        static func query(_ input: In) -> SQLQueryString
+        {
+            "SELECT * FROM \(unsafeRaw: funcName.rawValue)(\(bind: input.app_version)::int4);"
+        }
+
+        static func decode(_ r: any SQLRow) throws -> Results
+        {
+            try .init(
+                is_supported      : r.decode(column: "is_supported"      , as: Bool.self),
+                latest_version    : r.decode(column: "latest_version"    , as: Int32.self),
+                supported_features: r.decode(column: "supported_features", as: [Int32]?.self)
+            )
+        }
+
+        
     }
 
     // =========================================================

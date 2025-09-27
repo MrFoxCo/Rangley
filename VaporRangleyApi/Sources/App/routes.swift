@@ -98,7 +98,6 @@ public func routes(_ app: Application) throws
 
         return try await Func.ViewMeets.fetchAll(on: sql, sub: sub)
     }
-
     
     v.get("users")
     {
@@ -350,6 +349,20 @@ public func routes(_ app: Application) throws
         )
     }
     
+    publicAuth.get("app-version")
+    {
+        req async throws -> [Func.ViewAppVersion.Results] in
+        guard let sql = req.db as? any SQLDatabase
+        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+        
+        guard let appVersionString = req.query[String.self, at: "version"],
+              let appVersion = Int32(appVersionString)
+        else {
+            throw Abort(.badRequest, reason: "Missing or invalid 'version' query parameter")
+        }
+        
+        return try await Func.ViewAppVersion.fetchAll(on: sql, Func.ViewAppVersion.In(app_version: appVersion))
+    }
     
 
     // MARK: - END INSERTS (i_*) or POST ROUTES
@@ -727,6 +740,22 @@ public func routes(_ app: Application) throws
                   matched_by: $0.matched_by,
                   can_invite: $0.can_invite)
         })
+    }
+    
+    s.post("user", "delete")
+    {
+        req async throws -> Proc.SystemDeleteUser.Out in
+        
+        let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
+
+        guard let sql = req.db as? any SQLDatabase
+        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+
+        let params = Proc.SystemDeleteUser.In(cognito_sub: sub)
+        let outputPlaceholder = Proc.SystemDeleteUser.Out(is_success: false)
+        
+        return try await Proc.SystemDeleteUser.call(on: sql, params, outputPlaceholder)
     }
     
     

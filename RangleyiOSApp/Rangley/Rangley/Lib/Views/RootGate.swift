@@ -26,9 +26,11 @@ struct RootGate: View {
     private var content: some View {
         if auth.isCheckingAuth {
             ZStack {
-                Color.black.ignoresSafeArea()
+                AppPalette.Brand.japDarkerPurple.ignoresSafeArea()
                 VStack {
-                    ProgressView().scaleEffect(1.3)
+                    ProgressView()
+                        .scaleEffect(1.3)
+                        .tint(.white)
                     Text("Checking authentication…")
                         .foregroundStyle(.white)
                         .padding(.top, 8)
