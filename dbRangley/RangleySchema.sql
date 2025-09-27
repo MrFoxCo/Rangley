@@ -44,9 +44,11 @@ CREATE TABLE rangley.td_features
     ,name        VARCHAR(100) NOT NULL DEFAULT ''
 );
 
-select * from rangley.te_version_features;
 
-select * from rangley.td_features;
+update rangley.te_version_features
+set version = 10000
+where version = 10002;
+
 
 
 CREATE TABLE rangley.td_participant_status

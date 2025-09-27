@@ -210,7 +210,8 @@ struct AuthAPI
     }
     
     /// POST /auth/verify-phone - Verify SMS code
-    static func verifyPhoneCode(baseURL: URL, phone: String, code: String) async throws -> VerifyPhoneResponse
+    static func verifyPhoneCode(baseURL: URL, phone: String, code: String) async throws
+        -> VerifyPhoneResponse
     {
         let body = VerifyPhoneRequest(phone: phone, code: code)
         
@@ -250,6 +251,46 @@ struct AuthAPI
             throw AuthAPIError.decode(error.localizedDescription)
         }
     }
+    
+    
+    static func viewAppVersion(baseURL: URL, appVersion: Int32)
+        async throws -> AppVersionModelResponse
+    {
+        // Add query parameter for version
+        var urlComponents = URLComponents(url: makeURL(baseURL, ["auth", "app-version"]), resolvingAgainstBaseURL: false)!
+        urlComponents.queryItems = [URLQueryItem(name: "version", value: String(appVersion))]
+        
+        var req = URLRequest(url: urlComponents.url!)
+        req.httpMethod = "GET"
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
+        guard (200..<300).contains(http.statusCode) else {
+            #if DEBUG
+            print("=== App Version Failed ===")
+            print("Status Code: \(http.statusCode)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        }
+        
+        do {
+            // In your AuthAPI.viewAppVersion method, change this line:
+            return try isoDecoder.decode([AppVersionModelResponse].self, from: data).first ??
+                   // Don't hardcode values here - throw an error instead
+                   { throw AuthAPIError.decode("No version data returned") }()
+        } catch {
+            #if DEBUG
+            print("=== Decode Error in viewAppVersion ===")
+            print("Error: \(error)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.decode(error.localizedDescription)
+        }
+    }
+    
+    
     
     // GET /auth/whoami  (protected; Bearer ID token)
     static func whoAmI(baseURL: URL, token: String) async throws -> WhoAmI
@@ -370,7 +411,8 @@ struct AuthAPI
     
     
     // THE VERY FIRST MEET corresponds to SystemInsertMeet
-    static func createMeetWithInvites(baseURL: URL, token: String, body: MeetWithInvitesInsertBody) async throws -> MeetWithInvitesInsertResponse
+    static func createMeetWithInvites(baseURL: URL, token: String, body: MeetWithInvitesInsertBody)
+        async throws -> MeetWithInvitesInsertResponse
     {
         var req = URLRequest(url: makeURL(baseURL, ["s", "meet-with-invites"]))
         req.httpMethod = "POST"
@@ -406,7 +448,8 @@ struct AuthAPI
     }
     
     // THE VERY FIRST MEET corresponds to SystemInsertMeet
-    static func insertAdditionalParticipantsToMeet(baseURL: URL, token: String, body: InsertAddtionalParticpantsModelBody) async throws -> InsertAddtionalParticpantsModelResponse
+    static func insertAdditionalParticipantsToMeet(baseURL: URL, token: String, body: InsertAddtionalParticpantsModelBody)
+        async throws -> InsertAddtionalParticpantsModelResponse
     {
         var req = URLRequest(url: makeURL(baseURL, ["s", "insert-additional-participants-to-meet"]))
         req.httpMethod = "POST"
@@ -483,8 +526,8 @@ struct AuthAPI
     
     
     // Corresponds to SystemInsertUpdatedMeet in VAPOR
-    static func deleteMeet(baseURL: URL,
-                           token: String, body: DeletedMeetInsertBody) async throws -> DeletedMeetInsertResponse
+    static func deleteMeet(baseURL: URL, token: String, body: DeletedMeetInsertBody)
+        async throws -> DeletedMeetInsertResponse
     {
         var req = URLRequest(url: makeURL(baseURL, ["s", "deleted-meet"]))
         req.httpMethod = "POST"
@@ -509,6 +552,44 @@ struct AuthAPI
         } catch {
             #if DEBUG
             print("=== Decode Error in deleteMeet ===")
+            print("Error: \(error)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.decode(error.localizedDescription)
+        }
+    }
+    
+    
+    // Move this outside the function
+    struct DeleteUserResponse: Codable {
+        let is_success: Bool
+    }
+
+    static func deleteUser(baseURL: URL, token: String) async throws -> DeleteUserResponse
+    {
+        var req = URLRequest(url: makeURL(baseURL, ["s","user","delete"]))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        // No body needed - cognito_sub comes from auth token
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
+        guard (200..<300).contains(http.statusCode) else {
+            #if DEBUG
+            print("=== User Deletion Failed ===")
+            print("Status Code: \(http.statusCode)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        }
+        
+        do {
+            return try JSONDecoder().decode(DeleteUserResponse.self, from: data)
+        } catch {
+            #if DEBUG
+            print("=== Decode Error in deleteUser ===")
             print("Error: \(error)")
             print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
             #endif
@@ -582,7 +663,8 @@ struct AuthAPI
  
     // MARK: - Invitations API
     
-    static func respondToInvitation(baseURL: URL, token: String, body: RespondToInviteBody) async throws -> RespondToInviteResponse
+    static func respondToInvitation(baseURL: URL, token: String, body: RespondToInviteBody)
+        async throws -> RespondToInviteResponse
     {
         var req = URLRequest(url: makeURL(baseURL, ["s", "meets", "invitations", "respond"]))
         req.httpMethod = "POST"
@@ -614,7 +696,8 @@ struct AuthAPI
         }
     }
     
-    static func updateParticipantStatus(baseURL: URL, token: String, body: UpdateParticipantStatusBody) async throws -> UpdateParticipantStatusResponse
+    static func updateParticipantStatus(baseURL: URL, token: String, body: UpdateParticipantStatusBody)
+        async throws -> UpdateParticipantStatusResponse
     {
         var req = URLRequest(url: makeURL(baseURL, ["s", "update-participant-status"]))
         req.httpMethod = "POST"
