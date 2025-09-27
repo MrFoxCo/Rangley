@@ -22,6 +22,7 @@
 // TODO: - meet invitaiton should be single repsonsiblity (maybe give leaveMeet or left meet new one
 // TODO: - Out of App Notifcations???
 // TODO: - Extermely important need to make sure we're not always refetching all the data... need to use cache
+// TODO: - Tweak on Update Screen
 // TODO: - ^^ and only grab the meet affected to what we were updating.
 // MARK: - V2
 // MARK: - IGNORE THE ABOVE TODOs FOR NOW
@@ -41,7 +42,6 @@
 // TODO: - AWS delete account ... finish vapor and SQL
 // TODO: - loading is kinda fixed
 // TODO: -  ^^^^this is for first download or simply reopening the app... an ANYTIME open of the app load
-// TODO: - SETUP APp Version Gate
 // MARK: - V1
 // MARK: - IGNORE THE ABOVE TODOs FOR NOW
 // ==========================================================================================================
@@ -479,85 +479,6 @@ class LocationDataStore: ObservableObject
 }
 
 
-// MARK: - Authentication State Manager
-@MainActor
-class AuthStateStore: ObservableObject
-{
-    @Published var isAuthenticated = false
-    @Published var currentToken = ""
-    @Published var currentUser: ViewUserMeModel?
-    @Published var isCheckingAuth = true
-    
-    init() {
-        checkAuthenticationStatus()
-    }
-    
-    func checkAuthenticationStatus()
-    {
-        Task {
-            do {
-                let session = try await Amplify.Auth.fetchAuthSession()
-                await MainActor.run {
-                    isAuthenticated = session.isSignedIn
-                    isCheckingAuth = false
-                }
-                
-                if session.isSignedIn {
-                    await updateToken()
-                    await fetchCurrentUser()
-                }
-            } catch {
-                await MainActor.run {
-                    isAuthenticated = false
-                    isCheckingAuth = false
-                    currentToken = ""
-                }
-            }
-        }
-    }
-    
-    private func fetchCurrentUser() async
-    {
-        do {
-            let user = try await AuthAPI.me(baseURL: Env.apiBaseURL, token: currentToken)
-            await MainActor.run {
-                currentUser = user
-            }
-        } catch {
-            print("Failed to fetch current user: \(error)")
-        }
-    }
-    
-    
-    func updateToken() async
-    {
-        do {
-            let session = try await Amplify.Auth.fetchAuthSession()
-            guard let provider = session as? AuthCognitoTokensProvider else { return }
-            let token = try provider.getCognitoTokens().get().idToken
-            
-            await MainActor.run {
-                currentToken = token
-            }
-        } catch {
-            print("Failed to get token: \(error)")
-            await MainActor.run {
-                currentToken = ""
-            }
-        }
-    }
-    
-    func signOut() async
-    {
-        _ = await Amplify.Auth.signOut()
-        await MainActor.run {
-            isAuthenticated = false
-            currentToken = ""
-        }
-    }
-}
-
-
 // MARK: - UI State Manager
 @MainActor
 class UIStateStore: ObservableObject
@@ -689,13 +610,15 @@ public struct PublicMapView: View
                     Task { await inbox.setToken(nil) }
                 }
             }
-
-            .onReceive(NotificationCenter.default.publisher(for: .init("amplify.auth.signedIn"))) { _ in
-                authState.checkAuthenticationStatus()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .init("amplify.auth.signedOut"))) { _ in
-                authState.checkAuthenticationStatus()
-            }
+            // TODO: - bad was screwing up account creation
+//            .onReceive(NotificationCenter.default.publisher(for: .init("amplify.auth.signedIn"))) { _ in
+//                authState.checkAuthenticationStatus()
+//            }
+//            .onReceive(NotificationCenter.default.publisher(for: .init("amplify.auth.signedOut"))) { _ in
+//                authState.checkAuthenticationStatus()
+//            }
+        
+        
     }
 
     

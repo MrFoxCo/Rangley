@@ -155,7 +155,7 @@ struct MeetUpdateFormView: View
         .frame(maxWidth: 420, maxHeight: 590)
         .background(
             RoundedRectangle(cornerRadius: 24)
-                .fill(AppPalette.Brand.russianViolet)
+                .fill(AppPalette.Brand.formBlack)
                 .overlay(
                     RoundedRectangle(cornerRadius: 24)
                         .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1)

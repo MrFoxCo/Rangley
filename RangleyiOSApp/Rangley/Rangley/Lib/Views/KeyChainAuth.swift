@@ -1,5 +1,5 @@
 //
-//  KeyChainAuth.swift
+//  KeychainAuth.swift
 //  Rangley
 //
 //  Created by Anthony Guzzardo on 9/22/25.
@@ -130,7 +130,7 @@ enum KeychainAuth {
             return password
             
         case errSecItemNotFound:
-            return nil
+            throw KeychainError.itemNotFound // Changed: throw instead of return nil for consistency
             
         case errSecUserCanceled:
             throw KeychainError.userCanceled

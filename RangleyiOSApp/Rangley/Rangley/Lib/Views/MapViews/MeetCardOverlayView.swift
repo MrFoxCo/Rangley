@@ -299,19 +299,7 @@ private struct MeetCardView: View
                         
                         // In the header HStack with action buttons, add this before the existing buttons:
                         // Direct invite button - opens UserSearchView sheet immediately
-                        if canInvite {
-                            Button {
-                                showInviteSheet = true
-                            } label: {
-                                Image(systemName: "person.badge.plus")
-                                    .font(.system(size: 14, weight: .bold))
-                                    .padding(8)
-                                    .background(AppPalette.Surface.fieldFill, in: Circle())
-                                    .overlay(Circle().stroke(AppPalette.Surface.fieldStroke, lineWidth: 1))
-                                    .foregroundStyle(AppPalette.Brand.neonPink)
-                            }
-                            .buttonStyle(.plain)
-                        }
+
                         
                         if meet.is_owner {
                             Button { onEdit(meet) } label: {
@@ -320,7 +308,7 @@ private struct MeetCardView: View
                                     .padding(8)
                                     .background(AppPalette.Surface.fieldFill, in: Circle())
                                     .overlay(Circle().stroke(AppPalette.Surface.fieldStroke, lineWidth: 1))
-                                    .foregroundStyle(AppPalette.Brand.neonPink)
+                                    .foregroundStyle(AppPalette.Brand.lemonZest)
                             }
                             .buttonStyle(.plain)
 
@@ -330,7 +318,7 @@ private struct MeetCardView: View
                                     .padding(8)
                                     .background(AppPalette.Surface.fieldFill, in: Circle())
                                     .overlay(Circle().stroke(AppPalette.Surface.fieldStroke, lineWidth: 1))
-                                    .foregroundStyle(AppPalette.Brand.neonPink)
+                                    .foregroundStyle(AppPalette.Action.delete)
                             }
                             .buttonStyle(.plain)
                         } else if isAcceptedParticipant {
@@ -457,12 +445,41 @@ private struct MeetCardView: View
                     }
                     .padding(.top, 4)
                 }
-                
+
                 // Participant Information - UPDATED SECTION
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Participants")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(AppPalette.Text.primary)
+                    HStack {
+                        Text("Participants")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(AppPalette.Text.primary)
+                        
+//                        Spacer()
+                        
+                        if canInvite {
+                            Button {
+                                showInviteSheet = true
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "person.badge.plus")
+                                        .font(.system(size: 12, weight: .bold))
+                                    Text("Invite")
+                                        .font(.system(size: 13, weight: .semibold))
+                                }
+                                .foregroundStyle(AppPalette.Action.update)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .fill(AppPalette.Brand.neonPink.opacity(0.1))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1)
+                                        )
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
                     
                     if meet.is_owner {
                         // Show detailed participant list for owners

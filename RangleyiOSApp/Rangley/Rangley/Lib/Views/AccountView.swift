@@ -15,9 +15,17 @@ struct AccountView: View
     @State private var error: String?
     @State private var isAnimating = false
     @State private var showingPasswordReset = false
+    
+    @State private var showingDeleteConfirmation = false
+    @State private var showingFinalDeleteWarning = false
+    @State private var deleteConfirmationText = ""
+    @State private var isDeletingAccount = false
+    @State private var deleteError: String?
+    
     @Environment(\.dismiss) private var dismiss
 
-    var body: some View {
+    var body: some View
+    {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 0) {
@@ -63,6 +71,38 @@ struct AccountView: View
             .sheet(isPresented: $showingPasswordReset) {
                 ChangePasswordView()
             }
+            .alert("Delete Account?", isPresented: $showingDeleteConfirmation) {
+                Button("Cancel", role: .cancel) { }
+                Button("Continue", role: .destructive) {
+                    showingFinalDeleteWarning = true
+                }
+            } message: {
+                Text("This action cannot be undone. All your meets, participations, and account data will be permanently deleted.")
+            }
+            .alert("Final Confirmation", isPresented: $showingFinalDeleteWarning) {
+                TextField("Type DELETE to confirm", text: $deleteConfirmationText)
+                Button("Cancel", role: .cancel) {
+                    deleteConfirmationText = ""
+                }
+                Button("Delete Forever", role: .destructive) {
+                    if deleteConfirmationText.uppercased() == "DELETE" {
+                        Task { await deleteAccount() }
+                    }
+                    deleteConfirmationText = ""
+                }
+                .disabled(deleteConfirmationText.uppercased() != "DELETE")
+            } message: {
+                Text("Type DELETE to permanently delete your account. This will:\n\n• Delete all your meets\n• Remove you from all participations\n• Permanently delete your profile\n• Sign you out of all devices")
+            }
+            .alert("Delete Failed", isPresented: .constant(deleteError != nil)) {
+                Button("OK") {
+                    deleteError = nil
+                }
+            } message: {
+                if let error = deleteError {
+                    Text(error)
+                }
+            }
         }
         .preferredColorScheme(.dark)
         .task { await load() }
@@ -71,10 +111,12 @@ struct AccountView: View
                 isAnimating = true
             }
         }
+        
     }
     
     // MARK: - Profile Header
-    private var profileHeader: some View {
+    private var profileHeader: some View
+    {
         VStack(spacing: 20) {
             // Profile avatar with aura effect
             ZStack {
@@ -121,7 +163,8 @@ struct AccountView: View
     }
     
     // MARK: - Account Details
-    private func accountDetails(for profile: ViewUserMeModel) -> some View {
+    private func accountDetails(for profile: ViewUserMeModel) -> some View
+    {
         VStack(spacing: 16) {
             accountInfoCard(
                 title: "Personal Information",
@@ -145,7 +188,8 @@ struct AccountView: View
     }
     
     // MARK: - Security Section
-    private var securitySection: some View {
+    private var securitySection: some View
+    {
         VStack(alignment: .leading, spacing: 16) {
             // Section title
             Text("Security")
@@ -194,12 +238,57 @@ struct AccountView: View
                             .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1)
                     )
             )
+            
+            // Delete Account button (dangerous action)
+            Button(action: { showingDeleteConfirmation = true }) {
+                HStack {
+                    HStack(spacing: 12) {
+                        ZStack {
+                            Circle()
+                                .fill(Color.red.opacity(0.2))
+                                .frame(width: 36, height: 36)
+                            
+                            Image(systemName: "trash.fill")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(.red)
+                        }
+                        
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Delete Account")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(AppPalette.Action.warning)
+                            
+                            Text("Permanently remove your account")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(AppPalette.Text.secondary)
+                        }
+                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(AppPalette.Text.secondary)
+                }
+                .padding(16)
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(AppPalette.Brand.japPurple)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(Color.red.opacity(0.3), lineWidth: 1)
+                    )
+            )
+
+            
         }
         .padding(.horizontal, 24)
         .padding(.top, 16)
     }
     
-    private func accountInfoCard(title: String, items: [(String, String?)]) -> some View {
+    private func accountInfoCard(title: String, items: [(String, String?)]) -> some View
+    {
         VStack(alignment: .leading, spacing: 16) {
             // Section title
             Text(title)
@@ -232,7 +321,8 @@ struct AccountView: View
         )
     }
     
-    private func accountInfoRow(label: String, value: String?) -> some View {
+    private func accountInfoRow(label: String, value: String?) -> some View
+    {
         HStack {
             // Label with icon
             HStack(spacing: 8) {
@@ -257,7 +347,8 @@ struct AccountView: View
     }
     
     // MARK: - Error View
-    private func errorView(_ error: String) -> some View {
+    private func errorView(_ error: String) -> some View
+    {
         VStack(spacing: 16) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 40))
@@ -277,7 +368,8 @@ struct AccountView: View
     }
     
     // MARK: - Loading View
-    private var loadingView: some View {
+    private var loadingView: some View
+    {
         VStack(spacing: 16) {
             ProgressView()
                 .scaleEffect(1.2)
@@ -288,6 +380,58 @@ struct AccountView: View
                 .foregroundColor(AppPalette.Text.secondary)
         }
         .padding(.top, 60)
+    }
+    
+    private func deleteAccount() async
+    {
+        isDeletingAccount = true
+        defer { isDeletingAccount = false }
+        
+        do {
+            let session = try await Amplify.Auth.fetchAuthSession()
+            guard let provider = session as? AuthCognitoTokensProvider else {
+                throw AuthAPIError.http(-1, "No Cognito token provider")
+            }
+
+            let tokens = try provider.getCognitoTokens().get()
+            let idToken = tokens.idToken  // ← Uses ID token to match your CognitoIDMiddleware
+            
+            // Call your delete user API
+            let result = try await AuthAPI.deleteUser(baseURL: Env.apiBaseURL, token: idToken)
+            
+            if result.is_success {
+                // Delete from Cognito after successful database deletion
+                try await Amplify.Auth.deleteUser()
+                
+                NotificationCenter.default.post(name: .userAccountDeleted, object: nil)
+                // Note: deleteUser() automatically signs out the user
+                await MainActor.run {
+                    // Dismiss the account view
+                    dismiss()
+                }
+            } else {
+                await MainActor.run {
+                    deleteError = "Account deletion failed. Please try again."
+                }
+            }
+            
+        } catch AuthAPIError.http(let code, let reason) {
+            await MainActor.run {
+                if code == 401 {
+                    deleteError = "Session expired. Please sign in and try again."
+                } else {
+                    deleteError = "Delete failed: \(reason ?? "Unknown error")"
+                }
+            }
+        } catch let authError as AuthError {
+            await MainActor.run {
+                deleteError = "Failed to delete from Cognito: \(authError.localizedDescription)"
+            }
+        } catch {
+            await MainActor.run {
+                deleteError = "Unable to delete account. Please try again later."
+            }
+        }
     }
     
     // MARK: - Helpers
@@ -579,11 +723,6 @@ fileprivate final class ChangePasswordVM: ObservableObject
         }
     }
     
-}
-// MARK: - Change Password Status Component
-
-extension Notification.Name {
-    static let passwordChangeSuccess = Notification.Name("passwordChangeSuccess")
 }
 
 fileprivate struct ChangePasswordStatus: View

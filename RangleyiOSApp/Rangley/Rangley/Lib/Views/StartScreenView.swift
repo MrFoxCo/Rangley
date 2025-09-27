@@ -22,7 +22,8 @@
 import SwiftUI
 import Amplify
 
-extension Color {
+extension Color
+{
     init(hex: String) {
         let s = hex.trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "#", with: "")

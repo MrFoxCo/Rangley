@@ -9,8 +9,10 @@
 
 import SwiftUI
 
-struct AppPalette {
-    struct Brand {
+struct AppPalette
+{
+    struct Brand
+    {
         static let neonPink         = Color(hex: "#FF007D")
         static let russianViolet    = Color(hex: "#2E003E") // Russian violet Phtalo #1A002A Gunmetal Plum #1C0B1C
         static let gunmetalPlum     = Color(hex: "#1C0B1C")
@@ -31,6 +33,18 @@ struct AppPalette {
         static let vibrantBlue      = Color(hex: "#1E90FF")
         static let neonPurple       = Color(hex: "#6A0DAD")
         static let electricBlue     = Color(hex: "#0080FF")
+        
+        
+        // Yellows (work great on Russian Violet)
+        static let sunflowerYellow = Color(hex: "#FFC300") // bright, punchy
+        static let amberYellow     = Color(hex: "#FFB300") // strong warning (matches Action.warning)
+        static let honeyYellow     = Color(hex: "#FFC107") // rich amber (Material vibe)
+        static let saffronYellow   = Color(hex: "#F4C430") // warmer, a bit earthy
+        static let lemonZest       = Color(hex: "#FFD52E") // vivid, high-energy
+        static let butterYellow    = Color(hex: "#FFE380") // soft pill/background
+        static let goldenrod       = Color(hex: "#DAA520") // muted/gold, good for icons
+
+        
 
         static let brightViolet     = Color(hex: "#8A2BE2")
         static let neonBlue         = Color(hex: "#0066FF")
@@ -49,7 +63,28 @@ struct AppPalette {
 
     }
     
-    struct Text {
+    struct Action
+    {
+           // Destructive
+       static let delete  = Color(hex: "#FF3B30")     // iOS red (clear “Delete”)
+
+       // Negative / cancel
+       static let decline = Brand.neonPink            // your neon pink
+
+       // Positive / create
+       static let insert  = Brand.spearmintGreen      // minty confirm/create
+       static let accept  = Brand.spearmintGreen
+
+       // Edit / change
+       static let modify  = Brand.brightTeal          // teal reads “edit”
+       static let update  = Brand.electricBlue        // blue = “save/update”
+
+       // Caution / warning
+       static let warning = Color(hex: "#FFB300")     // vivid amber
+   }
+    
+    struct Text
+    {
         static let primary      = Color.white
         static let secondary    = Color.white.opacity(0.72)
         static let tertiary     = Color.white.opacity(0.56)

@@ -1411,7 +1411,8 @@ struct MeetCard: View
 
 
 // MARK: - Easter Egg Message Provider
-struct EasterEggMessages {
+struct EasterEggMessages
+{
     // Cheeky messages for empty "My Meets"
     static let cheekySelfMessages = [
         "Might be time to re-watch the first 7 seasons of Game of Thrones with your buds.",

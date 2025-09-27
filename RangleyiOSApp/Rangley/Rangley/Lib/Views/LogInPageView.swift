@@ -8,27 +8,70 @@ import SwiftUI
 import Amplify
 import AWSPluginsCore
 
-// Error explainer (same shape as your register file)
-fileprivate func explainAuth(_ error: Error) -> String
-{
+// User-friendly error handler
+fileprivate func getUserFriendlyError(_ error: Error) -> String {
+    // Log the full error for debugging (in development only)
+    #if DEBUG
+    print("Auth Error Debug: \(error)")
     if let ae = error as? AuthError {
-        var parts = [ae.errorDescription]
-        let rs = ae.recoverySuggestion; if !rs.isEmpty { parts.append(rs) }
-        if let underlying = ae.underlyingError as NSError? {
-            let type = (underlying.userInfo["__type"] as? String)
-                ?? (underlying.userInfo["code"] as? String) ?? underlying.domain
-            let msg  = (underlying.userInfo["message"] as? String)
-                ?? underlying.localizedDescription
-            parts.append("underlying: \(type) (\(underlying.code)) \(msg)")
+        print("AuthError details: \(ae.errorDescription)")
+        if let underlying = ae.underlyingError {
+            print("Underlying error: \(underlying)")
         }
-        return parts.joined(separator: " | ")
     }
-    return String(describing: error)
-}
-
-fileprivate enum BannerState: Equatable
-{
-    case none, info(String), error(String), success(String)
+    #endif
+    
+    // Return user-friendly messages only
+    if let ae = error as? AuthError {
+        // Check the underlying error type for specific AWS errors
+        if let underlying = ae.underlyingError as NSError? {
+            let errorType = (underlying.userInfo["__type"] as? String) ?? ""
+            
+            switch errorType {
+            case "UserNotFoundException":
+                return "Account not found"
+            case "NotAuthorizedException":
+                return "Incorrect password"
+            case "UserNotConfirmedException":
+                return "Please verify your account first"
+            case "PasswordResetRequiredException":
+                return "Password reset required"
+            case "TooManyRequestsException":
+                return "Too many attempts. Try again later"
+            case "LimitExceededException":
+                return "Rate limit exceeded. Try again later"
+            default:
+                break
+            }
+            
+            // Check for network-related errors
+            if underlying.domain == NSURLErrorDomain {
+                switch underlying.code {
+                case NSURLErrorNotConnectedToInternet:
+                    return "No internet connection"
+                case NSURLErrorTimedOut:
+                    return "Connection timed out"
+                default:
+                    return "Network error"
+                }
+            }
+        }
+        
+        // Check AuthError description for common patterns
+        let description = ae.errorDescription.lowercased()
+        if description.contains("network") || description.contains("connection") {
+            return "Connection problem"
+        }
+        if description.contains("invalid") && description.contains("password") {
+            return "Invalid password"
+        }
+        if description.contains("user") && description.contains("not found") {
+            return "Account not found"
+        }
+    }
+    
+    // Generic fallback
+    return "Sign in failed"
 }
 
 @MainActor
@@ -38,10 +81,11 @@ private final class SignInVM: ObservableObject
     @Published var principalRaw = ""   // phone/username/email
     @Published var password = ""
     
-    // UI
-    @Published var banner: BannerState = .none
+    // UI State
     @Published var isBusy = false
     @Published var idToken: String = ""
+    @Published var statusMessage: String = ""
+    @Published var isError: Bool = false
     
     // Remembered users UI
     struct SavedAccount: Identifiable, Hashable {
@@ -52,9 +96,8 @@ private final class SignInVM: ObservableObject
     @Published var savedAccounts: [SavedAccount] = []
     @Published var showUsernameChip = false
     
-    // Settings
-    @Published var rememberMe = true
-    @Published var useBiometrics = true
+    // Settings - simplified
+    @Published var shouldOfferBiometrics = false
     
     // CRITICAL: Load usernames WITHOUT triggering Face ID - just get the list
     func loadRememberedUsers()
@@ -111,7 +154,7 @@ private final class SignInVM: ObservableObject
                 prompt: "Authenticate to sign in as \(username)"
             ) else {
                 await MainActor.run {
-                    self.banner = .error("Could not retrieve saved password")
+                    self.showError("Could not retrieve saved password")
                 }
                 return false
             }
@@ -128,38 +171,59 @@ private final class SignInVM: ObservableObject
             await MainActor.run {
                 // Don't show error for user cancellation
                 if (error as NSError).code != Int(errSecUserCanceled) {
-                    self.banner = .error("Authentication failed")
+                    self.showError("Authentication failed")
                 }
             }
             return false
         }
     }
     
-    // Auto-login after successful credential fill - with better error handling
+    // Auto-login after successful credential fill
     func attemptAutoLogin(onSuccess: @escaping (String) -> Void) async
     {
         guard canSubmit else {
             await MainActor.run {
-                self.banner = .error("Invalid credentials loaded")
+                self.showError("Invalid credentials loaded")
             }
             return
         }
         
         await MainActor.run {
-            self.banner = .info("Signing in...")
+            self.showMessage("Signing in...", isError: false)
         }
         
         await signIn(onSuccess: onSuccess)
+    }
+    
+    // Message helpers
+    private func showError(_ message: String) {
+        statusMessage = message
+        isError = true
+    }
+    
+    private func showSuccess(_ message: String) {
+        statusMessage = message
+        isError = false
+    }
+    
+    private func showMessage(_ message: String, isError: Bool) {
+        statusMessage = message
+        self.isError = isError
+    }
+    
+    private func clearMessage() {
+        statusMessage = ""
+        isError = false
     }
     
     // Clear form
     func clearForm() {
         principalRaw = ""
         password = ""
-        banner = .none
+        clearMessage()
     }
     
-    // ===== existing sign-in logic with improvements =====
+    // ===== existing sign-in logic =====
     private var phoneDigits: String { principalRaw.filter(\.isNumber) }
     
     private var normalizedPrincipal: String
@@ -181,20 +245,21 @@ private final class SignInVM: ObservableObject
         return trimmed
     }
     
-    var canSubmit: Bool {
+    var canSubmit: Bool
+    {
         !normalizedPrincipal.isEmpty && !password.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
     
     func signIn(onSuccess: @escaping (String) -> Void) async
     {
         guard canSubmit else {
-            banner = .error("Enter your phone (E.164), username, or email and password.")
+            showError("Please enter your login details")
             return
         }
         
         await MainActor.run {
             self.isBusy = true
-            self.banner = .none
+            self.clearMessage()
         }
         
         defer {
@@ -207,39 +272,73 @@ private final class SignInVM: ObservableObject
             let res = try await Amplify.Auth.signIn(username: normalizedPrincipal, password: password)
             guard res.isSignedIn else {
                 await MainActor.run {
-                    self.banner = .error("Additional verification required and not supported here.")
+                    self.showError("Additional verification required")
                 }
                 return
             }
+            
             let session = try await Amplify.Auth.fetchAuthSession()
             guard session.isSignedIn, let p = session as? AuthCognitoTokensProvider else {
                 await MainActor.run {
-                    self.banner = .error("Signed in, but no tokens available.")
+                    self.showError("Sign in incomplete")
                 }
                 return
             }
+            
             let tokens = try p.getCognitoTokens().get()
             
             await MainActor.run {
                 self.idToken = tokens.idToken
-                self.banner = .success("Signed in successfully")
+                self.showSuccess("Signed in successfully")
             }
 
-            // Save credentials if remember me is enabled
-            if rememberMe {
-                try? KeychainAuth.save(username: normalizedPrincipal,
-                                       password: password,
-                                       protectWithBiometrics: useBiometrics)
-            } else {
-                // If remember me is off, remove any existing saved credentials
-                KeychainAuth.delete(username: normalizedPrincipal)
-            }
+            // Check if we should offer biometric setup for this user
+            let hasExistingCredentials = KeychainAuth.hasCredentials(for: normalizedPrincipal)
             
-            onSuccess(tokens.idToken)
+            if !hasExistingCredentials && BiometricAuth.isAvailable() {
+                // New user - offer to save with biometrics
+                // Store the success callback to call after biometric setup
+                await MainActor.run {
+                    self.pendingSuccessCallback = onSuccess
+                    self.pendingToken = tokens.idToken
+                    self.shouldOfferBiometrics = true
+                }
+            } else {
+                // Just save credentials normally (existing user or no biometrics)
+                try? KeychainAuth.save(username: normalizedPrincipal,
+                                     password: password,
+                                     protectWithBiometrics: hasExistingCredentials)
+                
+                onSuccess(tokens.idToken)
+            }
         } catch {
             await MainActor.run {
-                self.banner = .error("SignIn: " + explainAuth(error))
+                self.showError(getUserFriendlyError(error))
             }
+        }
+    }
+    
+    // Add these properties to store the callback and token
+    private var pendingSuccessCallback: ((String) -> Void)?
+    private var pendingToken: String?
+    
+    // Handle biometric setup decision
+    func setupBiometrics(enable: Bool) {
+        shouldOfferBiometrics = false
+        
+        do {
+            try KeychainAuth.save(username: normalizedPrincipal,
+                                password: password,
+                                protectWithBiometrics: enable)
+        } catch {
+            // Silent fail - credentials still work without biometrics
+        }
+        
+        // Now call the success callback that was delayed
+        if let callback = pendingSuccessCallback, let token = pendingToken {
+            callback(token)
+            pendingSuccessCallback = nil
+            pendingToken = nil
         }
     }
 }
@@ -265,42 +364,16 @@ struct LogInPageView: View
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     
-                    // Banner for feedback
-                    if case let .error(message) = vm.banner {
-                        HStack {
-                            Image(systemName: "exclamationmark.circle.fill")
-                            Text(message)
-                                .font(.caption)
-                        }
-                        .foregroundColor(.red)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(.red.opacity(0.1))
-                        .cornerRadius(8)
-                    } else if case let .success(message) = vm.banner {
-                        HStack {
-                            Image(systemName: "checkmark.circle.fill")
-                            Text(message)
-                                .font(.caption)
-                        }
-                        .foregroundColor(.green)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(.green.opacity(0.1))
-                        .cornerRadius(8)
-                    } else if case let .info(message) = vm.banner {
-                        HStack {
-                            ProgressView()
-                                .progressViewStyle(.circular)
-                                .scaleEffect(0.8)
-                            Text(message)
-                                .font(.caption)
-                        }
-                        .foregroundColor(.blue)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(.blue.opacity(0.1))
-                        .cornerRadius(8)
+                    // Clean status message display
+                    if !vm.statusMessage.isEmpty {
+                        Text(vm.statusMessage)
+                            .font(.caption)
+                            .foregroundColor(vm.isError ? .red : .green)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(vm.isError ? .red.opacity(0.1) : .green.opacity(0.1))
+                            .cornerRadius(8)
                     }
 
                     // === USERNAME ===
@@ -325,9 +398,9 @@ struct LogInPageView: View
                             }
                         }
                         .onChange(of: vm.principalRaw) { _, _ in
-                            // Clear banner when user starts typing manually
-                            if case .error = vm.banner {
-                                vm.banner = .none
+                            // Clear message when user starts typing
+                            if !vm.statusMessage.isEmpty {
+                                vm.statusMessage = ""
                             }
                         }
 
@@ -345,9 +418,9 @@ struct LogInPageView: View
                         .focused($passFocused)
                         .darkField(focused: passFocused)
                         .onChange(of: vm.password) { _, _ in
-                            // Clear banner when user starts typing manually
-                            if case .error = vm.banner {
-                                vm.banner = .none
+                            // Clear message when user starts typing
+                            if !vm.statusMessage.isEmpty {
+                                vm.statusMessage = ""
                             }
                         }
 
@@ -381,21 +454,6 @@ struct LogInPageView: View
                     .foregroundColor(AppPalette.Brand.neonPink)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.top, 8)
-
-                    // Remember me / Face ID
-                    Toggle(isOn: $vm.rememberMe) {
-                        Label("Remember me", systemImage: "key.fill")
-                    }
-                    .tint(AppPalette.Brand.neonPink)
-                    .foregroundStyle(.white.opacity(0.9))
-
-                    Toggle(isOn: $vm.useBiometrics) {
-                        Label("Protect with Face ID", systemImage: "faceid")
-                    }
-                    .tint(AppPalette.Brand.neonPink)
-                    .foregroundStyle(.white.opacity(0.9))
-                    .disabled(!vm.rememberMe)
-                    .opacity(vm.rememberMe ? 1.0 : 0.6)
                     
                     // Clear form button for testing
                     Button("Clear Form") {
@@ -485,6 +543,16 @@ struct LogInPageView: View
         }
         .sheet(isPresented: $showForgotPassword) {
             ForgotPasswordView()
+        }
+        .alert("Use Face ID for faster sign in?", isPresented: $vm.shouldOfferBiometrics) {
+            Button("Not Now") {
+                vm.setupBiometrics(enable: false)
+            }
+            Button("Use Face ID") {
+                vm.setupBiometrics(enable: true)
+            }
+        } message: {
+            Text("Securely sign in with Face ID instead of typing your password each time.")
         }
     }
 }
