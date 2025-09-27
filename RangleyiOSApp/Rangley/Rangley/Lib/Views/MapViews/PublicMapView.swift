@@ -20,6 +20,8 @@
 // TODO: - AWS change username, change display name, wire the account settings to have all of that shit
 // TODO: - meet invitaiton should be single repsonsiblity (maybe give leaveMeet or left meet new one
 // TODO: - Out of App Notifcations???
+// TODO: - Extermely important need to make sure we're not always refetching all the data... need to use cache
+// TODO: - ^^ and only grab the meet affected to what we were updating. 
 // MARK: - V2
 // MARK: - IGNORE THE ABOVE TODOs FOR NOW
 // ==========================================================================================================
@@ -128,25 +130,44 @@ class MapDataStore: ObservableObject
         await loadMeets()
     }
     
+    private func silentRefresh() async {
+        do {
+            let newMeets = try await apiService.fetchMeets()
+            
+            withAnimation(.none) {
+                meets = newMeets
+                
+                if let currentSelected = selectedMeet {
+                    selectedMeet = newMeets.first { $0.meet_id_uuid == currentSelected.meet_id_uuid }
+                }
+            }
+            
+            lastRefreshTime = Date()
+            
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+    
     func createMeet(_ body: MeetInsertBody) async throws {
         try await apiService.createMeet(body)
-        await forceRefresh()
+        await silentRefresh()
     }
     
     func createMeetWithInvites(_ body: MeetWithInvitesInsertBody) async throws {
         try await apiService.createMeetWithInvites(body)
-        await forceRefresh()
+        await silentRefresh()
     }
     
     func updateMeet(_ body: UpdatedMeetInsertBody) async throws {
         try await apiService.updateMeet(body)
-        await forceRefresh()
+        await silentRefresh()
     }
     
     func deleteMeet(_ meetId: UUID) async throws {
         let deleteBody = DeletedMeetInsertBody(meet_id_uuid: meetId)
         try await apiService.deleteMeet(deleteBody)
-        await forceRefresh()
+        await silentRefresh()
         
         if selectedMeet?.meet_id_uuid == meetId {
             selectedMeet = nil
@@ -155,25 +176,21 @@ class MapDataStore: ObservableObject
     
     func leaveMeet(_ meetId: UUID) async throws {
         try await apiService.leaveMeet(meetId)
-        await forceRefresh()
+        await silentRefresh()
         
         if selectedMeet?.meet_id_uuid == meetId {
             selectedMeet = nil
         }
     }
     
-    func removeParticipant(meetId: UUID, participantId: UUID) async throws {
+    func removeParticipant(meetId: UUID, participantId: UUID, currentUserId: UUID? = nil) async throws {
         try await apiService.removeParticipant(meetId: meetId, participantId: participantId)
-        await forceRefresh()
-        
-        if selectedMeet?.meet_id_uuid == meetId {
-            selectedMeet = nil
-        }
+        await silentRefresh()
     }
     
     func inviteUsersToMeet(meetId: UUID, userIds: [UUID]) async throws {
         try await apiService.inviteUsersToMeet(meetId: meetId, userIds: userIds)
-        await forceRefresh()
+        await silentRefresh()
     }
 }
 

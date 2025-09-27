@@ -146,7 +146,7 @@ BEGIN
             RAISE NOTICE 'Inviting user % would exceed capacity %', v_user_id, v_max_capacity;
         END IF;
 
-        -- insert / re-invite with proper timestamps
+		-- insert / re-invite with proper timestamps
         INSERT INTO rangley.tb_meet_participants(meet_id, user_id, participant_status_id, dttm_invited_utc)
         VALUES (p_meet_id, v_user_id, v_invited_status_id, now())
         ON CONFLICT (meet_id, user_id)
@@ -157,31 +157,38 @@ BEGIN
             dttm_left_utc = NULL,
             dttm_modified_utc = now();
 
-        -- notification
-        INSERT INTO rangley.tb_notifications (notification_type_id, meet_id, created_by_user_id, payload_json)
-        VALUES (
-            v_notification_type_id,
-            p_meet_id,
-            p_inviter_user_id,
-            jsonb_build_object(
-                'meet_id_uuid', v_meet_uuid,
-                'meet_name', v_meet_name,
-                'meet_start', v_meet_start,
-                'meet_end', v_meet_end,
-                'meet_location', jsonb_build_object('latitude', v_lat, 'longitude', v_lon),
-                'category_name', v_category_name,
-                'invited_by_display_name', v_inviter_display_name,
-                'invited_by_username', v_inviter_username,
-                'invitation_message', p_invitation_message,
-                'action_required', 'respond_to_invitation'
+        -- Only create notification for NEW invitations, not re-invitations
+        IF v_existing_status IS NULL THEN
+            -- This is a brand new invitation - create notification
+            INSERT INTO rangley.tb_notifications (notification_type_id, meet_id, created_by_user_id, payload_json)
+            VALUES (
+                v_notification_type_id,
+                p_meet_id,
+                p_inviter_user_id,
+                jsonb_build_object(
+                    'meet_id_uuid', v_meet_uuid,
+                    'meet_name', v_meet_name,
+                    'meet_start', v_meet_start,
+                    'meet_end', v_meet_end,
+                    'meet_location', jsonb_build_object('latitude', v_lat, 'longitude', v_lon),
+                    'category_name', v_category_name,
+                    'invited_by_display_name', v_inviter_display_name,
+                    'invited_by_username', v_inviter_username,
+                    'invitation_message', p_invitation_message,
+                    'action_required', 'respond_to_invitation'
+                )
             )
-        )
-        RETURNING notification_id INTO v_notification_id;
+            RETURNING notification_id INTO v_notification_id;
 
-        INSERT INTO rangley.tb_user_inboxes (user_id, notification_id)
-        VALUES (v_user_id, v_notification_id);
-
-        RETURN QUERY SELECT v_user_id, v_username, 'invited'::TEXT, v_notification_id;
+            INSERT INTO rangley.tb_user_inboxes (user_id, notification_id)
+            VALUES (v_user_id, v_notification_id);
+            
+            RETURN QUERY SELECT v_user_id, v_username, 'invited'::TEXT, v_notification_id;
+        ELSE
+            -- This is a re-invitation (they declined/left before) - no notification spam
+            v_notification_id := NULL;
+            RETURN QUERY SELECT v_user_id, v_username, 're_invited'::TEXT, NULL::BIGINT;
+        END IF;
     END LOOP;
 
     RETURN;
