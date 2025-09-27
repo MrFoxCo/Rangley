@@ -295,10 +295,7 @@ struct MeetCreationFormByTapView: View
 
                     case .startTime:
                         VStack(spacing: 16) {
-                            DatePicker("", selection: $startTime, displayedComponents: [.date, .hourAndMinute])
-                                .datePickerStyle(.wheel)
-                                .labelsHidden()
-                                .tint(AppPalette.Brand.neonPink)
+                            ThemedDatePicker(selection: $startTime)
                                 .frame(height: 200)
                                 .padding(.horizontal, 8)
                                 .background(
@@ -310,22 +307,24 @@ struct MeetCreationFormByTapView: View
                                         )
                                 )
                         }
+                        .foregroundColor(AppPalette.Text.primary)
                         .padding(.horizontal, 24)
 
                     case .endTime:
                         VStack(spacing: 16) {
-                            DatePicker("", selection: $endTime, in: startTime..., displayedComponents: [.date, .hourAndMinute])
-                                .datePickerStyle(.wheel)
-                                .labelsHidden()
-                                .tint(AppPalette.Brand.neonPink)
-                                .frame(height: 200)
-                                .padding(.horizontal, 8)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .fill(AppPalette.Surface.fieldFill)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 12)
-                                                .stroke(AppPalette.Surface.fieldStroke, lineWidth: 3)
+                            ThemedDatePicker(
+                                selection: $endTime,
+                                minimumDate: startTime,
+                                maximumDate: nil
+                            )
+                            .frame(height: 200)
+                            .padding(.horizontal, 8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(AppPalette.Surface.fieldFill)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(AppPalette.Surface.fieldStroke, lineWidth: 3)
                                         )
                                 )
 
@@ -335,6 +334,7 @@ struct MeetCreationFormByTapView: View
                                     .foregroundColor(AppPalette.Brand.neonPink)
                             }
                         }
+                        .foregroundColor(AppPalette.Text.primary)
                         .padding(.horizontal, 24)
 
                     case .inviteFriends:

@@ -445,11 +445,7 @@ struct MeetCreationUnifiedFormView: View
     private var startTimeStepContent: some View
     {
         VStack(spacing: 16) {
-            DatePicker("", selection: $vm.start, displayedComponents: [.date, .hourAndMinute])
-                .datePickerStyle(.wheel)
-                .labelsHidden()
-                .tint(AppPalette.Brand.neonPink)
-                .colorScheme(.dark)
+            ThemedDatePicker(selection: $vm.start)
                 .frame(height: 200)
                 .padding(.horizontal, 8)
                 .background(
@@ -461,27 +457,28 @@ struct MeetCreationUnifiedFormView: View
                         )
                 )
         }
+        .foregroundColor(AppPalette.Text.primary)
         .padding(.horizontal, 24)
     }
     
     private var endTimeStepContent: some View
     {
         VStack(spacing: 16) {
-            DatePicker("", selection: $vm.end, in: vm.start..., displayedComponents: [.date, .hourAndMinute])
-                .datePickerStyle(.wheel)
-                .labelsHidden()
-                .tint(AppPalette.Brand.neonPink)
-                .colorScheme(.dark)
-                .frame(height: 200)
-                .padding(.horizontal, 8)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(AppPalette.Surface.fieldFill)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
-                        )
-                )
+            ThemedDatePicker(
+                selection: $vm.end,
+                minimumDate: vm.start,
+                maximumDate: nil
+            )
+            .frame(height: 200)
+            .padding(.horizontal, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(AppPalette.Surface.fieldFill)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
+                    )
+            )
             
             if vm.end <= vm.start {
                 Text("End time must be after start time")
@@ -489,6 +486,7 @@ struct MeetCreationUnifiedFormView: View
                     .foregroundColor(AppPalette.Brand.neonPink)
             }
         }
+        .foregroundColor(AppPalette.Text.primary)
         .padding(.horizontal, 24)
     }
     

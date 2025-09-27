@@ -1093,7 +1093,6 @@ private struct DobStep: View
             DatePicker("", selection: $dob, displayedComponents: .date)
                 .labelsHidden()
                 .tint(AppPalette.Brand.neonPink)
-                .colorScheme(.dark)
                 .padding(.horizontal, 12).padding(.vertical, 12)
                 .background(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -1110,6 +1109,7 @@ private struct DobStep: View
 
             Spacer(minLength: 0)
         }
+        .foregroundColor(AppPalette.Text.primary)
         .padding(16)
     }
 }
