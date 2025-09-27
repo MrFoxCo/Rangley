@@ -31,6 +31,8 @@
 // TODO: -  ^^^^this is for first download or simply reopening the app... an ANYTIME open of the app load
 // TODO: - Cleanup jump from MyMeetsView to meetscard overlay
 // TODO: - Make sure KEYBOARDS ARE ALL THE SAME COLOR
+// TODO: - Add throttling for too many requests
+// TODO: - Add Technical Difficulties Page
 // MARK: - V2
 // MARK: - IGNORE THE ABOVE TODOs FOR NOW
 // ==========================================================================================================
@@ -42,7 +44,7 @@
 // ==========================================================================================================
 // MARK: - IGNORE THE BELOW TODOs FOR NOW
 // MARK: - V1
-// TODO: - Make sure KEYBOARDS ARE ALL THE SAME COLOR
+// TODO: - CANNOT INVITE PARTICPANTS THAT AREA ALREADY IN THE MEET or have already been invited...
 // MARK: - V1
 // MARK: - IGNORE THE ABOVE TODOs FOR NOW
 // ==========================================================================================================
@@ -491,6 +493,10 @@ class UIStateStore: ObservableObject
     @Published var meetToEdit       : ViewMeetsModel?
     @Published var selectedLocation : LocationInfo?
 
+    // TUTORIAL Objects
+    @Published var showTutorial = false
+    @Published var tutorialStep = 0
+    @Published var shouldShowTutorialWhenReady = false
     
     // Day/Night theme
     @Published var isDaylight = true
@@ -515,11 +521,63 @@ class UIStateStore: ObservableObject
     
     private var cancellables = Set<AnyCancellable>()
     
+    private func checkTutorialDisplay() {
+        if shouldShowTutorialWhenReady && canShowTutorial {
+            shouldShowTutorialWhenReady = false
+            startTutorial()
+        }
+    }
+    
     func dismissAllOverlays() {
-        showLocationPopup   = false
-        showMeetOverlay     = false
-        showCreateForm      = false
-        showUpdateOverlay   = false
+        showLocationPopup = false
+        showMeetOverlay = false
+        showCreateForm = false
+        showUpdateOverlay = false
+        checkTutorialDisplay()
+    }
+    
+    // Tutorial state checks
+    var hasActiveOverlays: Bool {
+        showLocationPopup || showMeetOverlay || showCreateForm || showUpdateOverlay || showTutorial
+    }
+    
+    var canShowTutorial: Bool {
+        !showLocationPopup && !showMeetOverlay && !showCreateForm && !showUpdateOverlay
+    }
+    
+    // Tutorial control methods
+    func dismissAllIncludingTutorial() {
+        dismissAllOverlays()
+        showTutorial = false
+        tutorialStep = 0
+    }
+    
+    func startTutorial() {
+        // CRITICAL FIX: Check if user has already seen tutorial
+        guard !UserDefaults.standard.bool(forKey: "hasSeenTutorial") else { return }
+        guard canShowTutorial else {
+            // If we can't show now, mark to show when ready
+            shouldShowTutorialWhenReady = true
+            return
+        }
+        tutorialStep = 0
+        showTutorial = true
+    }
+    
+    func nextTutorialStep() {
+        let maxSteps = TutorialConfig.steps.count - 1
+        if tutorialStep < maxSteps {
+            tutorialStep += 1
+        } else {
+            completeTutorial()
+        }
+    }
+    
+    func completeTutorial() {
+        UserDefaults.standard.set(true, forKey: "hasSeenTutorial")
+        showTutorial = false
+        tutorialStep = 0
+        shouldShowTutorialWhenReady = false // Clear the flag
     }
 }
 
@@ -591,6 +649,8 @@ public struct PublicMapView: View
     @Namespace private var meetNS
     @State private var tapTask: Task<Void, Never>?
     @State private var meetCreationMode: MeetCreationEntryMode?
+    
+    @StateObject private var tutorialStore = TutorialStore()
 
 
     public var body: some View
@@ -627,6 +687,7 @@ public struct PublicMapView: View
     private var content: some View
     {
         ZStack {
+
             MapView(
                 mapData: mapData,
                 locationData: locationData,
@@ -640,6 +701,7 @@ public struct PublicMapView: View
                 locationData: locationData,
                 uiState: uiState,
                 authState: authState,
+                tutorialStore: tutorialStore,
                 meetNS: meetNS,
                 authToken: authState.currentToken,
                 meetCreationMode: $meetCreationMode
@@ -655,6 +717,13 @@ public struct PublicMapView: View
         }
         .environment(\.colorScheme, uiState.isDaylight ? .light : .dark)
         .task {
+            // Check if tutorial should show on first launch
+            if tutorialStore.checkShouldShowTutorial() {
+                // Delay to allow UI to settle
+                try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+                uiState.startTutorial()
+            }
+            
             locationData.onSignificantLocationChange = {
                 await mapData.loadMeets()
             }
@@ -753,13 +822,16 @@ struct OverlaysView: View
     @ObservedObject var locationData: LocationDataStore
     @ObservedObject var uiState: UIStateStore
     @ObservedObject var authState: AuthStateStore  // Add this parameter
+    @ObservedObject var tutorialStore: TutorialStore  // Add this parameter
+    
     let meetNS: Namespace.ID
     let authToken: String
     @Binding var meetCreationMode: MeetCreationEntryMode?
     
     var body: some View
     {
-        ZStack {
+        ZStack
+        {
             // Meet Creation Overlay (Unified)
             MeetCreationUnifiedOverlay(
                 showOverlay: $uiState.showLocationPopup,
@@ -812,14 +884,18 @@ struct OverlaysView: View
                 }
             )
             // Add this to the ZStack in OverlaysView body
-           MeetUpdateUnifiedOverlay(
+            MeetUpdateUnifiedOverlay(
             showOverlay: $uiState.showUpdateOverlay,
             meetToEdit: $uiState.meetToEdit,
                onUpdate: { body in
                    try await mapData.updateMeet(body)
                },
                onLoadMeets: { await mapData.loadMeets() }
-           )
+            )
+            
+            SimpleTutorialOverlay(uiState: uiState)
+            
+            
             // Loading Overlay
             if mapData.isLoading {
                 LoadingOverlay()
@@ -1005,26 +1081,30 @@ struct ControlsView: View
     }
 }
 
-// TODO: - we need to add the hiide everything 
-// TODO: - FIX THIS IT HAS NO DESIGN
-// MARK: - Loading Overlay
+// MARK: - Minimal Loading Overlay
 struct LoadingOverlay: View
 {
-    var body: some View
-    {
-        Color(AppPalette.Brand.japPurple)
-            .ignoresSafeArea()
-        
+    var body: some View {
         VStack {
-            ProgressView()
-                .scaleEffect(1.5)
-                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-            Text("Loading meets...")
-                .foregroundColor(.white)
-                .padding(.top, 8)
+            Spacer()
+            HStack {
+                Spacer()
+                ProgressView()
+                    .scaleEffect(1.2)
+                    .progressViewStyle(CircularProgressViewStyle(tint: AppPalette.Brand.neonPink))
+                    .padding()
+                    .background(
+                        Circle()
+                            .fill(.regularMaterial)
+                            .shadow(radius: 4)
+                    )
+                Spacer()
+            }
+            .padding(.bottom, 120) // Above dock
         }
     }
 }
+
 
 // TODO: - is this being used?
 private func tapHitsAnnotation(_ proxy: MapProxy, _ pt: CGPoint, meets: [ViewMeetsModel]) -> Bool
@@ -1041,4 +1121,3 @@ private func tapHitsAnnotation(_ proxy: MapProxy, _ pt: CGPoint, meets: [ViewMee
     }
     return false
 }
-
