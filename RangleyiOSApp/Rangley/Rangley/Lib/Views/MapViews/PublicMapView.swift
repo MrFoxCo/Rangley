@@ -34,6 +34,7 @@
 // TODO: - Add throttling for too many requests
 // TODO: - Add Technical Difficulties Page
 // TODO: - Fix key chain so it's not so ugly
+// TODO: - Consider adding other POI's to the map
 // MARK: - V2
 // MARK: - IGNORE THE ABOVE TODOs FOR NOW
 // ==========================================================================================================
@@ -826,6 +827,35 @@ struct MapView: View
                     }
                     UserAnnotation()
                 }
+                .mapStyle(.standard(
+                    elevation: .flat,           // Eliminates 3D rendering entirely
+                    emphasis: .muted,           // Reduces visual complexity
+                    pointsOfInterest: .including([
+                        .restaurant,
+                        .cafe,
+                        .park,
+                        .publicTransport,
+                        .parking,
+                        .stadium,
+                        .hospital,
+                        .university,
+                        .foodMarket,
+                        .nightlife,           // This covers bars/clubs
+                        .brewery,              // If available
+                        .fitnessCenter,      // Covers gyms
+                        .golf,               // Golf courses
+                        .beach,              // Beaches
+                        .tennis,
+                        .museum,
+                        .aquarium,
+                        .skatePark,
+                        .amusementPark,
+                        .baseball,
+                        .basketball,
+                        .atm,
+                    ]),
+                    showsTraffic: false         // Disables traffic overlay rendering
+                ))
                 .mapControls {
                     // Don't include MapCompass() - this removes it
                 }
@@ -1121,7 +1151,8 @@ struct ControlsView: View
 
 
 // MARK: - Minimal Loading Overlay
-struct LoadingOverlay: View {
+struct LoadingOverlay: View
+{
     var body: some View {
         VStack {
             HStack {

@@ -13,20 +13,19 @@ struct AppPalette
 {
     struct Brand
     {
-        static let neonPink         = Color(hex: "#FF007D")
-        static let russianViolet    = Color(hex: "#2E003E") // Russian violet Phtalo #1A002A Gunmetal Plum #1C0B1C
-        static let gunmetalPlum     = Color(hex: "#1C0B1C")
-        static let phthaloViolet    = Color(hex: "#1A002A")
-        static let obsidianViolet   = Color(hex: "#120017")
-        static let japPurple        = Color(hex: "#452A83")
-        static let japDarkerPurple  = Color(hex: "#3C177B")
-        static let formBlack        = Color(hex: "#141416")
-        static let nearBlack        = Color(hex: "#0A0A0A")
+        // MARK: apps primary theme
+        static let neonPink         = Color(hex: "#FF007D") // much of the outlines and button colors
+        static let japPurple        = Color(hex: "#452A83") // used for text boxes
+        static let japDarkerPurple  = Color(hex: "#3C177B") // used for most backgrounds
+        static let formBlack        = Color(hex: "#141416") // search users/meets button and my meets view bg
+        static let nearBlack        = Color(hex: "#0A0A0A") // deprecated
+        static let russianViolet    = Color(hex: "#2E003E") // deprecated kinda i think
+        // MARK: apps primary theme ^^^
         
         static let electricViolet   = Color(hex: "#4B0082")
         static let violetMid        = Color(hex: "#23003E")
         static let blueMid          = Color(hex: "#0F4C81") // figure out what color this is
-        static let pigNeonPink      = Color(hex: "#FF007D")
+        static let pigNeonPink      = Color(hex: "#FF007D") // ooccasionally used
         static let coolBlue         = Color(hex: "#0A719D")
         static let warmPurple       = Color(hex: "#4A1A4A")
         static let brightTeal       = Color(hex: "#00CED1")
