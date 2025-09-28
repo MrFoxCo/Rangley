@@ -196,18 +196,20 @@ private final class RegisterVM: ObservableObject
 
     // MARK: - Navigation / Reducer-ish methods
 
-    // MARK: - Updated navigation methods in RegisterVM
-    func back() {
+
+    // MARK: - Updated navigation methods to include phone verification
+    func back()
+    {
         switch flow {
         case .collecting(let step):
             switch step {
             case .cellphone: break
             case .verifyPhone: flow = .collecting(.cellphone)
-            case .display: flow = .collecting(.cellphone)  // Skip verification, go back to cellphone
+            case .display: flow = .collecting(.verifyPhone(phone: e164Phone ?? ""))  // Go back to verification
             case .username: flow = .collecting(.display)
             case .dob: flow = .collecting(.username)
-            case .password: flow = .collecting(.dob)  // Password comes after DOB now
-            case .agree: flow = .collecting(.password)  // Agree comes after password
+            case .password: flow = .collecting(.dob)
+            case .agree: flow = .collecting(.password)
             case .saveCredentials: flow = .collecting(.agree)
             case .done: break
             }
@@ -218,22 +220,23 @@ private final class RegisterVM: ObservableObject
 
     func advanceFromCellphone() {
         if canAdvanceFromCellphone {
-            flow = .collecting(.display)  // Go to display first
+            // Send verification code and advance to verification step
+            Task { await sendPhoneVerification() }
         }
     }
 
     
     func advanceFromIdChooser() {
         if self.canAdvanceFromCellphone {
-            flow = .collecting(.display)  // Go to display first
+            // Send verification code and advance to verification step
+            Task { await sendPhoneVerification() }
         } else {
             Log.auth.debug("advanceFromIdChooser: invalid phone \(self.form.phoneRaw, privacy: .private)")
         }
     }
     
-    // Replace the placeholder sendPhoneVerification method in RegisterVM
-    func sendPhoneVerification() async
-    {
+    // MARK: - Phone verification methods
+    func sendPhoneVerification() async {
         guard let phone = e164Phone else { return }
         
         isBusy = true
@@ -269,7 +272,7 @@ private final class RegisterVM: ObservableObject
             )
             
             if response.verified {
-                flow = .collecting(.password)
+                flow = .collecting(.display)  // Go to display name after verification
                 verifyStatus = .success("Phone verified!")
                 // Clear the success after transition
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
@@ -282,19 +285,19 @@ private final class RegisterVM: ObservableObject
             verifyStatus = .error("Verification failed")
         }
     }
-    
+
     func resendVerificationCode() async
     {
-        guard case .collecting(.verifyPhone(_)) = flow else { return }
+        guard case .collecting(.verifyPhone(let phone)) = flow else { return }
         
         isResending = true
         verifyStatus = .none
         defer { isResending = false }
         
         do {
-            let handle = normalizedHandle()
-            _ = try await auth.resendSignUpCode(for: handle)
-            verifyStatus = .info("New code sent")
+            // Resend using the same phone verification API
+            try await AuthAPI.sendVerificationCode(baseURL: baseURL, phone: phone)
+            verifyStatus = .info("New code sent to \(phone)")
         } catch {
             verifyStatus = .error("Couldn't resend the code. Please try again")
         }
@@ -680,6 +683,7 @@ struct UserRegisterFlow: View
             }
    }
 
+    // MARK: - Updated view builder to include phone verification step
     @ViewBuilder
     private var content: some View {
         switch vm.flow {
@@ -757,8 +761,7 @@ struct UserRegisterFlow: View
         }
     }
 
-    private var canGoBack: Bool
-    {
+    private var canGoBack: Bool {
         switch vm.flow {
         case .collecting(let step):
             return step != .cellphone && step != .saveCredentials

@@ -33,6 +33,7 @@
 // TODO: - Make sure KEYBOARDS ARE ALL THE SAME COLOR
 // TODO: - Add throttling for too many requests
 // TODO: - Add Technical Difficulties Page
+// TODO: - Fix key chain so it's not so ugly
 // MARK: - V2
 // MARK: - IGNORE THE ABOVE TODOs FOR NOW
 // ==========================================================================================================
@@ -45,7 +46,6 @@
 // MARK: - IGNORE THE BELOW TODOs FOR NOW
 // MARK: - V1
 // TODO: - NEED TO FIX THE FUCKING locaiton bubble it's not shrinking
-// TODO: - Username Spot Check
 // MARK: - V1
 // MARK: - IGNORE THE ABOVE TODOs FOR NOW
 // ==========================================================================================================
