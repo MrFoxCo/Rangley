@@ -570,12 +570,10 @@ struct AuthAPI
     }
     
     
-    // Corresponds to SystemInsertUpdatedMeet in VAPOR
-    static func updateMeet(baseURL: URL,
-                           token: String, body: UpdatedMeetInsertBody) async throws -> UpdatedMeetInsertResponse
+    static func updateMeet(baseURL: URL, token: String, body: UpdatedMeetInsertBody)
+        async throws -> UpdatedMeetInsertResponse
     {
-        guard body.isCoordinateSetValid else
-        {
+        guard body.isCoordinateSetValid else {
             throw AuthAPIError.http(400, "Provide all 5 coordinate fields or none")
         }
 
@@ -587,26 +585,31 @@ struct AuthAPI
         req.httpBody = try isoEncoder.encode(body)
 
         let (data, resp) = try await URLSession.shared.data(for: req)
-        guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
-        guard (200..<300).contains(http.statusCode) else {
-            #if DEBUG
-            print("=== Meet Update Failed ===")
-            print("Status Code: \(http.statusCode)")
-            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
-            #endif
-            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        guard let http = resp as? HTTPURLResponse else {
+            throw AuthAPIError.http(-1, "No HTTPURLResponse")
         }
         
-        do {
-            return try JSONDecoder().decode(UpdatedMeetInsertResponse.self, from: data)
-        } catch {
-            #if DEBUG
-            print("=== Decode Error in updateMeet ===")
-            print("Error: \(error)")
-            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
-            #endif
-            throw AuthAPIError.decode(error.localizedDescription)
+        // Handle success responses (200) - may contain validation failures
+        if (200..<300).contains(http.statusCode) {
+            do {
+                return try JSONDecoder().decode(UpdatedMeetInsertResponse.self, from: data)
+            } catch {
+                #if DEBUG
+                print("=== Decode Error in updateMeet ===")
+                print("Error: \(error)")
+                print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+                #endif
+                throw AuthAPIError.decode(error.localizedDescription)
+            }
         }
+        
+        // Handle error responses (non-200)
+        #if DEBUG
+        print("=== Meet Update Failed ===")
+        print("Status Code: \(http.statusCode)")
+        print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+        #endif
+        throw AuthAPIError.http(http.statusCode, extractReason(from: data))
     }
     
     
