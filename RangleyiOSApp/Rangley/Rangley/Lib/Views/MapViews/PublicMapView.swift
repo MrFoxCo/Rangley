@@ -44,7 +44,8 @@
 // ==========================================================================================================
 // MARK: - IGNORE THE BELOW TODOs FOR NOW
 // MARK: - V1
-// TODO: - CANNOT INVITE PARTICPANTS THAT AREA ALREADY IN THE MEET or have already been invited...
+// TODO: - NEED TO FIX THE FUCKING locaiton bubble it's not shrinking
+// TODO: - Username Spot Check
 // MARK: - V1
 // MARK: - IGNORE THE ABOVE TODOs FOR NOW
 // ==========================================================================================================

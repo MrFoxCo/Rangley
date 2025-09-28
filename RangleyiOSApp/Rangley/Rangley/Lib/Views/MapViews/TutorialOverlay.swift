@@ -35,7 +35,7 @@ struct TutorialConfig {
         ),
         TutorialStepData(
             title: "Find Friends",
-            description: "Hit the (⌕) search to look up friends or explore meets."
+            description: "Hit the (magnifying-glass) to look up friends or explore meets."
         ),
         TutorialStepData(
             title: "Your Meets",
@@ -43,7 +43,7 @@ struct TutorialConfig {
         ),
         TutorialStepData(
             title: "Settings",
-            description: "Tap the menu (☰) in the top right for your account and app settings."
+            description: "Tap the menu (☰) in the dock for your account and app settings."
         ),
         TutorialStepData(
             title: "All Set!",

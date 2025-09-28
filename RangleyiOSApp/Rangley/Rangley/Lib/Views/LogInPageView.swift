@@ -379,7 +379,7 @@ struct LogInPageView: View
                     // === USERNAME ===
                     TextField("",
                               text: $vm.principalRaw,
-                              prompt: Text("Phone, email, or username").foregroundStyle(.white.opacity(0.95)))
+                              prompt: Text("Phone or username").foregroundStyle(.white.opacity(0.95)))
                         .textFieldStyle(.plain)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()

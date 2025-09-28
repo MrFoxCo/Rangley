@@ -43,6 +43,8 @@ enum RangleyFunc: String
     case m_update_participant_status               = "rangley.rangley_fn_m_update_participant_status"
     case i_additional_participants_to_meet         = "rangley.rangley_fn_i_additional_participants_to_meet_by_meet_id_uuid"
     case v_app_version                             = "rangley.rangley_fn_v_app_version"
+    case check_username_availability    = "rangley.rgl_fn_check_username_availability"
+    case validate_display_name          = "rangley.rgl_fn_validate_display_name"
 }
 
 // MARK: - Generic call shapes
@@ -1004,6 +1006,111 @@ enum Func
         
     }
 
+    
+    enum CheckUsernameAvailability: PgFunctionRow
+    {
+        static let funcName: RangleyFunc = .check_username_availability
+
+        struct In: Content, Sendable
+        {
+            let username: String
+        }
+
+        struct Results: Content, Sendable
+        {
+            let available: Bool
+            let reason: String
+            let message: String
+        }
+
+        static func query(_ input: In) -> SQLQueryString
+        {
+            "SELECT \(unsafeRaw: funcName.rawValue)(\(bind: input.username)::TEXT) as result;"
+        }
+
+        static func decode(_ r: any SQLRow) throws -> Results
+        {
+            // The function returns JSON, so we need to decode it
+            let jsonData = try r.decode(column: "result", as: Data.self)
+            let jsonResponse = try JSONDecoder().decode(JSONResponse.self, from: jsonData)
+            
+            return Results(
+                available: jsonResponse.available,
+                reason: jsonResponse.reason,
+                message: jsonResponse.message
+            )
+        }
+        
+        // Helper struct for JSON decoding
+        private struct JSONResponse: Codable
+        {
+            let available: Bool
+            let reason: String
+            let message: String
+        }
+        
+        // Convenience method
+        static func call(on db: any SQLDatabase, username: String) async throws -> Results {
+            try await call(on: db, In(username: username))
+        }
+    }
+
+    enum ValidateDisplayName: PgFunctionRow
+    {
+        static let funcName: RangleyFunc = .validate_display_name
+
+        struct In: Content, Sendable
+        {
+            let display_name: String
+        }
+
+        struct Results: Content, Sendable
+        {
+            let valid: Bool
+            let reason: String
+            let message: String
+        }
+
+        static func query(_ input: In) -> SQLQueryString
+        {
+            "SELECT \(unsafeRaw: funcName.rawValue)(\(bind: input.display_name)::TEXT) as result;"
+        }
+
+        static func decode(_ r: any SQLRow) throws -> Results
+        {
+            // The function returns JSON, so we need to decode it
+            let jsonData = try r.decode(column: "result", as: Data.self)
+            let jsonResponse = try JSONDecoder().decode(JSONResponse.self, from: jsonData)
+            
+            return Results(
+                valid: jsonResponse.valid,
+                reason: jsonResponse.reason,
+                message: jsonResponse.message
+            )
+        }
+        
+        // Helper struct for JSON decoding
+        private struct JSONResponse: Codable
+        {
+            let valid: Bool
+            let reason: String
+            let message: String
+        }
+        
+        // Convenience method
+        static func call(on db: any SQLDatabase, displayName: String) async throws -> Results {
+            try await call(on: db, In(display_name: displayName))
+        }
+    }
+
+    // You'll also need to add these to your RangleyFunc enum:
+    /*
+    extension RangleyFunc {
+        static let fn_check_username_availability = RangleyFunc(rawValue: "fn_check_username_availability")
+        static let fn_validate_display_name = RangleyFunc(rawValue: "fn_validate_display_name")
+    }
+    */
+    
     // =========================================================
     // MARK: - END Transaction Level Meet View
     // =========================================================

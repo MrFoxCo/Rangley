@@ -364,6 +364,47 @@ public func routes(_ app: Application) throws
         return try await Func.ViewAppVersion.fetchAll(on: sql, Func.ViewAppVersion.In(app_version: appVersion))
     }
     
+    publicAuth.get("validate", "display-name")
+    {
+        req async throws -> Func.ValidateDisplayName.Results in
+        
+        guard let displayName = req.query[String.self, at: "display_name"] else {
+            throw Abort(.badRequest, reason: "Missing display_name query parameter")
+        }
+
+        guard let sql = req.db as? any SQLDatabase
+        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+
+        do {
+            let result = try await Func.ValidateDisplayName.call(on: sql, displayName: displayName)
+            return result
+            
+        } catch let error as PSQLError {
+            req.logger.error("Database error validating display name: \(error)")
+            throw Abort(.internalServerError, reason: "Failed to validate display name")
+        }
+    }
+
+    publicAuth.get("check", "username-availability")
+    {
+        req async throws -> Func.CheckUsernameAvailability.Results in
+        
+        guard let username = req.query[String.self, at: "username"] else {
+            throw Abort(.badRequest, reason: "Missing username query parameter")
+        }
+
+        guard let sql = req.db as? any SQLDatabase
+        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+
+        do {
+            let result = try await Func.CheckUsernameAvailability.call(on: sql, username: username)
+            return result
+            
+        } catch let error as PSQLError {
+            req.logger.error("Database error checking username availability: \(error)")
+            throw Abort(.internalServerError, reason: "Failed to check username availability")
+        }
+    }
 
     // MARK: - END INSERTS (i_*) or POST ROUTES
     
@@ -758,7 +799,7 @@ public func routes(_ app: Application) throws
         return try await Proc.SystemDeleteUser.call(on: sql, params, outputPlaceholder)
     }
     
-    
+
 
     // MARK: - END System INSERTS (s*) or POST ROUTES
     

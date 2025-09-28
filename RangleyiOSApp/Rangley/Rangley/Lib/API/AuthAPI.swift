@@ -354,6 +354,91 @@ struct AuthAPI
             throw AuthAPIError.decode(error.localizedDescription)
         }
     }
+    
+    
+    // GET /auth/check  (protected; Bearer ID token)
+    static func checkUsernameAvailability(baseURL: URL, body: CheckUsernameAvailabilityModelBody)
+        async throws -> CheckUsernameAvailabilityModelResponse
+    {
+        // URL encode the username parameter
+        guard let encodedUsername = body.username.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
+            throw AuthAPIError.decode("Invalid username characters")
+        }
+        
+        let urlString = makeURL(baseURL, ["auth", "check", "username-availability"]).absoluteString + "?username=\(encodedUsername)"
+        guard let url = URL(string: urlString) else {
+            throw AuthAPIError.decode("Invalid URL")
+        }
+        
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
+        guard (200..<300).contains(http.statusCode) else {
+            #if DEBUG
+            print("=== Username Check Failed ===")
+            print("Status Code: \(http.statusCode)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        }
+        
+        do {
+            return try isoDecoder.decode(CheckUsernameAvailabilityModelResponse.self, from: data)
+        } catch {
+            #if DEBUG
+            print("=== Decode Error in username check ===")
+            print("Error: \(error)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.decode(error.localizedDescription)
+        }
+    }
+
+    // GET /validate/display-name?display_name=... (public endpoint)
+    static func validateDisplayName(baseURL: URL, body: ValidateDisplayNameModelBody)
+        async throws -> ValidateDisplayNameModelResponse
+    {
+        // URL encode the display name parameter
+        guard let encodedDisplayName = body.display_name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
+            throw AuthAPIError.decode("Invalid display name characters")
+        }
+        
+        let urlString = makeURL(baseURL, ["auth", "validate", "display-name"]).absoluteString + "?display_name=\(encodedDisplayName)"
+        guard let url = URL(string: urlString) else {
+            throw AuthAPIError.decode("Invalid URL")
+        }
+        
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
+        guard (200..<300).contains(http.statusCode) else {
+            #if DEBUG
+            print("=== Display Name Validation Failed ===")
+            print("Status Code: \(http.statusCode)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        }
+        
+        do {
+            return try isoDecoder.decode(ValidateDisplayNameModelResponse.self, from: data)
+        } catch {
+            #if DEBUG
+            print("=== Decode Error in display name validation ===")
+            print("Error: \(error)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.decode(error.localizedDescription)
+        }
+    }
+
+    
 
     
     // MARK: - Optional debug helper (pretty raw JSON)
