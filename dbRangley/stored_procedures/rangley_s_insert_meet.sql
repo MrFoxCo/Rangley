@@ -33,6 +33,7 @@ DECLARE
 	new_meet_id          	INT8;
 	new_meet_coordinate_id 	INT8;          
 	v_new_meet_id_uuid        UUID;
+    v_validation_result         JSON;
 BEGIN
     -- OUT sentinel
     num_inserted           := 0;
@@ -75,13 +76,28 @@ BEGIN
           HINT='Ensure the user exists in tb_users and the sub is correct.';
     END IF;
 
+    -- ===== Content validation - validate meet content for illegal activities
+    SELECT rangley.rgl_fn_validate_meet_content(p_name, created_by_user_id, p_description)
+      INTO v_validation_result;
+
+    -- Check if content validation failed
+    IF (v_validation_result->>'valid')::boolean = FALSE THEN
+        RAISE EXCEPTION USING
+          ERRCODE='23514',
+          MESSAGE=format('[ERRO] Meet content validation failed: %s', v_validation_result->>'message'),
+          DETAIL=format('reason=%s name=%s description=%s', 
+                       v_validation_result->>'reason', p_name, p_description),
+          HINT='Please review the meet name and description for inappropriate content.';
+    END IF;
+
+    RAISE LOG '[INFO] Content validation passed for meet creation by user_id=%', created_by_user_id;
+
     -- 1) create meet_id
     CALL rangley.rangley_i_meet_id(new_meet_id, created_by_user_id);
 
 	SELECT uuid INTO meet_id_uuid
 	FROM rangley.tb_meet_ids
 	WHERE meet_id = new_meet_id;
-
 
     -- 2) create meet_coordinate_id (has its own range/NULL checks)
     CALL rangley.rangley_i_meet_coordinate(
@@ -132,7 +148,6 @@ BEGIN
     )
     VALUES (new_meet_id, created_by_user_id, 7, now(), now())
     ON CONFLICT (meet_id, user_id) DO NOTHING;
-
 
     RAISE LOG '[INFO] Created meet_id=% with meet_coordinate_id=% (change_stamp=0) by user_id=%',
         new_meet_id, new_meet_coordinate_id, created_by_user_id;

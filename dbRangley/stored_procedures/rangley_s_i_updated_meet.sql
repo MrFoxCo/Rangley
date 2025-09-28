@@ -1,3 +1,4 @@
+-- Updated rangley_s_insert_updated_meet procedure with content validation
 CREATE OR REPLACE PROCEDURE rangley.rangley_s_insert_updated_meet
 (
     -- OUTs
@@ -56,6 +57,12 @@ DECLARE
     final_max_capacity      int4;
     final_dttm_start_utc    timestamptz;
     final_dttm_end_utc      timestamptz;
+
+    -- Content validation
+    content_validation      json;
+    content_valid           boolean;
+    content_reason          text;
+    content_message         text;
 
     _provided               int;
     _eps        float8 := 1e-7;
@@ -141,6 +148,21 @@ BEGIN
     -- Validate finals
     IF final_name IS NULL OR btrim(final_name) = '' THEN
         RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='[ERRO] name is required';
+    END IF;
+
+    -- ===== Content validation for inappropriate language
+    content_validation := rangley.rgl_fn_validate_meet_content(final_name, v_user_id, final_description);
+    content_valid := (content_validation->>'valid')::boolean;
+    content_reason := content_validation->>'reason';
+    content_message := content_validation->>'message';
+    
+    IF NOT content_valid THEN
+        RAISE LOG '[ERRO] Update aborted: inappropriate content detected (reason: %)', content_reason;
+        RAISE EXCEPTION USING
+            ERRCODE = '22023',
+            MESSAGE = '[ERRO] Meet content validation failed during update',
+            DETAIL  = format('reason=%s message=%s', content_reason, content_message),
+            HINT    = 'Please review and modify the meet name and description to remove inappropriate content.';
     END IF;
 
     IF final_dttm_start_utc IS NULL OR final_dttm_end_utc IS NULL OR final_dttm_start_utc >= final_dttm_end_utc THEN
@@ -260,7 +282,7 @@ BEGIN
           DETAIL=format('rows=%s meet_id=%s change_stamp=%s', num_inserted, v_meet_id, v_new_change_stamp);
     END IF;
 
-    RAISE LOG '[INFO] Updated meet_id=% with change_stamp=% and meet_coordinate_id=% by user_id=%',
+    RAISE LOG '[INFO] Updated meet_id=% with change_stamp=% and meet_coordinate_id=% by user_id=% with validated content',
         v_meet_id, v_new_change_stamp, final_coordinate_id, v_user_id;
 
 EXCEPTION

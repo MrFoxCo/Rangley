@@ -1,9 +1,9 @@
--- DROP PROCEDURE rangley.rangley_i_meet(out int4, in int8, in varchar, in timestamptz, in timestamptz, in varchar, in varchar, in int2, in int4);
-
+-- Updated rangley_i_meet procedure with content validation
 CREATE OR REPLACE PROCEDURE rangley.rangley_i_meet
 (
 	 OUT num_inserted 			int4
 	
+	,in p_user_id				int8
 	,in p_meet_id				int8
 	,IN p_meet_coordinate_id 	int8
 	,IN p_name 					varchar(50)
@@ -18,65 +18,14 @@ CREATE OR REPLACE PROCEDURE rangley.rangley_i_meet
 )
 LANGUAGE plpgsql
 AS $procedure$
-/*
-##########################################################################################
-
-##########################################################################################
--- Purpose of Stored Procedure
- Insert meet object
--- DECLARED OBJECTS 
-
-
-RETURNED_SQLSTATE → _state
-The standardized 5-character SQLSTATE error code.
-Example:
-23505 = unique_violation
-22023 = invalid_parameter_value
-MESSAGE_TEXT → _msg
-The human-readable error message from Postgres itself.
-Example:
-"duplicate key value violates unique constraint \"ux_tb_meets_meet_id\""
-PG_EXCEPTION_DETAIL → _detail
-Additional context the database engine provides about the error.
-Example:
-"Key (meet_id)=(42) already exists."
-PG_EXCEPTION_HINT → _hint
-Optional suggestion text from Postgres.
-Example:
-"Perhaps you meant to use ON CONFLICT DO NOTHING."
-PG_EXCEPTION_CONTEXT → _ctx
-The execution context where the error occurred — e.g., which function/procedure line.
-Example:
-"SQL statement \"INSERT INTO ...\""
-##########################################################################################
-
-##########################################################################################
-*/
-/*
-
-do $$
-declare
-result integer;
-begin
-	CALL rangley.rangley_i_meet
-	(
-		 result
-		,2
-		,3
-		,'Cubs Rooftop Meetup'
-		,'2025-09-29T18:00:00Z' , '2025-09-29T21:00:00Z"'
-	);
-end $$;
-
-select * from rangley.vw_meets;
-
-*/
-
--- TODO FIX THE ERROR MESSAGES MAKE THEM MORE HUMAN READABLE
 DECLARE
     _state  text; _msg text; _detail text; _hint text; _ctx text;
     is_valid_meet_id         int := -1; -- 1 = ok
     is_valid_meet_coordinate int := -1; -- 1 = ok
+    content_validation       json;
+    content_valid            boolean;
+    content_reason           text;
+    content_message          text;
 BEGIN
     num_inserted := 0;
 
@@ -92,6 +41,21 @@ BEGIN
             DETAIL  = format('meet_id=%s name=%s start=%s end=%s',
 				p_meet_id, p_name, p_dttm_start_utc, p_dttm_end_utc),
             HINT    = 'Provide non-null meet_id/name/dttm_start_utc/dttm_end_utc.';
+    END IF;
+
+    -- ===== Content validation for inappropriate language
+    content_validation := rangley.rgl_fn_validate_meet_content(p_name,p_user_id,p_description);
+    content_valid := (content_validation->>'valid')::boolean;
+    content_reason := content_validation->>'reason';
+    content_message := content_validation->>'message';
+    
+    IF NOT content_valid THEN
+        RAISE LOG '[ERRO] Insert aborted: inappropriate content detected (reason: %)', content_reason;
+        RAISE EXCEPTION USING
+            ERRCODE = '22023',
+            MESSAGE = '[ERRO] Meet content validation failed',
+            DETAIL  = format('reason=%s message=%s', content_reason, content_message),
+            HINT    = 'Please review and modify the meet name and description to remove inappropriate content.';
     END IF;
 
     -- ===== Validate meet_id (must already exist/is valid per your model)
@@ -128,7 +92,6 @@ BEGIN
             DETAIL  = format('start=%s end=%s', p_dttm_start_utc, p_dttm_end_utc),
             HINT    = 'Swap or adjust the timestamps.';
     END IF;
-
 
   	INSERT INTO rangley.tb_meets
 	(
@@ -167,7 +130,7 @@ BEGIN
             HINT    = 'Check triggers and constraints.';
     END IF;
 
-    RAISE LOG '[INFO] Inserted meet (meet_id=% meet_coordinate_id=%)',
+    RAISE LOG '[INFO] Inserted meet (meet_id=% meet_coordinate_id=%) with validated content',
 		p_meet_id, p_meet_coordinate_id;
 
 EXCEPTION
