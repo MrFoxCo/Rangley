@@ -17,6 +17,7 @@ struct MeetCreationUnifiedOverlay: View
     let baseURL: URL
     let token: String
     let onCreateMeet: (LocationInfo, String, Date, Date, [ViewUsersModel]) async throws -> Void
+    let onContentViolation: (ContentViolation) -> Void
     
     // MARK: State
     @State private var isAnimating = false
@@ -109,32 +110,27 @@ struct MeetCreationUnifiedOverlay: View
             RegionCoordinate: .init(body.region_latitude, body.region_longitude),
             RegionRadius: body.region_radius,
             Name: body.name,
-            ThoroughFare: nil,
-            SubThoroughFare: nil,
-            Locality: nil,
-            SubLocality: nil,
-            AdministrativeArea: nil,
-            SubAdministrativeArea: nil,
-            PostalCode: nil,
-            Country: nil,
-            IsoCountryCode: nil,
-            TimeZone: nil,
-            InlandWater: nil,
-            Ocean: nil
+            ThoroughFare: nil, SubThoroughFare: nil, Locality: nil, SubLocality: nil,
+            AdministrativeArea: nil, SubAdministrativeArea: nil, PostalCode: nil,
+            Country: nil, IsoCountryCode: nil, TimeZone: nil, InlandWater: nil, Ocean: nil
         )
         
-        // This will throw on error, preventing success animation
-        try await onCreateMeet(
-            location,
-            body.name,
-            body.dttm_start_utc,
-            body.dttm_end_utc,
-            invites
-        )
-        
-        // Only reach here on success
-        await MainActor.run { explodeThenDismiss() }
+        do {
+            try await onCreateMeet(location, body.name, body.dttm_start_utc, body.dttm_end_utc, invites)
+            await MainActor.run { explodeThenDismiss() }
+        } catch {
+            if let violation = parseContentViolation(from: error) {
+                await MainActor.run {
+                    onContentViolation(violation)
+                }
+                throw error // Re-throw so the form can reset isSubmitting
+            } else {
+                throw error
+            }
+        }
     }
+
+    // ADD THIS HELPER FUNCTION to MeetCreationUnifiedOverlay
 
     
     private func handleCreateMeetWithInvites(body: MeetWithInvitesInsertBody) async throws
@@ -144,41 +140,36 @@ struct MeetCreationUnifiedOverlay: View
             RegionCoordinate: .init(body.region_latitude, body.region_longitude),
             RegionRadius: body.region_radius,
             Name: body.name,
-            ThoroughFare: nil,
-            SubThoroughFare: nil,
-            Locality: nil,
-            SubLocality: nil,
-            AdministrativeArea: nil,
-            SubAdministrativeArea: nil,
-            PostalCode: nil,
-            Country: nil,
-            IsoCountryCode: nil,
-            TimeZone: nil,
-            InlandWater: nil,
-            Ocean: nil
+            ThoroughFare: nil, SubThoroughFare: nil, Locality: nil, SubLocality: nil,
+            AdministrativeArea: nil, SubAdministrativeArea: nil, PostalCode: nil,
+            Country: nil, IsoCountryCode: nil, TimeZone: nil, InlandWater: nil, Ocean: nil
         )
         
         let invitedUsers = body.initial_invitee_uuids.map { uuid in
-            ViewUsersModel(
-                user_uuid: uuid,
-                username: "",
-                display_name: "",
-                matched_by: [],
-                can_invite: false
-            )
+            ViewUsersModel(user_uuid: uuid, username: "", display_name: "", matched_by: [], can_invite: false)
         }
         
-        // This will throw on error, preventing success animation
-        try await onCreateMeet(
-            location,
-            body.name,
-            body.dttm_start_utc,
-            body.dttm_end_utc,
-            invitedUsers
-        )
-        
-        // Only reach here on success
-        await MainActor.run { explodeThenDismiss() }
+        do {
+            try await onCreateMeet(location, body.name, body.dttm_start_utc, body.dttm_end_utc, invitedUsers)
+            await MainActor.run { explodeThenDismiss() }
+        } catch {
+            if let violation = parseContentViolation(from: error) {
+                await MainActor.run {
+                    onContentViolation(violation)
+                }
+                throw error // Re-throw so the form can reset isSubmitting
+            } else {
+                throw error
+            }
+        }
+    }
+    
+    // MARK: ^^ HELPER FUNCTION
+    private func parseContentViolation(from error: Error) -> ContentViolation? {
+        if let contentError = error as? ContentViolationError {
+            return contentError.violation
+        }
+        return nil
     }
     
     // MARK: Actions

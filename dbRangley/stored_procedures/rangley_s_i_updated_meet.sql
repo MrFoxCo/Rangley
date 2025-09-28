@@ -163,19 +163,16 @@ BEGIN
     content_reason := content_validation->>'reason';
     content_message := content_validation->>'message';
     
-    IF NOT content_valid THEN
-        -- Set validation failure outputs
-        validation_failed := TRUE;
-        validation_reason := content_reason;
-        validation_message := content_message;
-        
-        RAISE LOG '[ERRO] Update aborted: inappropriate content detected (reason: %)', content_reason;
-        RAISE EXCEPTION USING
-            ERRCODE = '22023',
-            MESSAGE = '[ERRO] Meet content validation failed during update',
-            DETAIL  = format('reason=%s message=%s', content_reason, content_message),
-            HINT    = 'Please review and modify the meet name and description to remove inappropriate content.';
-    END IF;
+	IF NOT content_valid THEN
+	    -- Set validation failure outputs
+	    validation_failed := TRUE;
+	    validation_reason := content_reason;
+	    validation_message := content_message;
+	    
+	    RAISE LOG '[INFO] Update aborted: inappropriate content detected (reason: %)', content_reason;
+	    -- Return normally instead of throwing exception
+	    RETURN;
+	END IF;
 
     -- Time validation
     IF final_dttm_start_utc IS NULL OR final_dttm_end_utc IS NULL OR final_dttm_start_utc >= final_dttm_end_utc THEN

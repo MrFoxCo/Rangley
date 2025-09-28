@@ -869,13 +869,13 @@ struct OverlaysView: View
                 baseURL: Env.apiBaseURL,
                 token: authToken,
                 onCreateMeet: { location, name, start, end, invitedUsers in
-                    await handleMeetCreation(location, name, start, end, invitedUsers)
+                    try await handleMeetCreation(location, name, start, end, invitedUsers)
+                },
+                onContentViolation: { violation in
+                    uiState.showContentViolation = violation
                 }
             )
-            
-            
-            
-            // MARK: Meet Card Overlay - Fixed with authState parameter
+         
             // MARK: In OverlaysView body, update the MeetCardOverlay call to:
             MeetCardOverlay(
                 selectedMeet: $mapData.selectedMeet,
@@ -975,38 +975,34 @@ struct OverlaysView: View
     
     private func handleMeetCreation(
         _ location: LocationInfo,_ name: String,
-        _ start: Date,_ end: Date,_ invitedUsers: [ViewUsersModel]) async
+        _ start: Date,_ end: Date,_ invitedUsers: [ViewUsersModel]) async throws  // ADD throws
     {
-        do {
-            let invitedUUIDs = invitedUsers.map(\.user_uuid)
-            
-            if invitedUUIDs.isEmpty {
-                let body = MeetCreationService.buildMeetBody(
-                    locationInfo: location,
-                    name: name,
-                    startTime: start,
-                    endTime: end
-                )
-                try await mapData.createMeet(body)
-            } else {
-                let body = MeetCreationService.buildMeetWithInvitesBody(
-                    locationInfo: location,
-                    name: name,
-                    startTime: start,
-                    endTime: end,
-                    invitedUsers: invitedUUIDs
-                )
-                try await mapData.createMeetWithInvites(body)
-            }
-            
-            locationData.centerOn(coordinate: CLLocationCoordinate2D(
-                latitude: location.Coordinate.latitude,
-                longitude: location.Coordinate.longitude
-            ))
-            
-        } catch {
-            print("Meet creation failed: \(error)")
+        let invitedUUIDs = invitedUsers.map(\.user_uuid)
+        
+        if invitedUUIDs.isEmpty {
+            let body = MeetCreationService.buildMeetBody(
+                locationInfo: location,
+                name: name,
+                startTime: start,
+                endTime: end
+            )
+            try await mapData.createMeet(body)
+        } else {
+            let body = MeetCreationService.buildMeetWithInvitesBody(
+                locationInfo: location,
+                name: name,
+                startTime: start,
+                endTime: end,
+                invitedUsers: invitedUUIDs
+            )
+            try await mapData.createMeetWithInvites(body)
         }
+        
+        // Only center on success (no exception thrown)
+        locationData.centerOn(coordinate: CLLocationCoordinate2D(
+            latitude: location.Coordinate.latitude,
+            longitude: location.Coordinate.longitude
+        ))
     }
 }
 

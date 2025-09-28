@@ -661,6 +661,7 @@ struct MeetCreationOverlayByTap: View
     let baseURL : URL
     let token   : String
     let onCreateMeet: (LocationInfo, String, Date, Date, [ViewUsersModel]) async throws -> Void
+    let onContentViolation: (ContentViolation) -> Void
     
     //================================================
     // MARK: - END PARAMS
@@ -733,7 +734,14 @@ struct MeetCreationOverlayByTap: View
         // Generic fallback that doesn't expose technical details
         return "Something went wrong. Please try again."
     }
-
+    
+    private func parseContentViolation(from error: Error) -> ContentViolation?
+    {
+        if let contentError = error as? ContentViolationError {
+            return contentError.violation
+        }
+        return nil
+    }
     
     
     enum Step { case locationConfirm, meetDetails }
@@ -793,16 +801,17 @@ struct MeetCreationOverlayByTap: View
                                             try await onCreateMeet(location, name, start, end, invitedUsers)
                                             await MainActor.run {
                                                 isSubmitting = false
-                                                // Only show success animation if creation actually succeeded
-                                                withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
-                                                    explodeThenDismiss()
-                                                }
+                                                explodeThenDismiss()
                                             }
                                         } catch {
                                             await MainActor.run {
                                                 isSubmitting = false
-                                                // Parse error and show user-friendly message
-                                                submitError = parseErrorMessage(error)
+                                                // Check for content violation
+                                                if let violation = parseContentViolation(from: error) {
+                                                    onContentViolation(violation)
+                                                } else {
+                                                    submitError = parseErrorMessage(error)
+                                                }
                                             }
                                         }
                                     }

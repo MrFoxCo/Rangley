@@ -51,7 +51,7 @@ struct MeetWithInvitesInsertBody: Codable
 struct MeetInsertResponse: Codable
 {
     let num_inserted: Int32
-    let meet_id_uuid: UUID
+    let meet_id_uuid: UUID?
     let validation_failed: Bool
     let validation_reason: String?
     let validation_message: String?
@@ -60,7 +60,7 @@ struct MeetInsertResponse: Codable
 struct MeetWithInvitesInsertResponse: Codable
 {
     let num_inserted: Int32
-    let new_meet_id_uuid: UUID
+    let new_meet_id_uuid: UUID?
     let validation_failed: Bool
     let validation_reason: String?
     let validation_message: String?

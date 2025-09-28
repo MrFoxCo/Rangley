@@ -888,21 +888,23 @@ struct MeetUpdateUnifiedOverlay: View
     
     // Replace the handleUpdate function in MeetUpdateUnifiedOverlay:
 
-    private func handleUpdate(body: UpdatedMeetInsertBody) async throws {
-           do {
-               try await onUpdate(body)
-               await onLoadMeets?()
-               await MainActor.run { explodeThenDismiss() }
-           } catch {
-               if let violation = parseContentViolation(from: error) {
-                   await MainActor.run {
-                       onContentViolation(violation)  // Pass it up instead
-                   }
-               } else {
-                   throw error
-               }
-           }
-       }
+    private func handleUpdate(body: UpdatedMeetInsertBody) async throws
+    {
+        do {
+            try await onUpdate(body)
+            await onLoadMeets?()
+            await MainActor.run { explodeThenDismiss() }
+        } catch {
+            if let violation = parseContentViolation(from: error) {
+                await MainActor.run {
+                    onContentViolation(violation)
+                }
+                throw error // Re-throw so the form can reset isSubmitting
+            } else {
+                throw error // Re-throw other errors for form to handle
+            }
+        }
+    }
     
     // MARK: Actions
     private func dismiss() {

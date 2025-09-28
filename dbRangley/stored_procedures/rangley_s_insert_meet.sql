@@ -87,19 +87,16 @@ BEGIN
       INTO v_validation_result;
 
     -- Check if content validation failed
-    IF (v_validation_result->>'valid')::boolean = FALSE THEN
-        -- Set validation failure outputs
-        validation_failed := TRUE;
-        validation_reason := v_validation_result->>'reason';
-        validation_message := v_validation_result->>'message';
-        
-        RAISE EXCEPTION USING
-          ERRCODE='23514',
-          MESSAGE=format('[ERRO] Meet content validation failed: %s', v_validation_result->>'message'),
-          DETAIL=format('reason=%s name=%s description=%s', 
-                       v_validation_result->>'reason', p_name, p_description),
-          HINT='Please review the meet name and description for inappropriate content.';
-    END IF;
+	IF (v_validation_result->>'valid')::boolean = FALSE THEN
+	    -- Set validation failure outputs
+	    validation_failed := TRUE;
+	    validation_reason := v_validation_result->>'reason';
+	    validation_message := v_validation_result->>'message';
+	    
+	    -- Log and return normally instead of throwing exception
+	    RAISE LOG '[INFO] Meet creation aborted: inappropriate content detected (reason: %)', validation_reason;
+	    RETURN;
+	END IF;
 
     RAISE LOG '[INFO] Content validation passed for meet creation by user_id=%', created_by_user_id;
 
