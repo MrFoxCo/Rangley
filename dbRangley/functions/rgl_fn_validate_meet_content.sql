@@ -225,7 +225,17 @@ BEGIN
         RAISE LOG 'CRITICAL: Hate crime content detected - combined_text: "%"', v_combined_text;
         RETURN json_build_object('valid', FALSE, 'reason', 'content_hate_crime', 'message', 'Content contains language that could incite hate crimes or discriminatory violence');
     END IF;
-    
+
+	-- CATEGORY 10.5: HATE SPEECH AND RACIAL SLURS
+    IF v_combined_text ~* '\y(n[i1]gg[ae]r?s?|f[a4]gg[o0]ts?|sp[i1]ck?s?|ch[i1]nks?|k[i1]kes?|w[e3]tb[a4]ck|b[e3][a4]n[e3]r|c[o0]{2}n|h[o0]nky|cr[a4]ck[e3]r|wh[i1]t[e3]y|r[a4]g\s?h[e3][a4]d|s[a4]nd\s?n[i1]gg[e3]r|t[o0]w[e3]l\s?h[e3][a4]d)\y'
+    THEN
+        INSERT INTO rangley.tb_content_violations (violation_category_id, user_id, attempted_name, attempted_description)
+        VALUES (26, p_user_id, p_name, p_description);
+        
+        RAISE LOG 'CRITICAL: Hate speech content detected - combined_text: "%"', v_combined_text;
+        RETURN json_build_object('valid', FALSE, 'reason', 'content_hate_speech', 'message', 'Content contains hate speech or slurs that violate community guidelines');
+    END IF;
+
     -- CATEGORY 11: KIDNAPPING AND ABDUCTION
     IF v_combined_text ~ '(kidnap|abduct|snatch|grab|take|capture).*(child|kid|person|someone)'
        OR v_combined_text ~ '(ransom|hostage|captive|prisoner|held\s+against|locked\s+up)'

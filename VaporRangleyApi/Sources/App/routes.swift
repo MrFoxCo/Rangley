@@ -416,7 +416,6 @@ public func routes(_ app: Application) throws
     s.post("meet")
     {
         req async throws -> HTTPDTO.Meets.InsertMeetResponse in
-        
         let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
 
@@ -449,35 +448,53 @@ public func routes(_ app: Application) throws
             let dbResult = try await Proc.SystemInsertMeet.call(
                 on: sql,
                 params,
-                .init(num_inserted: 0,meet_id_uuid: nil)
+                .init(num_inserted: 0, meet_id_uuid: nil, validation_failed: false, validation_reason: nil, validation_message: nil)
             )
             
-            // Validate the result
+            // Return validation failure in response instead of throwing
+            if dbResult.validation_failed {
+                return .init(
+                    num_inserted: dbResult.num_inserted,
+                    meet_id_uuid: dbResult.meet_id_uuid,
+                    validation_failed: true,
+                    validation_reason: dbResult.validation_reason,
+                    validation_message: dbResult.validation_message
+                )
+            }
+            
+            // Validate the result for successful case
             guard dbResult.num_inserted == 1,
                   let meetId = dbResult.meet_id_uuid
             else { throw Abort(.internalServerError, reason: "Failed to create meet") }
-    
 
-            return .init(meet_id_uuid: meetId, num_inserted: dbResult.num_inserted)
+            return .init(
+                num_inserted: dbResult.num_inserted,
+                meet_id_uuid: meetId,
+                validation_failed: false,
+                validation_reason: nil,
+                validation_message: nil
+            )
             
         } catch let error as PSQLError {
             // Handle specific PostgreSQL errors from your procedure
-            if error.serverInfo?[.sqlState] == "22023" {  // Invalid parameter value
-                throw Abort(.badRequest, reason: "Invalid input parameters")
-            } else if error.serverInfo?[.sqlState] == "23505" {  // Unique violation
-                throw Abort(.conflict, reason: "Meet already exists")
-            } else {
+            let state = error.serverInfo?[.sqlState]
+            
+            switch state {
+            case "22023": throw Abort(.badRequest, reason: "Invalid input parameters")
+            case "23505": throw Abort(.conflict, reason: "Meet already exists")
+            default:
                 req.logger.error("Database error creating meet: \(error)")
                 throw Abort(.internalServerError, reason: "Failed to create meet")
             }
+        } catch let abort as Abort {
+            // Re-throw Abort errors
+            throw abort
         }
-        
     }
-    
-    s.post("meet-with-invites") // Fixed typo: "invitess" -> "invites"
+
+    s.post("meet-with-invites")
     {
         req async throws -> HTTPDTO.MeetsWithInvites.InsertMeetResponse in
-        
         let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
 
@@ -491,54 +508,158 @@ public func routes(_ app: Application) throws
         guard let sql = req.db as? any SQLDatabase
         else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
 
-        let input = Proc.SystemInsertMeetWithInvites.Input(
-            cognito_sub             : sub,
-            initial_invitee_uuids   : body.initial_invitee_uuids,
-            latitude                : body.latitude,
-            longitude               : body.longitude,
-            region_latitude         : body.region_latitude,
-            region_longitude        : body.region_longitude,
-            region_radius           : body.region_radius,
-            name                    : body.name,
-            dttm_start_utc          : body.dttm_start_utc,
-            dttm_end_utc            : body.dttm_end_utc,
-            description             : body.description,
-            meet_category_id        : body.meet_category_id,
-            max_capacity            : body.max_capacity,
-            invitation_message      : body.invitation_message
+        let input = Proc.SystemInsertMeetWithInvites.Params(
+            cognito_sub: sub,
+            initial_invitee_uuids: body.initial_invitee_uuids,
+            latitude: body.latitude,
+            longitude: body.longitude,
+            region_latitude: body.region_latitude,
+            region_longitude: body.region_longitude,
+            region_radius: body.region_radius,
+            name: body.name,
+            dttm_start_utc: body.dttm_start_utc,
+            dttm_end_utc: body.dttm_end_utc,
+            description: body.description,
+            meet_category_id: body.meet_category_id,
+            max_capacity: body.max_capacity,
+            invitation_message: body.invitation_message
         )
         
-        let output = Proc.SystemInsertMeetWithInvites.Output(
+        let output = Proc.SystemInsertMeetWithInvites.Result(
             num_inserted: 0,
-            new_meet_id_uuid: nil
+            new_meet_id_uuid: nil,
+            validation_failed: false,
+            validation_reason: nil,
+            validation_message: nil
         )
 
         do {
-            let dbResult = try await Proc.SystemInsertMeetWithInvites.call(
-                on: sql,
-                input,
-                output
-            )
+            let dbResult = try await Proc.SystemInsertMeetWithInvites.call(on: sql, input, output)
             
-            // Validate the result
+            // Return validation failure in response instead of throwing
+            if dbResult.validation_failed {
+                return .init(
+                    num_inserted: dbResult.num_inserted,
+                    new_meet_id_uuid: dbResult.new_meet_id_uuid,
+                    validation_failed: true,
+                    validation_reason: dbResult.validation_reason,
+                    validation_message: dbResult.validation_message
+                )
+            }
+            
+            // Validate the result for successful case
             guard dbResult.num_inserted == 1,
                   let meetId = dbResult.new_meet_id_uuid
             else { throw Abort(.internalServerError, reason: "Failed to create meet") }
 
-            return .init(num_inserted: dbResult.num_inserted, new_meet_id_uuid: meetId)
+            return .init(
+                num_inserted: dbResult.num_inserted,
+                new_meet_id_uuid: meetId,
+                validation_failed: false,
+                validation_reason: nil,
+                validation_message: nil
+            )
             
         } catch let error as PSQLError {
-            // Handle specific PostgreSQL errors from your procedure
-            if error.serverInfo?[.sqlState] == "22023" {  // Invalid parameter value
-                throw Abort(.badRequest, reason: "Invalid input parameters")
-            } else if error.serverInfo?[.sqlState] == "23505" {  // Unique violation
-                throw Abort(.conflict, reason: "Meet already exists")
-            } else {
+            let state = error.serverInfo?[.sqlState]
+            
+            switch state {
+            case "22023": throw Abort(.badRequest, reason: "Invalid input parameters")
+            case "23505": throw Abort(.conflict, reason: "Meet already exists")
+            default:
                 req.logger.error("Database error creating meet: \(error)")
                 throw Abort(.internalServerError, reason: "Failed to create meet")
             }
+        } catch let abort as Abort {
+            throw abort
         }
     }
+
+    s.post("updated-meet")
+    {
+        req async throws -> HTTPDTO.Meets.InsertUpdateResponse in
+        let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
+
+        let body = try req.content.decode(HTTPDTO.Meets.InsertUpdatedBody.self)
+
+        // Only validate fields that are provided
+        if let name = body.name {
+            guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            else { throw Abort(.badRequest, reason: "name cannot be empty if provided") }
+        }
+        
+        if let startTime = body.dttm_start_utc, let endTime = body.dttm_end_utc {
+            guard startTime < endTime
+            else { throw Abort(.badRequest, reason: "dttm_start_utc must be before dttm_end_utc") }
+        }
+
+        guard let sql = req.db as? any SQLDatabase
+        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+
+        let params = Proc.SystemInsertUpdatedMeet.Params(
+            cognito_sub: sub,
+            meet_id_uuid: body.meet_id_uuid,
+            latitude: body.latitude,
+            longitude: body.longitude,
+            region_latitude: body.region_latitude,
+            region_longitude: body.region_longitude,
+            region_radius: body.region_radius,
+            meet_status_id: body.meet_status_id,
+            name: body.name,
+            dttm_start_utc: body.dttm_start_utc,
+            dttm_end_utc: body.dttm_end_utc,
+            description: body.description,
+            change_reason: body.change_reason,
+            meet_category_id: body.meet_category_id,
+            max_capacity: body.max_capacity
+        )
+
+        do {
+            let dbResult = try await Proc.SystemInsertUpdatedMeet.call(
+                on: sql,
+                params,
+                .init(num_inserted: 0, validation_failed: false, validation_reason: nil, validation_message: nil)
+            )
+            
+            // Return validation failure in response instead of throwing
+            if dbResult.validation_failed {
+                return .init(
+                    num_inserted: dbResult.num_inserted,
+                    validation_failed: true,
+                    validation_reason: dbResult.validation_reason,
+                    validation_message: dbResult.validation_message
+                )
+            }
+            
+            // Validate the result for successful case
+            guard dbResult.num_inserted == 1
+            else { throw Abort(.internalServerError, reason: "Failed to update meet") }
+
+            return .init(
+                num_inserted: dbResult.num_inserted,
+                validation_failed: false,
+                validation_reason: nil,
+                validation_message: nil
+            )
+                        
+        } catch let error as PSQLError {
+            let state = error.serverInfo?[.sqlState]
+            
+            switch state {
+            case "22023": throw Abort(.badRequest, reason: "Invalid input parameters")
+            case "P0002": throw Abort(.notFound,    reason: "Meet not found")
+            case "42501": throw Abort(.forbidden,   reason: "Not authorized to update this meet")
+            default:
+                req.logger.error("sqlstate=\(state ?? "nil") error=\(String(reflecting: error))")
+                throw Abort(.internalServerError, reason: "Failed to update meet")
+            }
+        } catch let abort as Abort {
+            throw abort
+        }
+    }
+    
+    
     
     s.post("meets", "invitations", "respond")
     {
@@ -644,71 +765,7 @@ public func routes(_ app: Application) throws
         }
     }
     
-    s.post("updated-meet")
-    {
-        req async throws -> HTTPDTO.Meets.InsertUpdateResponse in
-        
-        let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
 
-        let body = try req.content.decode(HTTPDTO.Meets.InsertUpdatedBody.self)  // Use InsertUpdatedBody
-
-        // Only validate fields that are provided
-        if let name = body.name {
-            guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            else { throw Abort(.badRequest, reason: "name cannot be empty if provided") }
-        }
-        
-        if let startTime = body.dttm_start_utc, let endTime = body.dttm_end_utc {
-            guard startTime < endTime
-            else { throw Abort(.badRequest, reason: "dttm_start_utc must be before dttm_end_utc") }
-        }
-
-        guard let sql = req.db as? any SQLDatabase
-        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
-
-        let params = Proc.SystemInsertUpdatedMeet.Params(
-            cognito_sub: sub,
-            meet_id_uuid: body.meet_id_uuid,  // Now available from body
-            latitude: body.latitude,
-            longitude: body.longitude,
-            region_latitude: body.region_latitude,
-            region_longitude: body.region_longitude,
-            region_radius: body.region_radius,
-            meet_status_id: body.meet_status_id,
-            name: body.name,
-            dttm_start_utc: body.dttm_start_utc,
-            dttm_end_utc: body.dttm_end_utc,
-            description: body.description,
-            change_reason: body.change_reason,
-            meet_category_id: body.meet_category_id,
-            max_capacity: body.max_capacity
-        )
-
-        do {
-            let dbResult = try await Proc.SystemInsertUpdatedMeet.call(
-                on: sql,
-                params,
-                .init(num_inserted: 0)
-            )
-            
-            guard dbResult.num_inserted == 1
-            else { throw Abort(.internalServerError, reason: "Failed to update meet") }
-
-            return .init(num_inserted: dbResult.num_inserted)
-                        
-        } catch let error as PSQLError {
-            let state = error.serverInfo?[.sqlState]
-            switch state {
-            case "22023": throw Abort(.badRequest, reason: "Invalid input parameters")
-            case "P0002": throw Abort(.notFound,    reason: "Meet not found")
-            case "42501": throw Abort(.forbidden,   reason: "Not authorized to update this meet")
-            default:
-                req.logger.error("sqlstate=\(state ?? "nil") error=\(String(reflecting: error))")
-                throw Abort(.internalServerError, reason: "Failed to update meet")
-            }
-        }
-    }
     
     s.post("deleted-meet")
     {

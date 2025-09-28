@@ -227,17 +227,44 @@ class APIService: APIServiceProtocol
     
     func createMeet(_ body: MeetInsertBody) async throws {
         let token = try await getAuthToken()
-        _ = try await AuthAPI.createMeet(baseURL: Env.apiBaseURL, token: token, body: body)
+        let response = try await AuthAPI.createMeet(baseURL: Env.apiBaseURL, token: token, body: body)
+        
+        // Check validation fields in response
+        if response.validation_failed {
+            let violation = ContentViolation(
+                reason: response.validation_reason ?? "content_violation",
+                message: response.validation_message ?? "Content violates community guidelines"
+            )
+            throw ContentViolationError(violation: violation)
+        }
     }
     
     func createMeetWithInvites(_ body: MeetWithInvitesInsertBody) async throws {
         let token = try await getAuthToken()
-        _ = try await AuthAPI.createMeetWithInvites(baseURL: Env.apiBaseURL, token: token, body: body)
+        let response = try await AuthAPI.createMeetWithInvites(baseURL: Env.apiBaseURL, token: token, body: body)
+        
+        // Check validation fields in response
+        if response.validation_failed {
+            let violation = ContentViolation(
+                reason: response.validation_reason ?? "content_violation",
+                message: response.validation_message ?? "Content violates community guidelines"
+            )
+            throw ContentViolationError(violation: violation)
+        }
     }
     
     func updateMeet(_ body: UpdatedMeetInsertBody) async throws {
         let token = try await getAuthToken()
-        _ = try await AuthAPI.updateMeet(baseURL: Env.apiBaseURL, token: token, body: body)
+        let response = try await AuthAPI.updateMeet(baseURL: Env.apiBaseURL, token: token, body: body)
+        
+        // Check validation fields in response
+        if response.validation_failed {
+            let violation = ContentViolation(
+                reason: response.validation_reason ?? "content_violation",
+                message: response.validation_message ?? "Content violates community guidelines"
+            )
+            throw ContentViolationError(violation: violation)
+        }
     }
     
     func deleteMeet(_ body: DeletedMeetInsertBody) async throws {
@@ -498,6 +525,7 @@ class UIStateStore: ObservableObject
     @Published var showTutorial = false
     @Published var tutorialStep = 0
     @Published var shouldShowTutorialWhenReady = false
+    @Published var showContentViolation: ContentViolation?
     
     // Day/Night theme
     @Published var isDaylight = true
@@ -534,6 +562,7 @@ class UIStateStore: ObservableObject
         showMeetOverlay = false
         showCreateForm = false
         showUpdateOverlay = false
+        showContentViolation = nil
         checkTutorialDisplay()
     }
     
@@ -886,13 +915,25 @@ struct OverlaysView: View
             )
             // Add this to the ZStack in OverlaysView body
             MeetUpdateUnifiedOverlay(
-            showOverlay: $uiState.showUpdateOverlay,
-            meetToEdit: $uiState.meetToEdit,
-               onUpdate: { body in
-                   try await mapData.updateMeet(body)
-               },
-               onLoadMeets: { await mapData.loadMeets() }
+                showOverlay: $uiState.showUpdateOverlay,
+                meetToEdit: $uiState.meetToEdit,
+                onUpdate: { body in
+                    try await mapData.updateMeet(body)
+                },
+                onLoadMeets: { await mapData.loadMeets() },
+                onContentViolation: { violation in
+                    uiState.showContentViolation = violation
+                }
             )
+            
+            if let violation = uiState.showContentViolation {
+               ContentViolationAlert(violation: violation) {
+                   uiState.showContentViolation = nil
+               }
+               .transition(.opacity)
+               .zIndex(1000)
+           }
+            
             
             SimpleTutorialOverlay(uiState: uiState)
             

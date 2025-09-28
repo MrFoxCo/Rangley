@@ -26,7 +26,8 @@ struct MeetCreationUnifiedOverlay: View
     @State private var isSoftDismissing = false
     
     // MARK: Body
-    var body: some View {
+    var body: some View
+    {
         ZStack {
             if showOverlay, let mode = entryMode {
                 // Dark backdrop
@@ -101,8 +102,8 @@ struct MeetCreationUnifiedOverlay: View
     }
     
     // MARK: Handlers
-    private func handleCreateMeet(body: MeetInsertBody, invites: [ViewUsersModel]) async throws {
-        // Extract location from body for callback
+    private func handleCreateMeet(body: MeetInsertBody, invites: [ViewUsersModel]) async throws
+    {
         let location = LocationInfo(
             Coordinate: .init(body.latitude, body.longitude),
             RegionCoordinate: .init(body.region_latitude, body.region_longitude),
@@ -122,6 +123,7 @@ struct MeetCreationUnifiedOverlay: View
             Ocean: nil
         )
         
+        // This will throw on error, preventing success animation
         try await onCreateMeet(
             location,
             body.name,
@@ -130,11 +132,13 @@ struct MeetCreationUnifiedOverlay: View
             invites
         )
         
+        // Only reach here on success
         await MainActor.run { explodeThenDismiss() }
     }
+
     
-    private func handleCreateMeetWithInvites(body: MeetWithInvitesInsertBody) async throws {
-        // Extract location from body
+    private func handleCreateMeetWithInvites(body: MeetWithInvitesInsertBody) async throws
+    {
         let location = LocationInfo(
             Coordinate: .init(body.latitude, body.longitude),
             RegionCoordinate: .init(body.region_latitude, body.region_longitude),
@@ -154,7 +158,6 @@ struct MeetCreationUnifiedOverlay: View
             Ocean: nil
         )
         
-        // Convert UUIDs back to ViewUsersModel (simplified - in real app you'd need actual user data)
         let invitedUsers = body.initial_invitee_uuids.map { uuid in
             ViewUsersModel(
                 user_uuid: uuid,
@@ -165,6 +168,7 @@ struct MeetCreationUnifiedOverlay: View
             )
         }
         
+        // This will throw on error, preventing success animation
         try await onCreateMeet(
             location,
             body.name,
@@ -173,19 +177,23 @@ struct MeetCreationUnifiedOverlay: View
             invitedUsers
         )
         
+        // Only reach here on success
         await MainActor.run { explodeThenDismiss() }
     }
     
     // MARK: Actions
-    private func dismiss() {
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+    private func dismiss()
+    {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8))
+        {
             showOverlay = false
             entryMode = nil
             showCreateForm = false
         }
     }
     
-    private func softDismiss() {
+    private func softDismiss()
+    {
         guard !isExploding else { return }
         isSoftDismissing = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
@@ -196,7 +204,8 @@ struct MeetCreationUnifiedOverlay: View
         }
     }
     
-    private func explodeThenDismiss() {
+    private func explodeThenDismiss()
+    {
         guard !isExploding else { return }
         isExploding = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) {
@@ -351,36 +360,3 @@ struct CreateMeetConfirmationPopup: View
         }
     }
 }
-// MARK: - Usage Example
-/*
- In your main map view:
- 
- @State private var showMeetCreation = false
- @State private var meetCreationMode: MeetCreationEntryMode?
- 
- // For tap on map:
- .onTapGesture { location in
-     let locationInfo = LocationInfo(...)
-     meetCreationMode = .tapOnMap(location: locationInfo)
-     showMeetCreation = true
- }
- 
- // For create button:
- Button("Create Meet") {
-     meetCreationMode = .createButton
-     showMeetCreation = true
- }
- 
- // Overlay:
- .overlay {
-     MeetCreationUnifiedOverlay(
-         showOverlay: $showMeetCreation,
-         entryMode: $meetCreationMode,
-         baseURL: baseURL,
-         token: token,
-         onCreateMeet: { location, name, start, end, invites in
-             // Handle meet creation
-         }
-     )
- }
- */

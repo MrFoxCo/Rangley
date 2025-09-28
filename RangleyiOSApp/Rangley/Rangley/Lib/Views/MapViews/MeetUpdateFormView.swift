@@ -508,31 +508,51 @@ struct MeetUpdateFormView: View
         .padding(.horizontal, 24)
     }
 
-    
     private var actionButton: some View
     {
-        Button(action: nextStep) {
-            Text(currentStep == .review ? "Save Changes" : "Next")
-                .font(.system(size: 16, weight: .bold))
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(canProceed ? AppPalette.Brand.neonPink : AppPalette.Brand.neonPink.opacity(0.5))
-                )
-        }
-        .disabled(!canProceed || isSubmitting)
-        .padding(.horizontal, 24)
-        .padding(.bottom, 24)
-        .overlay(alignment: .bottom) {
+        VStack(spacing: 8) {
+            // Show error message ABOVE the button, not below
             if let submitError, currentStep == .review {
                 Text(submitError)
-                    .font(.footnote)
+                    .font(.system(size: 14, weight: .medium))
                     .foregroundColor(.red)
-                    .padding(.bottom, 4)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 8)
+                    .transition(.opacity)
             }
+            
+            Button(action: nextStep) {
+                if isSubmitting {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                            .tint(.white)
+                        Text("Saving...")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(AppPalette.Brand.neonPink.opacity(0.7))
+                    )
+                } else {
+                    Text(currentStep == .review ? "Save Changes" : "Next")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(canProceed ? AppPalette.Brand.neonPink : AppPalette.Brand.neonPink.opacity(0.5))
+                        )
+                }
+            }
+            .disabled(!canProceed || isSubmitting)
         }
+        .padding(.horizontal, 24)
+        .padding(.bottom, 24)
     }
     
     // MARK: Navigation
@@ -573,7 +593,8 @@ struct MeetUpdateFormView: View
     }
     
     // MARK: Submit
-    // MARK: Submit - FIXED
+
+
     private func submit()
     {
         guard !isSubmitting else { return }
@@ -595,22 +616,58 @@ struct MeetUpdateFormView: View
         
         isSubmitting = true
         Task {
-            defer {
-                Task { @MainActor in
-                    isSubmitting = false
-                }
-            }
-            
             do {
                 try await onUpdate(updateBody)
-                // Don't call onLoadMeets here - let the overlay handle it
-                // The overlay will trigger the success animation
+                // Success - overlay will handle confetti and dismissal
             } catch {
                 await MainActor.run {
-                    submitError = error.localizedDescription
+                    isSubmitting = false
+                    submitError = parseUpdateErrorMessage(error)
                 }
             }
         }
+    }
+
+
+    private func parseUpdateErrorMessage(_ error: Error) -> String {
+        // Content violations are now handled by throwing ContentViolationError from API service
+        // This function now only handles other types of errors
+        
+        let errorString = error.localizedDescription.lowercased()
+        
+        // Check for common API errors without exposing HTTP codes
+        if errorString.contains("failed to update") ||
+           errorString.contains("500") {
+            return "Unable to update meet right now. Please try again."
+        }
+        
+        if errorString.contains("invalid input") ||
+           errorString.contains("400") {
+            return "Please check your changes and try again."
+        }
+        
+        if errorString.contains("unauthorized") ||
+           errorString.contains("401") {
+            return "Please log in and try again."
+        }
+        
+        if errorString.contains("forbidden") ||
+           errorString.contains("403") {
+            return "You don't have permission to update this meet."
+        }
+        
+        if errorString.contains("not found") ||
+           errorString.contains("404") {
+            return "This meet no longer exists."
+        }
+        
+        if errorString.contains("network") ||
+           errorString.contains("connection") {
+            return "Network error. Please check your connection and try again."
+        }
+        
+        // Generic fallback that doesn't expose technical details
+        return "Something went wrong. Please try again."
     }
     
     // MARK: Location Address Loading
@@ -769,15 +826,18 @@ struct MeetUpdateUnifiedOverlay: View
     @Binding var meetToEdit: ViewMeetsModel?
     let onUpdate: (UpdatedMeetInsertBody) async throws -> Void
     let onLoadMeets: (() async -> Void)?
+    let onContentViolation: (ContentViolation) -> Void
     
     // MARK: State
     @State private var isAnimating = false
     @State private var isExploding = false
     @State private var showConfetti = false
     @State private var isSoftDismissing = false
+
     
     // MARK: Body
-    var body: some View {
+    var body: some View
+    {
         ZStack {
             if showOverlay, let meet = meetToEdit {
                 // Dark backdrop
@@ -823,14 +883,26 @@ struct MeetUpdateUnifiedOverlay: View
             }
         }
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showOverlay)
+
     }
     
-    // MARK: Handlers
+    // Replace the handleUpdate function in MeetUpdateUnifiedOverlay:
+
     private func handleUpdate(body: UpdatedMeetInsertBody) async throws {
-        try await onUpdate(body)
-        await onLoadMeets?()
-        await MainActor.run { explodeThenDismiss() }
-    }
+           do {
+               try await onUpdate(body)
+               await onLoadMeets?()
+               await MainActor.run { explodeThenDismiss() }
+           } catch {
+               if let violation = parseContentViolation(from: error) {
+                   await MainActor.run {
+                       onContentViolation(violation)  // Pass it up instead
+                   }
+               } else {
+                   throw error
+               }
+           }
+       }
     
     // MARK: Actions
     private func dismiss() {
@@ -888,3 +960,4 @@ private struct ChangeRow: View
         }
     }
 }
+

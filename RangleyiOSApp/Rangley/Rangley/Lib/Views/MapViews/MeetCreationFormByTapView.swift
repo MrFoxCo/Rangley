@@ -696,7 +696,48 @@ struct MeetCreationOverlayByTap: View
         UINotificationFeedbackGenerator().notificationOccurred(.success)
     }
     
+    // Add this helper function to MeetCreationOverlayByTap
+    private func parseErrorMessage(_ error: Error) -> String
+    {
+        let errorString = error.localizedDescription.lowercased()
+        
+        // Check for content moderation
+        if errorString.contains("content not allowed") ||
+           errorString.contains("violates") ||
+           errorString.contains("inappropriate") ||
+           errorString.contains("community guidelines") {
+            return "Content not allowed - please review your meet details"
+        }
+        
+        // Check for common API errors without exposing HTTP codes
+        if errorString.contains("failed to create meet") ||
+           errorString.contains("500") {
+            return "Unable to create meet right now. Please try again."
+        }
+        
+        if errorString.contains("invalid input") ||
+           errorString.contains("400") {
+            return "Please check your meet details and try again."
+        }
+        
+        if errorString.contains("unauthorized") ||
+           errorString.contains("401") {
+            return "Please log in and try again."
+        }
+        
+        if errorString.contains("network") ||
+           errorString.contains("connection") {
+            return "Network error. Please check your connection and try again."
+        }
+        
+        // Generic fallback that doesn't expose technical details
+        return "Something went wrong. Please try again."
+    }
+
+    
+    
     enum Step { case locationConfirm, meetDetails }
+    
 
     var body: some View
     {
@@ -741,32 +782,34 @@ struct MeetCreationOverlayByTap: View
                         ZStack {
                             MeetCreationFormByTapView(
                                 locationInfo: location,
-                                baseURL: baseURL,  // NEW: Pass API dependencies
-                                token: token,      // NEW: Pass API dependencies
-                                onConfirm: { name, start, end, invitedUsers in // UPDATED: Now includes invitedUsers
+                                baseURL: baseURL,
+                                token: token,
+                                onConfirm: { name, start, end, invitedUsers in
                                     guard !isSubmitting else { return }
                                     submitError = nil
                                     isSubmitting = true
                                     Task {
                                         do {
-                                            try await onCreateMeet(location, name, start, end, invitedUsers) // UPDATED: Pass invitedUsers
+                                            try await onCreateMeet(location, name, start, end, invitedUsers)
                                             await MainActor.run {
+                                                isSubmitting = false
+                                                // Only show success animation if creation actually succeeded
                                                 withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
                                                     explodeThenDismiss()
                                                 }
                                             }
                                         } catch {
                                             await MainActor.run {
-                                                submitError = error.localizedDescription
+                                                isSubmitting = false
+                                                // Parse error and show user-friendly message
+                                                submitError = parseErrorMessage(error)
                                             }
                                         }
-                                        await MainActor.run { isSubmitting = false }
                                     }
                                 },
                                 onBack: {
                                     guard !isExploding else { return }
                                     isSoftDismissing = true
-                                    // run the fade/scale, then actually hide after it finishes
                                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
                                         withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
                                             showPopup = false

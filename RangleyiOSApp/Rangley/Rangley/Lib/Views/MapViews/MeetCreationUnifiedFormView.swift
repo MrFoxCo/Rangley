@@ -604,31 +604,75 @@ struct MeetCreationUnifiedFormView: View
         
         isSubmitting = true
         Task {
-            defer { Task { @MainActor in isSubmitting = false } }
             do {
                 if invitedUsers.isEmpty {
-                    // No invites - use simple insert
                     if let body = vm.makeCreateBody() {
                         try await onCreate(body)
-                        await MainActor.run { onClose() }
+                        // Success - form will be dismissed by parent
                     } else {
-                        await MainActor.run { submitError = "Missing required fields" }
+                        await MainActor.run {
+                            isSubmitting = false
+                            submitError = "Missing required information. Please check all fields."
+                        }
                     }
                 } else {
-                    // Has invites - use invite insert
                     if let body = vm.makeCreateBodyWithInvites(invitedUserUUIDs: invitedUsers.map { $0.user_uuid }) {
                         try await onCreateWithInvites(body)
-                        await MainActor.run { onClose() }
+                        // Success - form will be dismissed by parent
                     } else {
-                        await MainActor.run { submitError = "Missing required fields" }
+                        await MainActor.run {
+                            isSubmitting = false
+                            submitError = "Missing required information. Please check all fields."
+                        }
                     }
                 }
             } catch {
-                await MainActor.run { submitError = error.localizedDescription }
+                await MainActor.run {
+                    isSubmitting = false
+                    submitError = parseErrorMessage(error)
+                }
             }
         }
     }
     
+    // Add this helper function to MeetCreationUnifiedFormView
+    private func parseErrorMessage(_ error: Error) -> String
+    {
+        let errorString = error.localizedDescription.lowercased()
+        
+        // Check for content moderation
+        if errorString.contains("content not allowed") ||
+           errorString.contains("violates") ||
+           errorString.contains("inappropriate") ||
+           errorString.contains("community guidelines") {
+            return "Content not allowed - please review your meet details"
+        }
+        
+        // Check for common API errors without exposing HTTP codes
+        if errorString.contains("failed to create meet") ||
+           errorString.contains("500") {
+            return "Unable to create meet right now. Please try again."
+        }
+        
+        if errorString.contains("invalid input") ||
+           errorString.contains("400") {
+            return "Please check your meet details and try again."
+        }
+        
+        if errorString.contains("unauthorized") ||
+           errorString.contains("401") {
+            return "Please log in and try again."
+        }
+        
+        if errorString.contains("network") ||
+           errorString.contains("connection") {
+            return "Network error. Please check your connection and try again."
+        }
+        
+        // Generic fallback that doesn't expose technical details
+        return "Something went wrong. Please try again."
+    }
+
     // MARK: Helpers
     private func setupInitialState()
     {

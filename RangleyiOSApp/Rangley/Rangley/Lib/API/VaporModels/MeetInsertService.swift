@@ -19,30 +19,3 @@ final class AmplifyTokenProvider: AuthTokenProvider {
         return try p.getCognitoTokens().get().idToken
     }
 }
-//
-//actor MeetInsertService {
-//    private let baseURL: URL
-//    private let tokenProvider: AuthTokenProvider
-//
-//    init(baseURL: URL = Env.apiBaseURL,
-//         tokenProvider: AuthTokenProvider = AmplifyTokenProvider()) {
-//        self.baseURL = baseURL
-//        self.tokenProvider = tokenProvider
-//    }
-//
-//    func createMeetOnly(
-//        info: LocationInfo, name: String, start: Date, end: Date
-//    ) async throws -> MeetInsertResponse {
-//        let body = buildMeetBody(locationInfo: info, name: name, startTime: start, endTime: end)
-//        let token = try await tokenProvider.idToken()
-//        return try await AuthAPI.createMeet(baseURL: baseURL, token: token, body: body)
-//    }
-//
-//    func createMeetWithInvites(
-//        info: LocationInfo, name: String, start: Date, end: Date, invited: [UUID]
-//    ) async throws -> MeetInsertResponse {
-//        let body = buildMeetWithInvitesBody(locationInfo: info, name: name, startTime: start, endTime: end, invitedUsers: invited)
-//        let token = try await tokenProvider.idToken()
-//        return try await AuthAPI.createMeetWithInvites(baseURL: baseURL, token: token, body: body)
-//    }
-//}

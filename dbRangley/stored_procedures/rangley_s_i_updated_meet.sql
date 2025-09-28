@@ -1,8 +1,11 @@
--- Updated rangley_s_insert_updated_meet procedure with content validation
+-- Updated rangley_s_insert_updated_meet procedure with validation outputs
 CREATE OR REPLACE PROCEDURE rangley.rangley_s_insert_updated_meet
 (
     -- OUTs
       OUT num_inserted            INT4
+    , OUT validation_failed       BOOLEAN
+    , OUT validation_reason       TEXT
+    , OUT validation_message      TEXT
 
     -- INs (required)
     , IN  p_cognito_sub           text
@@ -68,7 +71,11 @@ DECLARE
     _eps        float8 := 1e-7;
     _eps_radius float8 := 1e-3;
 BEGIN
+    -- OUT sentinels
     num_inserted := 0;
+    validation_failed := FALSE;
+    validation_reason := NULL;
+    validation_message := NULL;
 
     -- Basic guards
     v_sub := nullif(btrim(p_cognito_sub), '');
@@ -76,7 +83,7 @@ BEGIN
         RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='[ERRO] p_cognito_sub is required (non-empty)';
     END IF;
 
-    -- Resolve user id (was previously missing before ownership check)
+    -- Resolve user id
     SELECT rangley.rangley_fn_v_user_id_by_cognito_sub(v_sub)
       INTO v_user_id;
     IF v_user_id IS NULL OR v_user_id <= 0 THEN
@@ -85,7 +92,7 @@ BEGIN
           DETAIL=format('cognito_sub=%s', v_sub);
     END IF;
 
-    -- Existence, then ownership
+    -- Existence and ownership checks
     IF NOT EXISTS (
         SELECT 1
         FROM rangley.tb_meet_ids mid
@@ -157,6 +164,11 @@ BEGIN
     content_message := content_validation->>'message';
     
     IF NOT content_valid THEN
+        -- Set validation failure outputs
+        validation_failed := TRUE;
+        validation_reason := content_reason;
+        validation_message := content_message;
+        
         RAISE LOG '[ERRO] Update aborted: inappropriate content detected (reason: %)', content_reason;
         RAISE EXCEPTION USING
             ERRCODE = '22023',
@@ -165,6 +177,7 @@ BEGIN
             HINT    = 'Please review and modify the meet name and description to remove inappropriate content.';
     END IF;
 
+    -- Time validation
     IF final_dttm_start_utc IS NULL OR final_dttm_end_utc IS NULL OR final_dttm_start_utc >= final_dttm_end_utc THEN
         RAISE EXCEPTION USING ERRCODE='22023',
           MESSAGE='[ERRO] Invalid time window (start must be before end)',

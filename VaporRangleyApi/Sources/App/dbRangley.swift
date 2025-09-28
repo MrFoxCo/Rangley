@@ -185,8 +185,11 @@ enum Proc
 
         struct Result: Content, Sendable
         {
-            let num_inserted    : Int32
-            let meet_id_uuid    : UUID?
+            let num_inserted        : Int32
+            let meet_id_uuid        : UUID?
+            let validation_failed   : Bool
+            let validation_reason   : String?
+            let validation_message  : String?
         }
 
         static func query(_ i: Params, _ o: Result) -> SQLQueryString {
@@ -195,6 +198,9 @@ enum Proc
             (
                  NULL::int4  -- OUT parameter placeholder
                 ,NULL::UUID -- OUT
+                ,NULL::boolean  -- OUT validation_failed
+                ,NULL::text     -- OUT validation_reason
+                ,NULL::text     -- OUT validation_mess
                 ,\(bind: i.cognito_sub              )::text
                 ,\(bind: i.latitude                 )::float8
                 ,\(bind: i.longitude                )::float8
@@ -211,13 +217,16 @@ enum Proc
             """
         }
 
-        static func decode(_ row: any SQLRow) throws -> Result {
-            try .init(
-                num_inserted: row.decode(column: "num_inserted", as: Int32.self),
-                meet_id_uuid: row.decode(column: "meet_id_uuid", as: UUID?.self)
-
-            )
-        }
+        static func decode(_ row: any SQLRow) throws -> Result
+        {
+                try .init(
+                    num_inserted: row.decode(column: "num_inserted", as: Int32.self),
+                    meet_id_uuid: row.decode(column: "meet_id_uuid", as: UUID?.self),
+                    validation_failed: row.decode(column: "validation_failed", as: Bool.self),
+                    validation_reason: row.decode(column: "validation_reason", as: String?.self),
+                    validation_message: row.decode(column: "validation_message", as: String?.self)
+                )
+            }
     }
 
 
@@ -249,15 +258,21 @@ enum Proc
             let max_capacity        : Int32?
         }
 
-        struct Result: Content, Sendable {
-            let num_inserted: Int32
-        }
-
+        struct Result: Content, Sendable
+        {
+             let num_inserted        : Int32
+             let validation_failed   : Bool
+             let validation_reason   : String?
+             let validation_message  : String?
+         }
         static func query(_ i: Params, _ o: Result) -> SQLQueryString {
             """
             CALL \(unsafeRaw: procName.rawValue)
             (
                  NULL::int4  -- OUT parameter placeholder
+                ,NULL::boolean  -- OUT validation_failed
+                ,NULL::text     -- OUT validation_reason
+                ,NULL::text     -- OUT validation_message
                 -- REQUIRED
                 ,\(bind: i.cognito_sub      )::text
                 ,\(bind: i.meet_id_uuid     )::uuid  -- FIX: was cognito_sub
@@ -280,7 +295,12 @@ enum Proc
         }
         static func decode(_ row: any SQLRow) throws -> Result
         {
-            try .init(num_inserted: row.decode(column: "num_inserted", as: Int32.self))
+            try .init(
+                num_inserted: row.decode(column: "num_inserted", as: Int32.self),
+                validation_failed: row.decode(column: "validation_failed", as: Bool.self),
+                validation_reason: row.decode(column: "validation_reason", as: String?.self),
+                validation_message: row.decode(column: "validation_message", as: String?.self)
+            )
         }
     }
     
@@ -352,8 +372,11 @@ enum Proc
 
         struct Result: Content, Sendable
         {
-            let num_inserted    : Int32
+            let num_inserted        : Int32
             let new_meet_id_uuid    : UUID?
+            let validation_failed   : Bool
+            let validation_reason   : String?
+            let validation_message  : String?
         }
 
         static func query(_ i: Params, _ o: Result) -> SQLQueryString
@@ -364,6 +387,9 @@ enum Proc
 
                  NULL::int4  -- OUT parameter placeholder
                 ,NULL::UUID -- OUT
+                ,NULL::boolean  -- OUT validation_failed
+                ,NULL::text     -- OUT validation_reason
+                ,NULL::text     -- OUT validation_message
                 ,\(bind: i.cognito_sub                )::text
                 ,\(bind: i.initial_invitee_uuids      )::UUID[]
                 ,\(bind: i.latitude                   )::float8
@@ -383,11 +409,14 @@ enum Proc
             """
         }
 
-        static func decode(_ row: any SQLRow) throws -> Result {
+        static func decode(_ row: any SQLRow) throws -> Result
+        {
             try .init(
                 num_inserted: row.decode(column: "num_inserted", as: Int32.self),
-                new_meet_id_uuid: row.decode(column: "new_meet_id_uuid", as: UUID?.self)
-
+                new_meet_id_uuid: row.decode(column: "new_meet_id_uuid", as: UUID?.self),
+                validation_failed: row.decode(column: "validation_failed", as: Bool.self),
+                validation_reason: row.decode(column: "validation_reason", as: String?.self),
+                validation_message: row.decode(column: "validation_message", as: String?.self)
             )
         }
     }
@@ -1115,48 +1144,3 @@ enum Func
     // MARK: - END Transaction Level Meet View
     // =========================================================
 }
-
-
-
-
-// TODO: CONSIDER UN-NESTING ALL THIS SHIT
-//
-//enum AWS
-//{
-//    // MARK: Helpers (all static)
-//    private static let reservedHandles: Set<String> = ["admin","support","rangley","mrfox","root","system"]
-//
-//    @inlinable
-//    static func normalizeHandle(_ s: String) -> String {
-//        s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-//    }
-//
-//    @inlinable
-//    static func validateHandle(_ h: String) -> Bool {
-//        h.range(of: #"^[a-z0-9_]{3,20}$"#, options: .regularExpression) != nil
-//        && !reservedHandles.contains(h)
-//    }
-//
-//    @inlinable
-//    static func normalizeEmail(_ e: String?) -> String? {
-//        e?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-//    }
-//
-//    @inlinable
-//    static func normalizePhoneE164(_ p: String?) -> String? {
-//        guard let p else { return nil }
-//        let cleaned = p.replacingOccurrences(of: #"[^+\d]"#, with: "", options: .regularExpression)
-//        return cleaned.hasPrefix("+") && cleaned.count >= 8 ? cleaned : nil
-//    }
-//    /// Turn whatever the user typed into a Cognito-friendly username:
-//    /// - phone -> E.164
-//    /// - email -> lowercase
-//    /// - else  -> normalized handle (lowercased)
-//    @inlinable
-//    static func normalizeLoginUsername(_ raw: String) -> String {
-//        if let p = normalizePhoneE164(raw) { return p }
-//        if let e = normalizeEmail(raw), raw.contains("@") { return e }
-//        return normalizeHandle(raw)
-//    }
-//
-//    // MARK: - END Helpers (all static)

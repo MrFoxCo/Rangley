@@ -2,7 +2,10 @@ CREATE OR REPLACE PROCEDURE rangley.rangley_s_insert_meet
 (
     -- OUTs
      OUT num_inserted            INT4
-	,OUT meet_id_uuid        UUID
+    ,OUT meet_id_uuid            UUID
+    ,OUT validation_failed       BOOLEAN
+    ,OUT validation_reason       TEXT
+    ,OUT validation_message      TEXT
     -- INs
     ,IN  p_cognito_sub           text
 
@@ -35,8 +38,11 @@ DECLARE
 	v_new_meet_id_uuid        UUID;
     v_validation_result         JSON;
 BEGIN
-    -- OUT sentinel
+    -- OUT sentinels
     num_inserted           := 0;
+    validation_failed      := FALSE;
+    validation_reason      := NULL;
+    validation_message     := NULL;
 
     -- ===== Basic guards
     v_sub := nullif(btrim(p_cognito_sub), '');
@@ -82,6 +88,11 @@ BEGIN
 
     -- Check if content validation failed
     IF (v_validation_result->>'valid')::boolean = FALSE THEN
+        -- Set validation failure outputs
+        validation_failed := TRUE;
+        validation_reason := v_validation_result->>'reason';
+        validation_message := v_validation_result->>'message';
+        
         RAISE EXCEPTION USING
           ERRCODE='23514',
           MESSAGE=format('[ERRO] Meet content validation failed: %s', v_validation_result->>'message'),

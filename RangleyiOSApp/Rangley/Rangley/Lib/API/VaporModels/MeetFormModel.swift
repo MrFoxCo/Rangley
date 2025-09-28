@@ -158,11 +158,11 @@ final class MeetFormModel: ObservableObject
     {
         guard case .update = mode, let id = meetIDUUID else { return nil }
 
-        // Simple diffs
+        // Simple diffs - FIXED
         let trimmed = String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(50))
-        let nameOpt: String? = (trimmed != (origName ?? "")) ? trimmed : nil
-        let startOpt: Date?  = (origStart.map { $0 != start } ?? true) ? start : nil
-        let endOpt: Date?    = (origEnd.map   { $0 != end   } ?? true) ? end   : nil
+        let nameOpt: String? = (trimmed != origName) ? trimmed : nil
+        let startOpt: Date?  = (start != origStart) ? start : nil
+        let endOpt: Date?    = (end != origEnd) ? end : nil
         let descOpt: String? = diff(descriptionText, origDescription)
         let catOpt : Int16?  = diff(meetCategoryID,  origCategoryID)
         let capOpt : Int32?  = diff(maxCapacity,     origMaxCapacity)

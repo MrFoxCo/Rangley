@@ -30,8 +30,12 @@ struct UpdatedMeetInsertBody: Codable
     let max_capacity: Int32?
 }
 
-struct UpdatedMeetInsertResponse: Codable {
+struct UpdatedMeetInsertResponse: Codable
+{
     let num_inserted: Int32
+    let validation_failed: Bool
+    let validation_reason: String?
+    let validation_message: String?
 }
 
 extension UpdatedMeetInsertBody {

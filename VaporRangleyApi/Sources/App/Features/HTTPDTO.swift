@@ -78,10 +78,13 @@ enum HTTPDTO
             let meet_id_uuid    : UUID
         }
         
-        struct InsertMeetResponse: Content, Sendable
+        struct InsertMeetResponse: Content
         {
-            let meet_id_uuid    : UUID
-            let num_inserted    : Int32
+            let num_inserted: Int32
+            let meet_id_uuid: UUID?
+            let validation_failed: Bool
+            let validation_reason: String?
+            let validation_message: String?
         }
         
         struct InsertDeleteResponse: Content, Sendable
@@ -89,9 +92,12 @@ enum HTTPDTO
             let num_inserted: Int32
         }
         
-        struct InsertUpdateResponse: Content, Sendable
+        struct InsertUpdateResponse: Content
         {
             let num_inserted: Int32
+            let validation_failed: Bool
+            let validation_reason: String?
+            let validation_message: String?
         }
     }
     
@@ -117,10 +123,13 @@ enum HTTPDTO
             let invitation_message      : String? 
         }
 
-        struct InsertMeetResponse: Content, Sendable
+        struct InsertMeetResponse: Content
         {
-            let num_inserted        : Int32
-            let new_meet_id_uuid    : UUID
+            let num_inserted: Int32
+            let new_meet_id_uuid: UUID?
+            let validation_failed: Bool
+            let validation_reason: String?
+            let validation_message: String?
         }
         
 
@@ -271,127 +280,3 @@ enum HTTPDTO
         }
     }
 }
-
-
-/*
- ADd this later
- 
- extension HTTPDTO.Users.SearchBody {
-     func sanitized() -> Self {
-         func clean(_ xs: [String]?) -> [String]? {
-             let r = xs?.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                        .filter { !$0.isEmpty }
-             return (r?.isEmpty == false) ? r : nil
-         }
-         return .init(usernames: clean(usernames), emails: clean(emails), phones: clean(phones))
-     }
- }
-... then in routes
- 
- let body = try req.content.decode(HTTPDTO.Users.SearchBody.self).sanitized()
- let q = (try? req.query.decode(HTTPDTO.Users.SearchBody.self))?.sanitized() ?? .init(usernames:nil, emails:nil, phones:nil)
-
- 
- to support browsing later
- extension HTTPDTO.Users {
-     struct BrowseQuery: Content, Sendable {
-         let limit: Int?
-         let offset: Int?
-     }
- }
-
- 
- */
-
-
-
-/*
- ADd this later
- 
- extension HTTPDTO.Users.SearchBody {
-     func sanitized() -> Self {
-         func clean(_ xs: [String]?) -> [String]? {
-             let r = xs?.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                        .filter { !$0.isEmpty }
-             return (r?.isEmpty == false) ? r : nil
-         }
-         return .init(usernames: clean(usernames), emails: clean(emails), phones: clean(phones))
-     }
- }
-... then in routes
- 
- let body = try req.content.decode(HTTPDTO.Users.SearchBody.self).sanitized()
- let q = (try? req.query.decode(HTTPDTO.Users.SearchBody.self))?.sanitized() ?? .init(usernames:nil, emails:nil, phones:nil)
-
- 
- to support browsing later
- extension HTTPDTO.Users {
-     struct BrowseQuery: Content, Sendable {
-         let limit: Int?
-         let offset: Int?
-     }
- }
-
- 
- */
-/*
- ADd this later
- 
- extension HTTPDTO.Users.SearchBody {
-     func sanitized() -> Self {
-         func clean(_ xs: [String]?) -> [String]? {
-             let r = xs?.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                        .filter { !$0.isEmpty }
-             return (r?.isEmpty == false) ? r : nil
-         }
-         return .init(usernames: clean(usernames), emails: clean(emails), phones: clean(phones))
-     }
- }
-... then in routes
- 
- let body = try req.content.decode(HTTPDTO.Users.SearchBody.self).sanitized()
- let q = (try? req.query.decode(HTTPDTO.Users.SearchBody.self))?.sanitized() ?? .init(usernames:nil, emails:nil, phones:nil)
-
- 
- to support browsing later
- extension HTTPDTO.Users {
-     struct BrowseQuery: Content, Sendable {
-         let limit: Int?
-         let offset: Int?
-     }
- }
-
- 
- */
-
-
-
-/*
- ADd this later
- 
- extension HTTPDTO.Users.SearchBody {
-     func sanitized() -> Self {
-         func clean(_ xs: [String]?) -> [String]? {
-             let r = xs?.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                        .filter { !$0.isEmpty }
-             return (r?.isEmpty == false) ? r : nil
-         }
-         return .init(usernames: clean(usernames), emails: clean(emails), phones: clean(phones))
-     }
- }
-... then in routes
- 
- let body = try req.content.decode(HTTPDTO.Users.SearchBody.self).sanitized()
- let q = (try? req.query.decode(HTTPDTO.Users.SearchBody.self))?.sanitized() ?? .init(usernames:nil, emails:nil, phones:nil)
-
- 
- to support browsing later
- extension HTTPDTO.Users {
-     struct BrowseQuery: Content, Sendable {
-         let limit: Int?
-         let offset: Int?
-     }
- }
-
- 
- */
