@@ -101,7 +101,7 @@ class AuthStateStore: ObservableObject
     private func fetchCurrentUser() async
     {
         do {
-            let user = try await AuthAPI.me(baseURL: Env.apiBaseURL, token: currentToken)
+            let user = try await AuthAPI.viewUserMe(baseURL: Env.apiBaseURL, token: currentToken)
             await MainActor.run {
                 currentUser = user
             }

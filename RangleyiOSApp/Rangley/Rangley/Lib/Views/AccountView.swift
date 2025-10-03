@@ -169,17 +169,17 @@ struct AccountView: View
             accountInfoCard(
                 title: "Personal Information",
                 items: [
-                    ("Username", profile.username),
+                    ("Username",     profile.username),
                     ("Display Name", profile.display_name),
-                    ("Email", profile.email),
-                    ("Phone", profile.cellphone)
+                    ("Email",        profile.email),
+                    ("Phone",        profile.cellphone)
                 ]
             )
             
             accountInfoCard(
                 title: "Account Details",
                 items: [
-                    ("Date of Birth", formatDate(profile.dob)),
+                    ("Date of Birth", formatDobString(profile.dob)),
                     ("Member Since", formatDate(profile.dttm_created_utc))
                 ]
             )
@@ -435,20 +435,38 @@ struct AccountView: View
     }
     
     // MARK: - Helpers
-    private func getInitials(from name: String) -> String {
+    private func getInitials(from name: String) -> String
+    {
         let components = name.trimmingCharacters(in: .whitespaces).split(separator: " ")
         let initials = components.prefix(2).compactMap { $0.first }
         return String(initials).uppercased()
     }
     
-    private func formatDate(_ date: Date) -> String {
+    private func formatDate(_ date: Date) -> String
+    {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .none
         return formatter.string(from: date)
     }
     
-    private func load() async {
+    private func formatDobString(_ dateString: String) -> String {
+        let inputFormatter = DateFormatter()
+        inputFormatter.dateFormat = "yyyy-MM-dd"
+        
+        let outputFormatter = DateFormatter()
+        outputFormatter.dateStyle = .medium
+        outputFormatter.timeStyle = .none
+        
+        guard let date = inputFormatter.date(from: dateString) else {
+            return dateString  // Fallback to raw string
+        }
+        
+        return outputFormatter.string(from: date)
+    }
+    
+    private func load() async
+    {
         do {
             let session = try await Amplify.Auth.fetchAuthSession()
             guard let provider = session as? AuthCognitoTokensProvider else {
@@ -457,7 +475,7 @@ struct AccountView: View
 
             let tokens = try provider.getCognitoTokens().get()
             let idToken = tokens.idToken
-            let me = try await AuthAPI.me(baseURL: Env.apiBaseURL, token: idToken)
+            let me = try await AuthAPI.viewUserMe(baseURL: Env.apiBaseURL, token: idToken)
 
             await MainActor.run {
                 self.profile = me

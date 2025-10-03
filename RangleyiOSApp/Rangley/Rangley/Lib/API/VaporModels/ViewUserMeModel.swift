@@ -14,7 +14,7 @@ struct ViewUserMeModel: Codable, Identifiable
     let display_name        : String
     let cellphone           : String?
     let email               : String?
-    let dob                 : Date
+    let dob                 : String
     let dttm_created_utc    : Date
     
     var id: UUID { user_uuid }

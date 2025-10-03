@@ -322,12 +322,10 @@ struct AuthAPI
             throw AuthAPIError.decode(error.localizedDescription)
         }
     }
-
-    
     // GET /v/me  (protected; Bearer ID token)
-    static func me(baseURL: URL, token: String) async throws -> ViewUserMeModel
+    static func viewUserMe(baseURL: URL, token: String) async throws -> ViewUserMeModel
     {
-        var req = URLRequest(url: makeURL(baseURL, ["v", "me"]))
+        var req = URLRequest(url: makeURL(baseURL, ["v", "user", "me"]))
         req.httpMethod = "GET"
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")

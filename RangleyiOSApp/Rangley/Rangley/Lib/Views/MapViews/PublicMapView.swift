@@ -30,11 +30,13 @@
 // TODO: - loading is kinda fixed
 // TODO: -  ^^^^this is for first download or simply reopening the app... an ANYTIME open of the app load
 // TODO: - Cleanup jump from MyMeetsView to meetscard overlay
-// TODO: - Make sure KEYBOARDS ARE ALL THE SAME COLOR
+// TODO: - Make sure KEYBOARDS ARE ALL THE SAME COLOR -- make black theme
 // TODO: - Add throttling for too many requests
 // TODO: - Add Technical Difficulties Page
 // TODO: - Fix key chain so it's not so ugly
 // TODO: - Consider adding other POI's to the map
+// TODO: - Users can create groups... sorta like on iMessage. ex: invite their usual friend groups out
+// TODO: - filtering mechanism for my meets... might get really cluttered for super active users
 // MARK: - V2
 // MARK: - IGNORE THE ABOVE TODOs FOR NOW
 // ==========================================================================================================
@@ -296,7 +298,7 @@ class APIService: APIServiceProtocol
             let token = try await getAuthToken()
             
             // Get current user UUID for the inviter_user_uuid field
-            let currentUser = try await AuthAPI.me(baseURL: Env.apiBaseURL, token: token)
+            let currentUser = try await AuthAPI.viewUserMe(baseURL: Env.apiBaseURL, token: token)
             
             let body = InsertAddtionalParticpantsModelBody(
                 meet_id_uuid                    : meetId,

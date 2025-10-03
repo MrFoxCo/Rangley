@@ -26,7 +26,7 @@ final class SessionModel: ObservableObject {
             let session = try await Amplify.Auth.fetchAuthSession()
             guard let provider = session as? AuthCognitoTokensProvider else { return }
             let idToken = try provider.getCognitoTokens().get().idToken
-            me = try await AuthAPI.me(baseURL: Env.apiBaseURL, token: idToken)
+            me = try await AuthAPI.viewUserMe(baseURL: Env.apiBaseURL, token: idToken)
         } catch {
             print("reloadMe error:", error)
             me = nil

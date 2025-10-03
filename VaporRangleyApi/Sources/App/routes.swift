@@ -32,16 +32,6 @@ extension Request
     }
 }
 
-
-extension Func.ViewUser {
-    static func fetchOne(on sql: any SQLDatabase, _ input: In) async throws -> Results {
-        let rows = try await fetchAll(on: sql, input)
-        guard let first = rows.first else { throw Abort(.notFound, reason: "User not found") }
-        return first
-    }
-}
-
-
 // TODO: - REMOVE ALL BUSINESS LOGIC FROM routes.swift PLACE IN dbRangley.swift
 public func routes(_ app: Application) throws
 {
@@ -76,15 +66,26 @@ public func routes(_ app: Application) throws
     
     // MARK: - VIEW (fn_* ) or GET ROUTES
 
-
+    // TODO: Route is deprecated need to remove
     v.get("me")
     {
-        req async throws -> Func.ViewUser.Results in
+        req async throws -> Func.ViewUserDeprecated.Results in
         let sub = req.cognito.sub.value
         guard let sql = req.db as? any SQLDatabase
         else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
-        return try await Func.ViewUser.fetchOne(on: sql, .init(cognito_sub: sub))
+        return try await Func.ViewUserDeprecated.fetchOne(on: sql, .init(cognito_sub: sub))
     }
+    
+    
+    v.get("user","me")
+    {
+        req async throws -> Func.ViewUserNew.Results in
+        let sub = req.cognito.sub.value
+        guard let sql = req.db as? any SQLDatabase
+        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+        return try await Func.ViewUserNew.fetchOne(on: sql, .init(cognito_sub: sub))
+    }
+    
     
     // GET /v/meets  -> all meet card data
     v.get("meets")
@@ -247,6 +248,9 @@ public func routes(_ app: Application) throws
 //    }
 
 
+    // TODO: Same number might be able to beat Rater Limiter with multiple consecutive requests
+    // TODO: ENHANCE for race conditions
+    
     // Send verification code with rate limiting
     // Enhanced send verification route with IP protection
     publicAuth.post("send-verification")
@@ -322,6 +326,7 @@ public func routes(_ app: Application) throws
         }
     }
     
+
     // Verify phone code (with attempt limiting too)
     // Verify phone code with phone normalization
     publicAuth.post("verify-phone")

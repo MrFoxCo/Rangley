@@ -612,6 +612,7 @@ struct JSONKeyValueView: View
             Text(s).font(.system(size: 12, design: .monospaced))
         case _ as NSNull:
             Text("null").italic().font(.system(size: 12, design: .monospaced)).foregroundStyle(.secondary)
+        // TODO: fix
         default:
             Text("\(value)").font(.system(size: 12, design: .monospaced))
         }

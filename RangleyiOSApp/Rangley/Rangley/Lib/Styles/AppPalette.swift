@@ -1,11 +1,10 @@
 //
-//  RussianVioletBlackPalette.swift
+//  AppPalette.swift
 //  Rangley
 //
 //  Created by Anthony Guzzardo on 9/10/25.
 //
 
-//2E003E
 
 import SwiftUI
 
