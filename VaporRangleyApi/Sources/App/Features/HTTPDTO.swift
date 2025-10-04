@@ -351,6 +351,13 @@ enum HTTPDTO
             let dttm_opened_utc         : Date?
             let is_read                 : Bool
         }
+        
+        struct ClearInboxResponse: Content, Sendable
+        {
+            let success      : Bool
+            let message      : String
+            let cleared_count: Int32
+        }
     }
     
     

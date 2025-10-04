@@ -43,8 +43,8 @@ enum RangleyFunc: String
     
     case v_meet_categories                         = "rangley.rangley_fn_v_meet_categories"
     case v_meets_by_cognito_sub                    = "rangley.rangley_fn_v_meets_by_cognito_sub"
-
-
+    
+    
     case m_respond_to_meet_invitation              = "rangley.rangley_fn_m_respond_to_meet_invitation"
     case m_update_participant_status               = "rangley.rangley_fn_m_update_participant_status"
     case i_additional_participants_to_meet         = "rangley.rangley_fn_i_additional_participants_to_meet_by_meet_id_uuid"
@@ -56,6 +56,8 @@ enum RangleyFunc: String
     case send_friend_request                       = "rangley.rgl_fn_send_friend_request"
     case view_user_inbox                           = "rangley.rgl_fn_v_user_inbox"
     case respond_to_friend_request                 = "rangley.rgl_fn_respond_to_friend_request"
+    case clear_user_inbox                          = "rangley.rgl_fn_clear_user_inbox"
+
 }
 
 // MARK: - Generic call shapes
@@ -1191,6 +1193,35 @@ enum Func
                 dttm_received_utc:      r.decode(column: "dttm_received_utc",       as: Date.self),
                 dttm_opened_utc:        r.decode(column: "dttm_opened_utc",         as: Date?.self),
                 is_read:                r.decode(column: "is_read",                 as: Bool.self)
+            )
+        }
+    }
+    
+    enum ClearUserInbox: PgFunctionRows
+    {
+        static let funcName: RangleyFunc = .clear_user_inbox
+        
+        struct In: Sendable
+        {
+            let cognito_sub: String
+        }
+        
+        struct Results: Content, Sendable
+        {
+            let success      : Bool
+            let message      : String
+            let cleared_count: Int32
+        }
+        
+        static func query(_ input: In) -> SQLQueryString {
+            "SELECT * FROM \(unsafeRaw: funcName.rawValue)(\(bind: input.cognito_sub));"
+        }
+        
+        static func decode(_ r: any SQLRow) throws -> Results {
+            try .init(
+                success      : r.decode(column: "success",       as: Bool.self),
+                message      : r.decode(column: "message",       as: String.self),
+                cleared_count: r.decode(column: "cleared_count", as: Int32.self)
             )
         }
     }

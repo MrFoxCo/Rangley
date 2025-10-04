@@ -28,3 +28,9 @@ struct InboxNotificationModelBody: Codable, Sendable
     let is_read                 : Bool
 }
 
+struct ClearInboxResponse: Codable, Sendable
+{
+    let success      : Bool
+    let message      : String
+    let cleared_count: Int32
+}

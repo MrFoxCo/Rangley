@@ -74,6 +74,18 @@ BEGIN
         
         v_notification_type_id := 17;
     END IF;
+
+
+	-- Delete the friend request notification from recipient's inbox
+	DELETE FROM rangley.tb_user_inboxes ui
+	WHERE ui.user_id = v_recipient_user_id
+	  AND ui.notification_id IN (
+	      SELECT n.notification_id 
+	      FROM rangley.tb_notifications n
+	      WHERE n.notification_type_id = 15  -- Friend Request Received
+	        AND n.payload_json->>'friend_request_id' = p_friend_request_id::text
+	  );
+
     
     -- Insert notification into base table
     INSERT INTO rangley.tb_notifications (

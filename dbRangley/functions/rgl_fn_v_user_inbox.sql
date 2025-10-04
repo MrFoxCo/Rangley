@@ -3,12 +3,12 @@
 -- ============================================
 CREATE OR REPLACE FUNCTION rangley.rgl_fn_v_user_inbox
 (
-    p_cognito_sub text,
-    p_limit       int DEFAULT 50
+    p_cognito_sub TEXT,
+    p_limit       INT2 DEFAULT 50
 )
 RETURNS table
 (
-    notification_id      bigint,
+    notification_id      INT8,
     notification_type_id int2,
     notification_type    varchar(50),
     meet_id_uuid         uuid,

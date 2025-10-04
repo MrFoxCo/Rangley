@@ -1000,6 +1000,29 @@ public func routes(_ app: Application) throws
         )
     }
     
+    s.post("inbox", "clear")
+    {
+        req async throws -> HTTPDTO.Inbox.ClearInboxResponse in
+        let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
+        
+        guard let sql = req.db as? any SQLDatabase
+        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+        
+        let input = Func.ClearUserInbox.In(cognito_sub: sub)
+        let rs = try await sql.raw(Func.ClearUserInbox.query(input)).all()
+        
+        guard let result = try rs.map(Func.ClearUserInbox.decode).first else {
+            throw Abort(.internalServerError, reason: "No result returned")
+        }
+        
+        return .init(
+            success: result.success,
+            message: result.message,
+            cleared_count: result.cleared_count
+        )
+    }
+    
 
     // MARK: - END System INSERTS (s*) or POST ROUTES
     
