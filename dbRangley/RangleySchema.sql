@@ -33,37 +33,6 @@ CREATE TABLE rangley.td_violation_categories
     ,description            VARCHAR(200) NOT NULL DEFAULT ''
 );
 
-select * from  rangley.td_violation_categories;
-
--- Insert violation categories
-INSERT INTO rangley.td_violation_categories (violation_category_id, name, description) VALUES
-(1, 'content_true_threats', 'True threats and incitement to violence'),
-(2, 'content_slurs_hate_speech', 'Racial, ethnic, and religious slurs'),
-(3, 'content_sexually_explicit', 'Sexually explicit and harassing content'),
-(4, 'content_illegal_activity', 'Illegal activity and drug references'),
-(5, 'content_aggressive_profanity', 'Extreme profanity with aggressive context'),
-(6, 'content_predatory', 'Predatory or inappropriate targeting'),
-(7, 'content_extremist_conspiracy', 'Extremist and conspiracy content'),
-(8, 'content_spam_scam', 'Spam and scam patterns'),
-(9, 'content_doxxing_harassment', 'Doxxing and harassment patterns'),
-(10, 'content_discriminatory_professional', 'Professional context violations'),
-(11, 'content_terrorism', 'Terrorism and violent extremism'),
-(12, 'content_child_exploitation', 'Child sexual abuse and exploitation'),
-(13, 'content_human_trafficking', 'Human trafficking and forced labor'),
-(14, 'content_drug_distribution', 'Drug manufacturing and distribution'),
-(15, 'content_illegal_weapons', 'Weapons and illegal firearms'),
-(16, 'content_prostitution', 'Prostitution and sexual services'),
-(17, 'content_organized_crime', 'Organized crime and racketeering'),
-(18, 'content_financial_crime', 'Financial crimes and fraud'),
-(19, 'content_cybercrime', 'Cybercrime and hacking'),
-(20, 'content_hate_crime', 'Hate crimes and discriminatory violence'),
-(21, 'content_kidnapping', 'Kidnapping and abduction'),
-(22, 'content_animal_cruelty', 'Animal cruelty and illegal animal activities'),
-(23, 'content_sexual_crime', 'Sexual crimes'),
-(24, 'content_environmental_crime', 'Environmental crimes'),
-(25, 'content_immigration_crime', 'Border and immigration crimes');
-
-
 
 
 CREATE TABLE rangley.tb_content_violations

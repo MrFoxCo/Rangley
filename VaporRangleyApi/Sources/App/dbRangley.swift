@@ -34,6 +34,7 @@ enum RangleyProcName: String
 // Essentially these are views because postgres doesn't allow procedural views in an easy way
 enum RangleyFunc: String
 {
+    // TODO: remove deprecated when update is complete
     case v_user_by_cognito_sub_dep                 = "rangley.rangley_fn_v_user_by_cognito_sub"
     case v_user_by_cognito_sub_new                 = "rangley.rangley_fn_v_user_by_cognito_sub_patch_dob"
     case v_users_by_cognito_sub                    = "rangley.rangley_fn_v_users_by_cognito_sub"
@@ -49,6 +50,7 @@ enum RangleyFunc: String
     case v_app_version                             = "rangley.rangley_fn_v_app_version"
     case check_username_availability               = "rangley.rgl_fn_check_username_availability"
     case validate_display_name                     = "rangley.rgl_fn_validate_display_name"
+    case view_user_profile_by_uuid                 = "rangley.rgl_fn_v_user_profile_by_uuid"
 }
 
 // MARK: - Generic call shapes
@@ -884,7 +886,7 @@ enum Func
 
     }
 
-
+    // TODO: remove deprecated when update is complete
     enum ViewUserDeprecated: PgFunctionRows
     {
         static let funcName: RangleyFunc = .v_user_by_cognito_sub_dep  // or .v_user_clean
@@ -1025,6 +1027,55 @@ enum Func
         }
     }
 
+    enum ViewUserProfile: PgFunctionRows
+    {
+        static let funcName: RangleyFunc = .view_user_profile_by_uuid
+
+        struct In: Sendable
+        {
+            let user_uuid: UUID
+        }
+
+        struct Results: Content, Sendable
+        {
+            let user_uuid                   : UUID
+            let username                    : String
+            let display_name                : String
+            let member_since                : Date
+            let meets_created               : Int
+            let meets_attended              : Int
+            let friend_count                : Int
+            let discoverable_by_username    : Bool
+            let discoverable_by_phone       : Bool
+            let discoverable_by_email       : Bool
+            let show_full_name              : Bool
+            let allow_invites_from_anyone   : Bool
+        }
+
+        static func query(_ input: In) -> SQLQueryString
+        {
+            "SELECT * FROM \(unsafeRaw: funcName.rawValue)(\(bind: input.user_uuid));"
+        }
+
+        static func decode(_ r: any SQLRow) throws -> Results
+        {
+            try .init(
+                user_uuid:                r.decode(column: "user_uuid",                 as: UUID.self),
+                username:                 r.decode(column: "username",                  as: String.self),
+                display_name:             r.decode(column: "display_name",              as: String.self),
+                member_since:             r.decode(column: "member_since",              as: Date.self),
+                meets_created:            r.decode(column: "meets_created",             as: Int.self),
+                meets_attended:           r.decode(column: "meets_attended",            as: Int.self),
+                friend_count:             r.decode(column: "friend_count",              as: Int.self),
+                discoverable_by_username: r.decode(column: "discoverable_by_username",  as: Bool.self),
+                discoverable_by_phone:    r.decode(column: "discoverable_by_phone",     as: Bool.self),
+                discoverable_by_email:    r.decode(column: "discoverable_by_email",     as: Bool.self),
+                show_full_name:           r.decode(column: "show_full_name",            as: Bool.self),
+                allow_invites_from_anyone:r.decode(column: "allow_invites_from_anyone", as: Bool.self)
+            )
+        }
+    }
+    
     
     enum ViewMeetCategories: PgFunctionRows
     {

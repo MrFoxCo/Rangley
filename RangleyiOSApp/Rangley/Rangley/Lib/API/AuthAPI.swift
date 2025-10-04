@@ -353,6 +353,36 @@ struct AuthAPI
         }
     }
     
+    static func viewUsersProfile(baseURL: URL, token: String, userUUID: UUID) async throws -> ViewUserProfileModelResponse
+    {
+        var req = URLRequest(url: makeURL(baseURL, ["v", "users", "profile", userUUID.uuidString]))
+        req.httpMethod = "GET"
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
+        guard (200..<300).contains(http.statusCode) else {
+            #if DEBUG
+            print("=== Profile Failed ===")
+            print("Status Code: \(http.statusCode)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        }
+        
+        do {
+            return try isoDecoder.decode(ViewUserProfileModelResponse.self, from: data)
+        } catch {
+            #if DEBUG
+            print("=== Decode Error in profile ===")
+            print("Error: \(error)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.decode(error.localizedDescription)
+        }
+    }
+    
     
     // GET /auth/check  (protected; Bearer ID token)
     static func checkUsernameAvailability(baseURL: URL, body: CheckUsernameAvailabilityModelBody)

@@ -26,6 +26,14 @@ DROP VIEW IF EXISTS rangley.vw_meets CASCADE;
 DROP VIEW IF exists rangley.vw_user_privacy_settings cascade;
 
 
+DROP VIEW IF EXISTS rangley.vw_friend_request_status CASCADE;
+DROP VIEW IF EXISTS rangley.vw_friend_requests CASCADE;
+DROP VIEW IF EXISTS rangley.vw_friendships CASCADE;
+DROP VIEW IF EXISTS rangley.vw_user_meets_created_stats CASCADE;
+DROP VIEW IF EXISTS rangley.vw_user_meets_attended_stats CASCADE;
+DROP VIEW IF EXISTS rangley.vw_user_friend_count CASCADE;
+DROP VIEW IF EXISTS rangley.vw_user_profile CASCADE;
+DROP VIEW IF EXISTS rangley.vw_user_friendships CASCADE;
 
 CREATE OR REPLACE VIEW rangley.vw_meets AS 
 SELECT
@@ -211,20 +219,49 @@ SELECT
 FROM rangley.td_participant_status;
 
 
+
+-- Friend system base views
+CREATE OR REPLACE VIEW rangley.vw_friend_request_status AS
+SELECT 
+     friend_request_status_id
+    ,name
+    ,dttm_created_utc
+    ,created_by
+FROM rangley.td_friend_request_status;
+
+
+CREATE OR REPLACE VIEW rangley.vw_friend_requests AS
+SELECT 
+     friend_request_id
+    ,requester_user_id
+    ,recipient_user_id
+    ,friend_request_status_id
+    ,dttm_created_utc
+    ,dttm_responded_utc
+    ,dttm_modified_utc
+FROM rangley.tb_friend_requests;
+
+
+CREATE OR REPLACE VIEW rangley.vw_friendships AS
+SELECT 
+     friendship_id
+    ,user_id_a
+    ,user_id_b
+    ,dttm_created_utc
+FROM rangley.tb_friendships;
+
+
+
+
 CREATE OR REPLACE VIEW rangley.vw_version_features AS
 SELECT version, feature_id
 FROM rangley.te_version_features;
 
-/*
-CREATE OR REPLACE VIEW rangley.vw_meet_change_stamps_desc AS
-WITH latest AS (
-  SELECT meet_id, MAX(change_stamp) AS change_stamp
-  FROM rangley.vw_meets
-  GROUP BY meet_id
-)
-SELECT meet_id, change_stamp
-FROM latest;
-*/
+
+-- ============================================
+-- COMPUTED/AGGREGATE VIEWS
+-- ============================================
+
 
 CREATE OR REPLACE VIEW rangley.vw_meet_change_stamps_desc AS
 SELECT DISTINCT ON (meet_id)
@@ -282,6 +319,140 @@ WHERE
 CREATE OR REPLACE VIEW rangley.vw_meet_category_id_and_name AS
 SELECT meet_category_id, name
 FROM rangley.vw_meet_category;
+
+
+
+-- ============================================
+-- PROFILE STATS HELPER VIEWS
+-- ============================================
+
+CREATE OR REPLACE VIEW rangley.vw_user_meets_created_stats AS
+SELECT 
+     mi.created_by_user_id AS user_id
+    ,COUNT(DISTINCT mi.meet_id) AS meets_created_count
+FROM rangley.vw_meet_ids mi
+JOIN rangley.vw_meet_change_stamps_desc mcsd 
+    ON mcsd.meet_id = mi.meet_id
+JOIN rangley.vw_meets m 
+    ON m.meet_id = mcsd.meet_id 
+    AND m.change_stamp = mcsd.change_stamp
+WHERE m.dttm_end_utc < now()
+  AND m.meet_status_id NOT IN (2, 3, 5, 7)
+GROUP BY mi.created_by_user_id;
+
+
+CREATE OR REPLACE VIEW rangley.vw_user_meets_attended_stats AS
+SELECT 
+     mp.user_id
+    ,COUNT(DISTINCT mp.meet_id) AS meets_attended_count
+FROM rangley.vw_meet_participants mp
+JOIN rangley.vw_meet_change_stamps_desc mcsd 
+    ON mcsd.meet_id = mp.meet_id
+JOIN rangley.vw_meets m 
+    ON m.meet_id = mcsd.meet_id 
+    AND m.change_stamp = mcsd.change_stamp
+WHERE (
+        mp.participant_status_id = 7
+        OR (
+            mp.participant_status_id = 6
+            AND mp.dttm_accepted_utc IS NOT NULL
+        )
+      )
+  AND m.dttm_end_utc < now()
+  AND m.meet_status_id NOT IN (2, 3, 5, 7)
+GROUP BY mp.user_id;
+
+
+CREATE OR REPLACE VIEW rangley.vw_user_friend_count AS
+SELECT 
+     user_id
+    ,COUNT(*) AS friend_count
+FROM (
+    SELECT user_id_a AS user_id FROM rangley.vw_friendships
+    UNION ALL
+    SELECT user_id_b AS user_id FROM rangley.vw_friendships
+) friends
+GROUP BY user_id;
+
+
+-- ============================================
+-- MAIN USER PROFILE VIEW
+-- ============================================
+
+CREATE OR REPLACE VIEW rangley.vw_user_profile AS
+SELECT 
+     u.user_id
+    ,u.uuid AS user_uuid
+    ,u.username
+    ,u.display_name
+    ,u.first_name
+    ,u.last_name
+    ,u.dttm_created_utc AS member_since
+    ,COALESCE(mc.meets_created_count, 0) AS meets_created
+    ,COALESCE(ma.meets_attended_count, 0) AS meets_attended
+    ,COALESCE(fc.friend_count, 0) AS friend_count
+    ,ps.discoverable_by_username
+    ,ps.discoverable_by_phone
+    ,ps.discoverable_by_email
+    ,ps.show_full_name
+    ,ps.allow_invites_from_anyone
+FROM rangley.vw_users u
+LEFT JOIN rangley.vw_user_meets_created_stats mc ON mc.user_id = u.user_id
+LEFT JOIN rangley.vw_user_meets_attended_stats ma ON ma.user_id = u.user_id
+LEFT JOIN rangley.vw_user_friend_count fc ON fc.user_id = u.user_id
+LEFT JOIN rangley.vw_user_privacy_settings ps ON ps.user_id = u.user_id;
+
+
+-- ============================================
+-- ENRICHED FRIEND VIEWS
+-- ============================================
+
+CREATE OR REPLACE VIEW rangley.vw_user_friendships AS
+SELECT 
+     f.friendship_id
+    ,f.user_id_a AS user_id
+    ,f.user_id_b AS friend_user_id
+    ,u.username AS friend_username
+    ,u.display_name AS friend_display_name
+    ,u.uuid AS friend_uuid
+    ,f.dttm_created_utc AS friends_since
+FROM rangley.vw_friendships f
+JOIN rangley.vw_users u ON u.user_id = f.user_id_b
+
+UNION ALL
+
+SELECT 
+     f.friendship_id
+    ,f.user_id_b AS user_id
+    ,f.user_id_a AS friend_user_id
+    ,u.username AS friend_username
+    ,u.display_name AS friend_display_name
+    ,u.uuid AS friend_uuid
+    ,f.dttm_created_utc AS friends_since
+FROM rangley.vw_friendships f
+JOIN rangley.vw_users u ON u.user_id = f.user_id_a;
+
+
+CREATE OR REPLACE VIEW rangley.vw_friend_requests_enriched AS
+SELECT 
+     fr.friend_request_id
+    ,fr.requester_user_id
+    ,req.username AS requester_username
+    ,req.display_name AS requester_display_name
+    ,req.uuid AS requester_uuid
+    ,fr.recipient_user_id
+    ,rec.username AS recipient_username
+    ,rec.display_name AS recipient_display_name
+    ,rec.uuid AS recipient_uuid
+    ,fr.friend_request_status_id
+    ,frs.name AS request_status
+    ,fr.dttm_created_utc
+    ,fr.dttm_responded_utc
+FROM rangley.vw_friend_requests fr
+JOIN rangley.vw_users req ON req.user_id = fr.requester_user_id
+JOIN rangley.vw_users rec ON rec.user_id = fr.recipient_user_id
+JOIN rangley.vw_friend_request_status frs ON frs.friend_request_status_id = fr.friend_request_status_id;
+
 
 
 

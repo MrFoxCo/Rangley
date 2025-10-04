@@ -47,8 +47,7 @@ struct UpdateRequiredView: View {
     }
     
     private func openAppStore() {
-        let bundleId = Bundle.main.bundleIdentifier ?? "com.mrfoxco.app"
-        if let url = URL(string: "https://apps.apple.com/app/\(bundleId)") {
+        if let url = URL(string: "https://apps.apple.com/app/id6751070400") {
             UIApplication.shared.open(url)
         }
     }

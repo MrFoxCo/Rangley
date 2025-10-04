@@ -66,7 +66,7 @@ public func routes(_ app: Application) throws
     
     // MARK: - VIEW (fn_* ) or GET ROUTES
 
-    // TODO: Route is deprecated need to remove
+    // TODO: remove deprecated when update is complete
     v.get("me")
     {
         req async throws -> Func.ViewUserDeprecated.Results in
@@ -149,6 +149,47 @@ public func routes(_ app: Application) throws
             )
         })
     }
+    
+    v.get("users", "profile", ":user_uuid")
+    {
+        req async throws -> HTTPDTO.Users.ProfileResponse in
+        
+        let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
+        
+        guard let userUUIDString = req.parameters.get("user_uuid"),
+              let userUUID = UUID(uuidString: userUUIDString)
+        else { throw Abort(.badRequest, reason: "Invalid user_uuid") }
+        
+        guard let sql = req.db as? any SQLDatabase
+        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+        
+        let input = Func.ViewUserProfile.In(user_uuid: userUUID)
+        
+        let rs = try await sql.raw(Func.ViewUserProfile.query(input)).all()
+        let rows: [Func.ViewUserProfile.Results] = try rs.map(Func.ViewUserProfile.decode)
+        
+        guard let profile = rows.first else {
+            throw Abort(.notFound, reason: "User profile not found")
+        }
+        
+        return .init(
+            user_uuid: profile.user_uuid,
+            username: profile.username,
+            display_name: profile.display_name,
+            member_since: profile.member_since,
+            meets_created: profile.meets_created,
+            meets_attended: profile.meets_attended,
+            friend_count: profile.friend_count,
+            discoverable_by_username: profile.discoverable_by_username,
+            discoverable_by_phone: profile.discoverable_by_phone,
+            discoverable_by_email: profile.discoverable_by_email,
+            show_full_name: profile.show_full_name,
+            allow_invites_from_anyone: profile.allow_invites_from_anyone
+        )
+    }
+    
+    
     
     v.get("notifications")
     {
@@ -845,6 +886,7 @@ public func routes(_ app: Application) throws
         })
     }
     
+    // TODO: consider pluralizign eveyr route
     s.post("user", "delete")
     {
         req async throws -> Proc.SystemDeleteUser.Out in
@@ -861,7 +903,6 @@ public func routes(_ app: Application) throws
         return try await Proc.SystemDeleteUser.call(on: sql, params, outputPlaceholder)
     }
     
-
 
     // MARK: - END System INSERTS (s*) or POST ROUTES
     
