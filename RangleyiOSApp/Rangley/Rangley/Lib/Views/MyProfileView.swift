@@ -6,8 +6,9 @@
 //
 
 import SwiftUI
+import Amplify
+import AWSPluginsCore
 
-// Add this struct at the top of MyProfileView
 struct IdentifiableFriendsList: Identifiable {
     let id = UUID()
     let friends: [FriendItem]
@@ -92,7 +93,14 @@ struct MyProfileView: View
             )
         }
         .sheet(isPresented: $showSettings) {
-            SettingsPlaceholderView(onDismiss: { showSettings = false })
+            if let profile = myProfile {
+                ProfileSettingsView(
+                    profile: profile,
+                    baseURL: baseURL,
+                    token: token,
+                    onDismiss: { showSettings = false }
+                )
+            }
         }
         .task {
             await loadMyProfile()
@@ -151,26 +159,6 @@ struct MyProfileView: View
                     .font(.system(size: 16, weight: .medium))
                     .foregroundStyle(AppPalette.Text.secondary)
             }
-            
-            // Edit Profile Button
-            Button(action: { /* TODO: Edit profile */ }) {
-                HStack(spacing: 6) {
-                    Image(systemName: "pencil")
-                        .font(.system(size: 14))
-                    Text("Edit Profile")
-                        .font(.system(size: 15, weight: .medium))
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-                .background(Color.clear)
-                .foregroundStyle(AppPalette.Brand.neonPink)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(AppPalette.Brand.neonPink.opacity(0.5), lineWidth: 1)
-                )
-            }
-            .disabled(true)
-            .opacity(0.6)
         }
     }
     
@@ -196,7 +184,6 @@ struct MyProfileView: View
                         icon: "checkmark.circle.fill"
                     )
                     
-                    // Tappable friends count
                     Button(action: {
                         if stats.friend_count > 0 {
                             Task { await loadFriendsList() }
@@ -284,11 +271,9 @@ struct MyProfileView: View
         defer { isLoading = false }
         
         do {
-            // Load my profile info
             let profile = try await AuthAPI.viewUserMe(baseURL: baseURL, token: token)
             myProfile = profile
             
-            // Load my stats
             let stats = try await AuthAPI.viewUsersProfile(
                 baseURL: baseURL,
                 token: token,
@@ -322,7 +307,6 @@ struct MyProfileView: View
             )
             
             if response.success {
-                // Update the presented list
                 if let currentList = presentedFriendsList {
                     let updated = currentList.friends.filter { $0.id != friend.id }
                     presentedFriendsList = IdentifiableFriendsList(friends: updated)
@@ -337,11 +321,21 @@ struct MyProfileView: View
     }
 }
 
-// MARK: - Settings Placeholder
+// MARK: - Profile Settings View
 
-struct SettingsPlaceholderView: View
+struct ProfileSettingsView: View
 {
+    let profile: ViewUserMeModel
+    let baseURL: URL
+    let token: String
     let onDismiss: () -> Void
+    
+    @State private var showingPasswordReset = false
+    @State private var showingDeleteConfirmation = false
+    @State private var showingFinalDeleteWarning = false
+    @State private var deleteConfirmationText = ""
+    @State private var isDeletingAccount = false
+    @State private var deleteError: String?
     
     var body: some View
     {
@@ -350,20 +344,18 @@ struct SettingsPlaceholderView: View
                 AppPalette.Brand.formBlack
                     .ignoresSafeArea()
                 
-                VStack(spacing: 20) {
-                    Image(systemName: "gear")
-                        .font(.system(size: 48, weight: .light))
-                        .foregroundStyle(AppPalette.Brand.neonPink.opacity(0.4))
-                    
-                    Text("Settings")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(AppPalette.Text.primary)
-                    
-                    Text("Settings coming soon")
-                        .font(.system(size: 16))
-                        .foregroundStyle(AppPalette.Text.secondary)
+                ScrollView {
+                    VStack(spacing: 24) {
+                        accountDetailsSection
+                        securitySection
+                        
+                        Spacer(minLength: 40)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 20)
                 }
             }
+            .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -374,5 +366,224 @@ struct SettingsPlaceholderView: View
                 }
             }
         }
+        .alert("Delete Account?", isPresented: $showingDeleteConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Continue", role: .destructive) {
+                showingFinalDeleteWarning = true
+            }
+        } message: {
+            Text("This action cannot be undone. All your meets, participations, and account data will be permanently deleted.")
+        }
+        .alert("Final Confirmation", isPresented: $showingFinalDeleteWarning) {
+            TextField("Type DELETE to confirm", text: $deleteConfirmationText)
+            Button("Cancel", role: .cancel) {
+                deleteConfirmationText = ""
+            }
+            Button("Delete Forever", role: .destructive) {
+                if deleteConfirmationText.uppercased() == "DELETE" {
+                    Task { await deleteAccount() }
+                }
+                deleteConfirmationText = ""
+            }
+            .disabled(deleteConfirmationText.uppercased() != "DELETE")
+        } message: {
+            Text("Type DELETE to permanently delete your account. This will:\n\n• Delete all your meets\n• Remove you from all participations\n• Permanently delete your profile\n• Sign you out of all devices")
+        }
+        .alert("Delete Failed", isPresented: .constant(deleteError != nil)) {
+            Button("OK") {
+                deleteError = nil
+            }
+        } message: {
+            if let error = deleteError {
+                Text(error)
+            }
+        }
+        .sheet(isPresented: $showingPasswordReset) {
+            ChangePasswordView()
+        }
+    }
+    
+    // MARK: - Account Details Section
+    private var accountDetailsSection: some View
+    {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Account Details")
+                .font(.system(size: 20, weight: .bold))
+                .foregroundStyle(AppPalette.Text.primary)
+            
+            VStack(spacing: 12) {
+                accountInfoRow(label: "Username", value: profile.username)
+                accountInfoRow(label: "Display Name", value: profile.display_name)
+                accountInfoRow(label: "Email", value: profile.email)
+                accountInfoRow(label: "Phone", value: profile.cellphone)
+                accountInfoRow(label: "Date of Birth", value: formatDobString(profile.dob))
+                accountInfoRow(label: "Member Since", value: formatDate(profile.dttm_created_utc))
+            }
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color(AppPalette.Brand.japPurple))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(AppPalette.Brand.neonPink.opacity(0.2), lineWidth: 1)
+                    )
+            )
+        }
+    }
+    
+    private func accountInfoRow(label: String, value: String?) -> some View
+    {
+        HStack {
+            Text(label)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(AppPalette.Text.secondary)
+            
+            Spacer()
+            
+            Text(value ?? "—")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(AppPalette.Text.primary)
+        }
+        .padding(.vertical, 4)
+    }
+    
+    // MARK: - Security Section
+    private var securitySection: some View
+    {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Security")
+                .font(.system(size: 20, weight: .bold))
+                .foregroundStyle(AppPalette.Text.primary)
+            
+            Button(action: { showingPasswordReset = true }) {
+                HStack(spacing: 12) {
+                    Image(systemName: "key.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(AppPalette.Brand.neonPink)
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Change Password")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(AppPalette.Text.primary)
+                        
+                        Text("Update your account password")
+                            .font(.system(size: 13))
+                            .foregroundStyle(AppPalette.Text.secondary)
+                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14))
+                        .foregroundStyle(AppPalette.Text.secondary)
+                }
+                .padding(16)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color(AppPalette.Brand.japPurple))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(AppPalette.Brand.neonPink.opacity(0.2), lineWidth: 1)
+                        )
+                )
+            }
+            .buttonStyle(PlainButtonStyle())
+            
+            Button(action: { showingDeleteConfirmation = true }) {
+                HStack(spacing: 12) {
+                    Image(systemName: "trash.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(AppPalette.Action.delete)
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Delete Account")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(AppPalette.Action.delete)
+                        
+                        Text("Permanently remove your account")
+                            .font(.system(size: 13))
+                            .foregroundStyle(AppPalette.Text.secondary)
+                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14))
+                        .foregroundStyle(AppPalette.Text.secondary)
+                }
+                .padding(16)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color(AppPalette.Brand.japPurple))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(AppPalette.Action.delete.opacity(0.3), lineWidth: 1)
+                        )
+                )
+            }
+            .buttonStyle(PlainButtonStyle())
+        }
+    }
+    
+    private func deleteAccount() async
+    {
+        isDeletingAccount = true
+        defer { isDeletingAccount = false }
+        
+        do {
+            let result = try await AuthAPI.deleteUser(baseURL: baseURL, token: token)
+            
+            if result.is_success {
+                try await Amplify.Auth.deleteUser()
+                NotificationCenter.default.post(name: .userAccountDeleted, object: nil)
+                await MainActor.run {
+                    onDismiss()
+                }
+            } else {
+                await MainActor.run {
+                    deleteError = "Account deletion failed. Please try again."
+                }
+            }
+        } catch AuthAPIError.http(let code, let reason) {
+            await MainActor.run {
+                if code == 401 {
+                    deleteError = "Session expired. Please sign in and try again."
+                } else {
+                    deleteError = "Delete failed: \(reason ?? "Unknown error")"
+                }
+            }
+        } catch let authError as AuthError {
+            await MainActor.run {
+                deleteError = "Failed to delete from Cognito: \(authError.localizedDescription)"
+            }
+        } catch {
+            await MainActor.run {
+                deleteError = "Unable to delete account. Please try again later."
+            }
+        }
+    }
+    
+    private func formatDate(_ date: Date) -> String
+    {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter.string(from: date)
+    }
+    
+    private func formatDobString(_ dateString: String) -> String
+    {
+        let inputFormatter = DateFormatter()
+        inputFormatter.dateFormat = "yyyy-MM-dd"
+        
+        let outputFormatter = DateFormatter()
+        outputFormatter.dateStyle = .medium
+        outputFormatter.timeStyle = .none
+        
+        guard let date = inputFormatter.date(from: dateString) else {
+            return dateString
+        }
+        
+        return outputFormatter.string(from: date)
     }
 }
