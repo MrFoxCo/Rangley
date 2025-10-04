@@ -126,4 +126,12 @@ participant status
 8    Left
 9    Removed
 
+
+friend request status
+1	Pending
+2	Accepted
+3	Declined
+4	Blocked
+5	Cancelled
+
 */

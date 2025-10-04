@@ -183,10 +183,8 @@ final class InboxStore: ObservableObject {
         
         _ = try await AuthAPI.clearInbox(baseURL: baseURL, token: token)
         
-        await MainActor.run {
-            self.inboxNotifications = []
-            self.unreadCount = 0
-        }
+        // Just refresh to get the current state from server
+        await refresh(force: true)
     }
 
     func deleteNotification(_ notificationId: Int64) async throws

@@ -48,6 +48,7 @@ enum RangleyFunc: String
     
     
     case m_respond_to_meet_invitation              = "rangley.rangley_fn_m_respond_to_meet_invitation"
+    case leave_meet                                = "rangley.rgl_fn_leave_meet"
     case m_update_participant_status               = "rangley.rangley_fn_m_update_participant_status"
     case i_additional_participants_to_meet         = "rangley.rangley_fn_i_additional_participants_to_meet_by_meet_id_uuid"
     case v_app_version                             = "rangley.rangley_fn_v_app_version"
@@ -64,6 +65,13 @@ enum RangleyFunc: String
     case view_friendship_status                     = "rangley.rgl_fn_v_friendship_status"
     case view_friends_list                         = "rangley.rgl_fn_v_friends_list"
     case delete_friend                             = "rangley.rgl_fn_d_friend"
+    
+    case create_friend_group                       = "rangley.rgl_fn_create_friend_group"
+    case add_friends_to_group                      = "rangley.rgl_fn_add_friends_to_group"
+    case delete_friends_from_group                 = "rangley.rgl_fn_d_friends_from_group"
+    case delete_friend_group                       = "rangley.rgl_fn_d_friend_group"
+    case view_friend_groups                        = "rangley.rgl_fn_v_friend_groups"
+    case view_friend_group_members                 = "rangley.rgl_fn_v_friend_group_members"
 
 }
 
@@ -821,6 +829,41 @@ enum Func
 
     }
     
+    enum SystemLeaveMeet: PgFunctionRow
+    {
+        static let funcName: RangleyFunc = .leave_meet
+
+        struct In: Sendable
+        {
+            let cognito_sub: String
+            let meet_id_uuid: UUID
+        }
+
+        struct Results: Content, Sendable
+        {
+            let success: Bool
+            let message: String
+            let participant_id_out: Int64?
+            let old_status_id: Int16?
+        }
+
+        static func query(_ input: In) -> SQLQueryString
+        {
+            "SELECT * FROM \(unsafeRaw: funcName.rawValue)(\(bind: input.cognito_sub)::text, \(bind: input.meet_id_uuid)::uuid);"
+        }
+
+        static func decode(_ r: any SQLRow) throws -> Results
+        {
+            try .init(
+                success: r.decode(column: "success", as: Bool.self),
+                message: r.decode(column: "message", as: String.self),
+                participant_id_out: r.decode(column: "participant_id_out", as: Int64?.self),
+                old_status_id: r.decode(column: "old_status_id", as: Int16?.self)
+            )
+        }
+    }
+    
+    
     enum UpdateParticipantStatus: PgFunctionRow
     {
         static let funcName: RangleyFunc = .m_update_participant_status
@@ -1541,14 +1584,213 @@ enum Func
         }
     }
 
-    // You'll also need to add these to your RangleyFunc enum:
-    /*
-    extension RangleyFunc {
-        static let fn_check_username_availability = RangleyFunc(rawValue: "fn_check_username_availability")
-        static let fn_validate_display_name = RangleyFunc(rawValue: "fn_validate_display_name")
-    }
-    */
     
+    // =========================================================
+    // MARK: - END Friend GRoup Stuff
+    // =========================================================
+    
+    enum SystemCreateFriendGroup: PgFunctionRow
+    {
+        static let funcName: RangleyFunc = .create_friend_group
+
+        struct In: Sendable
+        {
+            let cognito_sub: String
+            let group_name: String
+        }
+
+        struct Results: Content, Sendable
+        {
+            let success: Bool
+            let message: String
+            let friend_group_id: Int64?
+        }
+
+        static func query(_ input: In) -> SQLQueryString
+        {
+            "SELECT * FROM \(unsafeRaw: funcName.rawValue)(\(bind: input.cognito_sub)::text, \(bind: input.group_name)::text);"
+        }
+
+        static func decode(_ r: any SQLRow) throws -> Results
+        {
+            try .init(
+                success: r.decode(column: "success", as: Bool.self),
+                message: r.decode(column: "message", as: String.self),
+                friend_group_id: r.decode(column: "friend_group_id", as: Int64?.self)
+            )
+        }
+    }
+
+    enum SystemAddFriendsToGroup: PgFunctionRow
+    {
+        static let funcName: RangleyFunc = .add_friends_to_group
+
+        struct In: Sendable
+        {
+            let cognito_sub: String
+            let friend_group_id: Int64
+            let friend_uuids: [UUID]
+        }
+
+        struct Results: Content, Sendable
+        {
+            let success: Bool
+            let message: String
+            let added_count: Int32
+            let skipped_count: Int32
+        }
+
+        static func query(_ input: In) -> SQLQueryString
+        {
+            "SELECT * FROM \(unsafeRaw: funcName.rawValue)(\(bind: input.cognito_sub)::text, \(bind: input.friend_group_id)::int8, \(bind: input.friend_uuids)::uuid[]);"
+        }
+
+        static func decode(_ r: any SQLRow) throws -> Results
+        {
+            try .init(
+                success: r.decode(column: "success", as: Bool.self),
+                message: r.decode(column: "message", as: String.self),
+                added_count: r.decode(column: "added_count", as: Int32.self),
+                skipped_count: r.decode(column: "skipped_count", as: Int32.self)
+            )
+        }
+    }
+
+    enum SystemDeleteFriendsFromGroup: PgFunctionRow
+    {
+        static let funcName: RangleyFunc = .delete_friends_from_group
+
+        struct In: Sendable
+        {
+            let cognito_sub: String
+            let friend_group_id: Int64
+            let friend_uuids: [UUID]
+        }
+
+        struct Results: Content, Sendable
+        {
+            let success: Bool
+            let message: String
+            let removed_count: Int32
+        }
+
+        static func query(_ input: In) -> SQLQueryString
+        {
+            "SELECT * FROM \(unsafeRaw: funcName.rawValue)(\(bind: input.cognito_sub)::text, \(bind: input.friend_group_id)::int8, \(bind: input.friend_uuids)::uuid[]);"
+        }
+
+        static func decode(_ r: any SQLRow) throws -> Results
+        {
+            try .init(
+                success: r.decode(column: "success", as: Bool.self),
+                message: r.decode(column: "message", as: String.self),
+                removed_count: r.decode(column: "removed_count", as: Int32.self)
+            )
+        }
+    }
+
+    enum SystemDeleteFriendGroup: PgFunctionRow
+    {
+        static let funcName: RangleyFunc = .delete_friend_group
+
+        struct In: Sendable
+        {
+            let cognito_sub: String
+            let friend_group_id: Int64
+        }
+
+        struct Results: Content, Sendable
+        {
+            let success: Bool
+            let message: String
+        }
+
+        static func query(_ input: In) -> SQLQueryString
+        {
+            "SELECT * FROM \(unsafeRaw: funcName.rawValue)(\(bind: input.cognito_sub)::text, \(bind: input.friend_group_id)::int8);"
+        }
+
+        static func decode(_ r: any SQLRow) throws -> Results
+        {
+            try .init(
+                success: r.decode(column: "success", as: Bool.self),
+                message: r.decode(column: "message", as: String.self)
+            )
+        }
+    }
+
+    enum SystemViewFriendGroups: PgFunctionRows
+    {
+        static let funcName: RangleyFunc = .view_friend_groups
+
+        struct In: Sendable
+        {
+            let cognito_sub: String
+        }
+
+        struct Results: Content, Sendable
+        {
+            let friend_group_id: Int64
+            let name: String
+            let member_count: Int64
+            let dttm_created_utc: Date
+            let dttm_modified_utc: Date?
+        }
+
+        static func query(_ input: In) -> SQLQueryString
+        {
+            "SELECT * FROM \(unsafeRaw: funcName.rawValue)(\(bind: input.cognito_sub)::text);"
+        }
+
+        static func decode(_ r: any SQLRow) throws -> Results
+        {
+            try .init(
+                friend_group_id: r.decode(column: "friend_group_id", as: Int64.self),
+                name: r.decode(column: "name", as: String.self),
+                member_count: r.decode(column: "member_count", as: Int64.self),
+                dttm_created_utc: r.decode(column: "dttm_created_utc", as: Date.self),
+                dttm_modified_utc: r.decode(column: "dttm_modified_utc", as: Date?.self)
+            )
+        }
+    }
+
+    enum SystemViewFriendGroupMembers: PgFunctionRows
+    {
+        static let funcName: RangleyFunc = .view_friend_group_members
+
+        struct In: Sendable
+        {
+            let cognito_sub: String
+            let friend_group_id: Int64
+        }
+
+        struct Results: Content, Sendable
+        {
+            let user_uuid: UUID
+            let username: String
+            let display_name: String
+            let dttm_added_utc: Date
+        }
+
+        static func query(_ input: In) -> SQLQueryString
+        {
+            "SELECT * FROM \(unsafeRaw: funcName.rawValue)(\(bind: input.cognito_sub)::text, \(bind: input.friend_group_id)::int8);"
+        }
+
+        static func decode(_ r: any SQLRow) throws -> Results
+        {
+            try .init(
+                user_uuid: r.decode(column: "user_uuid", as: UUID.self),
+                username: r.decode(column: "username", as: String.self),
+                display_name: r.decode(column: "display_name", as: String.self),
+                dttm_added_utc: r.decode(column: "dttm_added_utc", as: Date.self)
+            )
+        }
+    }
+    // =========================================================
+    // MARK: - END Friend GRoup Stuff
+    // =========================================================
+
     // =========================================================
     // MARK: - END Transaction Level Meet View
     // =========================================================

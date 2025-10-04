@@ -205,6 +205,17 @@ enum HTTPDTO
             // Intentionally omitting participant_id_out since client doesn't need it
         }
         // TODO: - ADD SHIT HERE FOR RESPOND TO MEET INVITES
+        struct LeaveMeetBody: Content, Sendable
+        {
+            let meet_id_uuid: UUID
+        }
+
+        struct LeaveMeetResponse: Content, Sendable
+        {
+            let success: Bool
+            let message: String
+            let old_status_id: Int16?
+        }
     }
     
     enum UpdateParticipantStatus
@@ -399,5 +410,79 @@ enum HTTPDTO
         
     }
     
+    enum FriendGroups
+    {
+        struct CreateGroupBody: Content, Sendable
+        {
+            let group_name: String
+        }
+        
+        struct CreateGroupResponse: Content, Sendable
+        {
+            let success: Bool
+            let message: String
+            let friend_group_id: Int64?
+        }
+        
+        struct AddFriendsBody: Content, Sendable
+        {
+            let friend_group_id: Int64
+            let friend_uuids: [UUID]
+        }
+        
+        struct AddFriendsResponse: Content, Sendable
+        {
+            let success: Bool
+            let message: String
+            let added_count: Int32
+            let skipped_count: Int32
+        }
+        
+        struct RemoveFriendsBody: Content, Sendable
+        {
+            let friend_group_id: Int64
+            let friend_uuids: [UUID]
+        }
+        
+        struct RemoveFriendsResponse: Content, Sendable
+        {
+            let success: Bool
+            let message: String
+            let removed_count: Int32
+        }
+        
+        struct DeleteGroupBody: Content, Sendable
+        {
+            let friend_group_id: Int64
+        }
+        
+        struct DeleteGroupResponse: Content, Sendable
+        {
+            let success: Bool
+            let message: String
+        }
+        
+        struct FriendGroup: Content, Sendable
+        {
+            let friend_group_id: Int64
+            let name: String
+            let member_count: Int64
+            let dttm_created_utc: Date
+            let dttm_modified_utc: Date?
+        }
+        
+        struct GroupMember: Content, Sendable
+        {
+            let user_uuid: UUID
+            let username: String
+            let display_name: String
+            let dttm_added_utc: Date
+        }
+        
+        struct GetMembersBody: Content, Sendable
+        {
+            let friend_group_id: Int64
+        }
+    }
     
 }

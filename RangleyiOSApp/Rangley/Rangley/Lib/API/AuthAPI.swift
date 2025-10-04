@@ -322,6 +322,7 @@ struct AuthAPI
             throw AuthAPIError.decode(error.localizedDescription)
         }
     }
+    
     // GET /v/me  (protected; Bearer ID token)
     static func viewUserMe(baseURL: URL, token: String) async throws -> ViewUserMeModel
     {
@@ -938,7 +939,8 @@ struct AuthAPI
     
     
     // Move this outside the function
-    struct DeleteUserResponse: Codable {
+    struct DeleteUserResponse: Codable
+    {
         let is_success: Bool
     }
 
@@ -1066,6 +1068,39 @@ struct AuthAPI
         } catch {
            #if DEBUG
            print("=== Decode Error in respondToInvitation ===")
+           print("Error: \(error)")
+           print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+           #endif
+           throw AuthAPIError.decode(error.localizedDescription)
+        }
+    }
+    
+    static func leaveMeet(baseURL: URL, token: String, body: LeaveMeetBody)
+        async throws -> LeaveMeetResponse
+    {
+        var req = URLRequest(url: makeURL(baseURL, ["s", "meets", "leave"]))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.httpBody = try isoEncoder.encode(body)
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
+        guard (200..<300).contains(http.statusCode) else {
+           #if DEBUG
+           print("=== Leave Meet Failed ===")
+           print("Status Code: \(http.statusCode)")
+           print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+           #endif
+           throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        }
+
+        do {
+           return try JSONDecoder().decode(LeaveMeetResponse.self, from: data)
+        } catch {
+           #if DEBUG
+           print("=== Decode Error in leaveMeet ===")
            print("Error: \(error)")
            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
            #endif

@@ -26,7 +26,8 @@ protocol APIServiceProtocol
 // MARK: - API Service Implementation
 class APIService: APIServiceProtocol
 {
-    private func getAuthToken() async throws -> String {
+    private func getAuthToken() async throws -> String
+    {
         let session = try await Amplify.Auth.fetchAuthSession()
         guard let provider = session as? AuthCognitoTokensProvider else {
             throw AuthAPIError.http(-1, "No Cognito token provider")
@@ -34,12 +35,14 @@ class APIService: APIServiceProtocol
         return try provider.getCognitoTokens().get().idToken
     }
     
-    func fetchMeets() async throws -> [ViewMeetsModel] {
+    func fetchMeets() async throws -> [ViewMeetsModel]
+    {
         let token = try await getAuthToken()
         return try await AuthAPI.viewMeets(baseURL: Env.apiBaseURL, token: token)
     }
     
-    func createMeet(_ body: MeetInsertBody) async throws {
+    func createMeet(_ body: MeetInsertBody) async throws
+    {
         let token = try await getAuthToken()
         let response = try await AuthAPI.createMeet(baseURL: Env.apiBaseURL, token: token, body: body)
         
@@ -53,7 +56,8 @@ class APIService: APIServiceProtocol
         }
     }
     
-    func createMeetWithInvites(_ body: MeetWithInvitesInsertBody) async throws {
+    func createMeetWithInvites(_ body: MeetWithInvitesInsertBody) async throws
+    {
         let token = try await getAuthToken()
         let response = try await AuthAPI.createMeetWithInvites(baseURL: Env.apiBaseURL, token: token, body: body)
         
@@ -67,7 +71,8 @@ class APIService: APIServiceProtocol
         }
     }
     
-    func updateMeet(_ body: UpdatedMeetInsertBody) async throws {
+    func updateMeet(_ body: UpdatedMeetInsertBody) async throws
+    {
         let token = try await getAuthToken()
         let response = try await AuthAPI.updateMeet(baseURL: Env.apiBaseURL, token: token, body: body)
         
@@ -81,12 +86,13 @@ class APIService: APIServiceProtocol
         }
     }
     
-    func deleteMeet(_ body: DeletedMeetInsertBody) async throws {
+    func deleteMeet(_ body: DeletedMeetInsertBody) async throws
+    {
         let token = try await getAuthToken()
         _ = try await AuthAPI.deleteMeet(baseURL: Env.apiBaseURL, token: token, body: body)
     }
     
-    func leaveMeet(_ meetId: UUID) async throws {  // ADD THIS FUNCTION
+    func leaveMeet(_ meetId: UUID) async throws {
         let token = try await getAuthToken()
         let body = RespondToInviteBody(
             meet_id_uuid: meetId,
@@ -95,7 +101,8 @@ class APIService: APIServiceProtocol
         _ = try await AuthAPI.respondToInvitation(baseURL: Env.apiBaseURL, token: token, body: body)
     }
     
-    func removeParticipant(meetId: UUID, participantId: UUID) async throws {
+    func removeParticipant(meetId: UUID, participantId: UUID) async throws
+    {
         let token = try await getAuthToken()
         let body = UpdateParticipantStatusBody(
             meet_id_uuid: meetId,
@@ -104,6 +111,7 @@ class APIService: APIServiceProtocol
         )
         _ = try await AuthAPI.updateParticipantStatus(baseURL: Env.apiBaseURL, token: token, body: body)
     }
+    
     func inviteUsersToMeet(meetId: UUID, userIds: [UUID]) async throws
     {
             let token = try await getAuthToken()

@@ -18,6 +18,9 @@ DECLARE
     
     -- Status constants
     v_deleted_status_id INT2 := 7;
+
+	v_friendships_deleted 		INT := 0;
+	v_friend_requests_deleted 	INT := 0;
 BEGIN
     -- Initialize output
     is_success := false;
@@ -127,6 +130,43 @@ BEGIN
     DELETE FROM rangley.tb_notifications WHERE created_by_user_id = v_user_id;
     GET DIAGNOSTICS v_notifications_deleted = ROW_COUNT;
     RAISE NOTICE 'Deleted % notifications created by user', v_notifications_deleted;
+
+
+	-- ========================================
+	-- STEP 3.5: Clean up friendships and friend requests
+	-- ========================================
+	DECLARE
+	    v_friendships_deleted INT := 0;
+	    v_friend_requests_deleted INT := 0;
+	BEGIN
+	    -- Delete all friendships where this user is involved (either side)
+	    DELETE FROM rangley.tb_friendships 
+	    WHERE user_id_a = v_user_id OR user_id_b = v_user_id;
+	    GET DIAGNOSTICS v_friendships_deleted = ROW_COUNT;
+	    
+	    -- Delete all friend requests where this user is involved (sent or received)
+	    DELETE FROM rangley.tb_friend_requests 
+	    WHERE requester_user_id = v_user_id OR recipient_user_id = v_user_id;
+	    GET DIAGNOSTICS v_friend_requests_deleted = ROW_COUNT;
+	    
+	    -- Clean up friend request notifications from inbox
+	    -- (notifications involving this user as requester or recipient)
+	    DELETE FROM rangley.tb_user_inboxes
+	    WHERE notification_id IN (
+	        SELECT n.notification_id 
+	        FROM rangley.tb_notifications n
+	        WHERE n.notification_type_id IN (15, 16, 17)  -- Friend request types
+	        AND (
+	            n.created_by_user_id = v_user_id
+	            OR n.payload_json->>'requester_user_id' = v_user_id::text
+	            OR n.payload_json->>'recipient_user_id' = v_user_id::text
+	        )
+	    );
+	    
+	    RAISE NOTICE 'Deleted % friendships and % friend requests', v_friendships_deleted, v_friend_requests_deleted;
+	END;
+
+
     
     -- ========================================
     -- STEP 4: Delete the user record (triggers will handle privacy settings)
@@ -142,6 +182,8 @@ BEGIN
     RAISE NOTICE '  - Meets marked as deleted: %', v_deleted_meets_count;
     RAISE NOTICE '  - Participations removed: %', v_participations_deleted;
     RAISE NOTICE '  - Notifications deleted: %', v_notifications_deleted;
+	RAISE NOTICE '  - Friendships deleted: %', v_friendships_deleted;
+	RAISE NOTICE '  - Friend requests deleted: %', v_friend_requests_deleted;
     
 EXCEPTION
     WHEN OTHERS THEN

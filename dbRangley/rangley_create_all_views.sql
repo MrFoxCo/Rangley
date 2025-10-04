@@ -34,6 +34,9 @@ DROP VIEW IF EXISTS rangley.vw_user_meets_attended_stats CASCADE;
 DROP VIEW IF EXISTS rangley.vw_user_friend_count CASCADE;
 DROP VIEW IF EXISTS rangley.vw_user_profile CASCADE;
 DROP VIEW IF EXISTS rangley.vw_user_friendships CASCADE;
+DROP VIEW IF EXISTS rangley.vw_friend_groups CASCADE;
+DROP VIEW IF EXISTS rangley.vw_friend_group_members CASCADE;
+
 
 CREATE OR REPLACE VIEW rangley.vw_meets AS 
 SELECT
@@ -249,6 +252,23 @@ SELECT
     ,user_id_b
     ,dttm_created_utc
 FROM rangley.tb_friendships;
+
+CREATE OR REPLACE VIEW rangley.vw_friend_groups AS
+SELECT
+     friend_group_id
+    ,created_by_user_id
+    ,name
+    ,dttm_created_utc
+    ,dttm_modified_utc
+FROM rangley.tb_friend_groups;
+
+CREATE OR REPLACE VIEW rangley.vw_friend_group_members AS
+SELECT
+     friend_group_id
+    ,user_id
+    ,dttm_added_utc
+FROM rangley.tb_friend_group_members;
+
 
 
 

@@ -15,6 +15,8 @@ struct UserInboxView: View
 
     @State private var selectedTab: InboxTab = .all
     @State private var showClearConfirmation = false
+    @State private var friendRequestsExpanded = true
+    @State private var meetInvitationsExpanded = true
     
     var body: some View
     {
@@ -118,31 +120,81 @@ struct UserInboxView: View
     // MARK: - Notifications List
     private var notificationsList: some View
     {
-        List {
-            ForEach(filteredNotifications) { notification in
-                NotificationCard(
-                    notification: notification,
-                    onTap: { await handleNotificationTap(notification) },
-                    onDelete: { await deleteNotification(notification) },
-                    onAcceptFriendRequest: { await acceptFriendRequest(notification) },
-                    onDeclineFriendRequest: { await declineFriendRequest(notification) }
-                )
-                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                    Button(role: .destructive) {
-                        Task {
-                            await deleteNotification(notification)
+        ScrollView {
+            LazyVStack(spacing: 16) {
+                // Friend Requests Section (always first if present)
+                if !friendRequests.isEmpty {
+                    CollapsibleSection(
+                        title: "Friend Requests",
+                        icon: "person.badge.plus",
+                        count: friendRequests.count,
+                        isExpanded: $friendRequestsExpanded
+                    ) {
+                        ForEach(friendRequests) { notification in
+                            NotificationCard(
+                                notification: notification,
+                                onTap: { await handleNotificationTap(notification) },
+                                onDelete: { await deleteNotification(notification) },
+                                onAcceptFriendRequest: { await acceptFriendRequest(notification) },
+                                onDeclineFriendRequest: { await declineFriendRequest(notification) },
+                                onAcceptMeetInvitation: { await acceptMeetInvitation(notification) },
+                                onDeclineMeetInvitation: { await declineMeetInvitation(notification) }
+                            )
+                            .padding(.horizontal, 20)
                         }
-                    } label: {
-                        Label("Delete", systemImage: "trash")
                     }
                 }
-                .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 6, trailing: 20))
-                .listRowSeparator(.hidden)
-                .listRowBackground(Color.clear)
+                
+                // Meet Invitations Section (second if present)
+                if !meetInvitations.isEmpty {
+                    CollapsibleSection(
+                        title: "Meet Invitations",
+                        icon: "envelope.fill",
+                        count: meetInvitations.count,
+                        isExpanded: $meetInvitationsExpanded
+                    ) {
+                        ForEach(meetInvitations) { notification in
+                            NotificationCard(
+                                notification: notification,
+                                onTap: { await handleNotificationTap(notification) },
+                                onDelete: { await deleteNotification(notification) },
+                                onAcceptFriendRequest: { await acceptFriendRequest(notification) },
+                                onDeclineFriendRequest: { await declineFriendRequest(notification) },
+                                onAcceptMeetInvitation: { await acceptMeetInvitation(notification) },
+                                onDeclineMeetInvitation: { await declineMeetInvitation(notification) }
+                            )
+                            .padding(.horizontal, 20)
+                        }
+                    }
+                }
+                
+                // Other Notifications
+                if !otherNotifications.isEmpty {
+                    ForEach(otherNotifications) { notification in
+                        NotificationCard(
+                            notification: notification,
+                            onTap: { await handleNotificationTap(notification) },
+                            onDelete: { await deleteNotification(notification) },
+                            onAcceptFriendRequest: { await acceptFriendRequest(notification) },
+                            onDeclineFriendRequest: { await declineFriendRequest(notification) },
+                            onAcceptMeetInvitation: { await acceptMeetInvitation(notification) },
+                            onDeclineMeetInvitation: { await declineMeetInvitation(notification) }
+                        )
+                        .padding(.horizontal, 20)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                Task {
+                                    await deleteNotification(notification)
+                                }
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
+                    }
+                }
             }
+            .padding(.vertical, 20)
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
     }
 
     private func deleteNotification(_ notification: InboxNotificationModelBody) async
@@ -200,6 +252,7 @@ struct UserInboxView: View
         print("Tapped notification: \(notification.notification_id)")
     }
     
+    // MARK: - Filtered Notifications
     private var filteredNotifications: [InboxNotificationModelBody]
     {
         switch selectedTab {
@@ -212,6 +265,20 @@ struct UserInboxView: View
         }
     }
     
+    // Separate notifications by priority
+    private var friendRequests: [InboxNotificationModelBody] {
+        filteredNotifications.filter { $0.notification_type_id == 15 }
+    }
+    
+    private var meetInvitations: [InboxNotificationModelBody] {
+        filteredNotifications.filter { $0.notification_type_id == 8 }
+    }
+    
+    private var otherNotifications: [InboxNotificationModelBody] {
+        filteredNotifications.filter { $0.notification_type_id != 15 && $0.notification_type_id != 8 }
+    }
+    
+    // MARK: - Actions
     private func acceptFriendRequest(_ notification: InboxNotificationModelBody) async
     {
         do {
@@ -227,6 +294,85 @@ struct UserInboxView: View
             try await inbox.respondToFriendRequest(notification, accept: false)
         } catch {
             print("Failed to decline: \(error)")
+        }
+    }
+    
+    private func acceptMeetInvitation(_ notification: InboxNotificationModelBody) async
+    {
+        do {
+            try await inbox.respondToMeetInvitation(notificationId: notification.notification_id, statusId: 6) // 6 = Accepted
+        } catch {
+            print("Failed to accept meet invitation: \(error)")
+        }
+    }
+    
+    private func declineMeetInvitation(_ notification: InboxNotificationModelBody) async
+    {
+        do {
+            try await inbox.respondToMeetInvitation(notificationId: notification.notification_id, statusId: 5) // 5 = Declined
+        } catch {
+            print("Failed to decline meet invitation: \(error)")
+        }
+    }
+}
+
+// MARK: - Collapsible Section
+struct CollapsibleSection<Content: View>: View {
+    let title: String
+    let icon: String
+    let count: Int
+    @Binding var isExpanded: Bool
+    let content: Content
+    
+    init(
+        title: String,
+        icon: String,
+        count: Int,
+        isExpanded: Binding<Bool>,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        self.icon = icon
+        self.count = count
+        self._isExpanded = isExpanded
+        self.content = content()
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Section Header
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(AppPalette.Brand.neonPink)
+                
+                Text(title)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(AppPalette.Text.primary)
+                
+                Text("(\(count))")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(AppPalette.Text.secondary)
+                
+                Spacer()
+                
+                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(AppPalette.Brand.neonPink)
+            }
+            .padding(.horizontal, 20)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                    isExpanded.toggle()
+                }
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            }
+            
+            // Expandable Content
+            if isExpanded {
+                content
+            }
         }
     }
 }
@@ -280,13 +426,15 @@ struct NotificationCard: View
     let onDelete: () async -> Void
     let onAcceptFriendRequest: () async -> Void
     let onDeclineFriendRequest: () async -> Void
+    let onAcceptMeetInvitation: () async -> Void
+    let onDeclineMeetInvitation: () async -> Void
     
     @State private var isProcessing = false
     
     var body: some View
     {
         VStack(alignment: .leading, spacing: 12) {
-            // Main content area - only tappable for non-friend-requests
+            // Main content area
             HStack(alignment: .top, spacing: 12) {
                 // Icon
                 Circle()
@@ -328,8 +476,8 @@ struct NotificationCard: View
             }
             .contentShape(Rectangle())
             .onTapGesture {
-                // Only allow general tap for non-friend-request notifications
-                if notification.notification_type_id != 15 {
+                // Only allow general tap for non-actionable notifications
+                if notification.notification_type_id != 15 && notification.notification_type_id != 8 {
                     Task { await onTap() }
                 }
             }
@@ -367,6 +515,67 @@ struct NotificationCard: View
                         Task {
                             isProcessing = true
                             await onDeclineFriendRequest()
+                            isProcessing = false
+                        }
+                    } label: {
+                        HStack {
+                            if isProcessing {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                                    .tint(AppPalette.Brand.neonPink)
+                            } else {
+                                Text("Decline")
+                            }
+                        }
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(AppPalette.Brand.neonPink)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(Color.clear)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(AppPalette.Brand.neonPink.opacity(0.5), lineWidth: 1)
+                        )
+                    }
+                    .disabled(isProcessing)
+                    .buttonStyle(.plain)
+                }
+                .allowsHitTesting(!isProcessing)
+            }
+            
+            // Meet invitation actions
+            if notification.notification_type_id == 8 {
+                HStack(spacing: 12) {
+                    Button {
+                        Task {
+                            isProcessing = true
+                            await onAcceptMeetInvitation()
+                            isProcessing = false
+                        }
+                    } label: {
+                        HStack {
+                            if isProcessing {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                                    .tint(.black)
+                            } else {
+                                Text("Accept")
+                            }
+                        }
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.black)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(AppPalette.Brand.spearmintGreen)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                    .disabled(isProcessing)
+                    .buttonStyle(.plain)
+                    
+                    Button {
+                        Task {
+                            isProcessing = true
+                            await onDeclineMeetInvitation()
                             isProcessing = false
                         }
                     } label: {
@@ -441,9 +650,7 @@ extension InboxNotificationModelBody
         return formatter.localizedString(for: dttm_created_utc, relativeTo: Date())
     }
     
-    
     var title: String {
-        // Parse from notification_type or payload_json
         switch notification_type_id {
         case 15: return "Friend Request"
         case 16: return "Friend Request Accepted"
@@ -457,101 +664,6 @@ extension InboxNotificationModelBody
         created_by_display_name
     }
 }
-
-struct FriendRequestNotificationCard: View
-{
-    let notification: InboxNotificationModelBody
-    let baseURL: URL
-    let token: String
-    let onRespond: () -> Void
-    
-    @State private var isResponding = false
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Circle()
-                    .fill(AppPalette.Brand.neonPink.opacity(0.2))
-                    .frame(width: 40, height: 40)
-                    .overlay(
-                        Image(systemName: "person.badge.plus")
-                            .foregroundStyle(AppPalette.Brand.neonPink)
-                    )
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Friend Request")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(AppPalette.Text.primary)
-                    
-                    if let message = notification.message {
-                        Text(message)
-                            .font(.system(size: 14))
-                            .foregroundStyle(AppPalette.Text.secondary)
-                            .lineLimit(3)
-                    }
-                }
-                
-                Spacer()
-            }
-            
-            // Accept/Decline buttons
-            if notification.notification_type == "friend_request" {
-                HStack(spacing: 12) {
-                    Button(action: { Task { await respond(accept: true) } }) {
-                        Text("Accept")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .background(Color.green)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                    }
-                    
-                    Button(action: { Task { await respond(accept: false) } }) {
-                        Text("Decline")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .background(Color.red.opacity(0.8))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                    }
-                }
-                .disabled(isResponding)
-            }
-        }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(AppPalette.Brand.japPurple))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(AppPalette.Brand.neonPink.opacity(0.2), lineWidth: 1)
-                )
-        )
-    }
-    
-    // In the FriendRequestNotificationCard's respond function:
-    private func respond(accept: Bool) async {
-        guard let friendRequestId = notification.friendRequestId else { return }
-        
-        isResponding = true
-        defer { isResponding = false }
-        
-        do {
-            _ = try await AuthAPI.respondToFriendRequest(
-                baseURL: baseURL,
-                token: token,
-                friendRequestId: friendRequestId,
-                accept: accept
-            )
-            onRespond()
-        } catch {
-            print("Failed to respond to friend request: \(error)")
-        }
-    }
-}
-
 
 // Make it Identifiable for ForEach
 extension InboxNotificationModelBody: Identifiable

@@ -65,11 +65,14 @@ BEGIN
     WHERE (requester_user_id = v_user_id AND recipient_user_id = v_target_user_id)
        OR (requester_user_id = v_target_user_id AND recipient_user_id = v_user_id);
 
+	PERFORM rangley.rgl_fn_cleanup_friend_groups_on_unfriend(v_user_id, v_target_user_id);
+
     IF v_rows_deleted > 0 THEN
         RETURN QUERY SELECT TRUE, 'Friend removed successfully';
     ELSE
         RETURN QUERY SELECT FALSE, 'Failed to remove friend';
     END IF;
+
 END;
 $$;
 
