@@ -14,17 +14,17 @@ struct InboxNotificationModelResponse: Codable, Sendable
 
 struct InboxNotificationModelBody: Codable, Sendable
 {
-    let notification_id: Int64
-    let notification_type_id: Int16
-    let notification_type: String
-    let meet_id_uuid: UUID?
-    let created_by_user_uuid: UUID
-    let created_by_username: String
-    let created_by_display_name: String
-    let payload_json: String
-    let dttm_created_utc: Date
-    let dttm_received_utc: Date
-    let dttm_opened_utc: Date?
-    let is_read: Bool
+    let notification_id         : Int64
+    let notification_type_id    : Int16
+    let notification_type       : String
+    let meet_id_uuid            : UUID?
+    let created_by_user_uuid    : UUID
+    let created_by_username     : String
+    let created_by_display_name : String
+    let payload_json            : String
+    let dttm_created_utc        : Date
+    let dttm_received_utc       : Date
+    let dttm_opened_utc         : Date?
+    let is_read                 : Bool
 }
 

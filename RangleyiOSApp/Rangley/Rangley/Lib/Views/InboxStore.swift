@@ -39,7 +39,8 @@ final class InboxStore: ObservableObject {
     init(baseURL: URL) { self.baseURL = baseURL }
 
     // MARK: - Token wiring
-    func setToken(_ new: String?) async {
+    func setToken(_ new: String?) async
+    {
         let newToken = (new ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard newToken != token else { return }
         token = newToken
@@ -52,7 +53,8 @@ final class InboxStore: ObservableObject {
     }
 
     // MARK: - Public API
-    func refresh(force: Bool = false) async {
+    func refresh(force: Bool = false) async
+    {
         guard !token.isEmpty else { return }
 
         if !force, let last = lastRefreshAt, Date().timeIntervalSince(last) < minRefreshInterval {
@@ -108,7 +110,8 @@ final class InboxStore: ObservableObject {
         await refreshTask?.value
     }
 
-    func respondToInvitation(_ n: ViewNotificationsModel, statusId: Int16) async throws {
+    func respondToInvitation(_ n: ViewNotificationsModel, statusId: Int16) async throws
+    {
         guard !token.isEmpty else { throw AuthAPIError.http(-1, "No auth token") }
 
         // Optimistic UI
@@ -125,14 +128,36 @@ final class InboxStore: ObservableObject {
         await refresh(force: true)
     }
     
+    func respondToMeetInvitation(notificationId: Int64, statusId: Int16) async throws
+    {
+        guard !token.isEmpty else { throw AuthAPIError.http(-1, "No auth token") }
+        
+        // Extract meet_id from the notification's payload
+        guard let notification = inboxNotifications.first(where: { $0.notification_id == notificationId }),
+              let data = notification.payload_json.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let meetIdString = json["meet_id_uuid"] as? String,
+              let meetId = UUID(uuidString: meetIdString) else {
+            throw AuthAPIError.http(-1, "Invalid notification payload")
+        }
+        
+        // Reuse existing respondToInvitation API
+        let body = RespondToInviteBody(meet_id_uuid: meetId, response_status_id: statusId)
+        _ = try await AuthAPI.respondToInvitation(baseURL: baseURL, token: token, body: body)
+        
+        await refresh(force: true)
+    }
+    
+    
     // NEW: Respond to friend request
-    func respondToFriendRequest(_ notification: InboxNotificationModelBody, accept: Bool) async throws {
+    func respondToFriendRequest(_ notification: InboxNotificationModelBody, accept: Bool) async throws
+    {
         guard !token.isEmpty else { throw AuthAPIError.http(-1, "No auth token") }
         
         // Extract friend_request_id from payload_json
         guard let data = notification.payload_json.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let friendRequestId = json["friend_request_id"] as? Int else {
+              let friendRequestId = json["friend_request_id"] as? Int64 else {
             throw AuthAPIError.http(-1, "Invalid payload")
         }
         

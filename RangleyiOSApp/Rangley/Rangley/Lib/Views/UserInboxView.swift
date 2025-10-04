@@ -394,5 +394,5 @@ extension InboxNotificationModelBody
 }
 // Make it Identifiable for ForEach
 extension InboxNotificationModelBody: Identifiable {
-    var id: Int { notification_id }
+    var id: Int64 { notification_id }
 }

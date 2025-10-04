@@ -423,7 +423,7 @@ struct AuthAPI
     }
 
     // MARK: - Respond to Friend Request
-    static func respondToFriendRequest(baseURL: URL,token: String,friendRequestId: Int,accept: Bool)
+    static func respondToFriendRequest(baseURL: URL,token: String,friendRequestId: Int64,accept: Bool)
         async throws -> RespondToFriendRequestModelResponse
     {
         var req = URLRequest(url: makeURL(baseURL, ["v", "friends", "respond"]))
