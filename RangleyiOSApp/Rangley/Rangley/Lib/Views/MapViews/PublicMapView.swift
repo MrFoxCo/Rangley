@@ -417,6 +417,7 @@ class UIStateStore: ObservableObject
     
     // Day/Night theme
     @Published var isDaylight = true
+    @Published var showInbox = false
     private let dayNightTimer = Timer.publish(every: 300, on: .main, in: .common).autoconnect()
     
     init() {
@@ -768,8 +769,8 @@ struct OverlaysView: View
     @ObservedObject var mapData: MapDataStore
     @ObservedObject var locationData: LocationDataStore
     @ObservedObject var uiState: UIStateStore
-    @ObservedObject var authState: AuthStateStore  // Add this parameter
-    @ObservedObject var tutorialStore: TutorialStore  // Add this parameter
+    @ObservedObject var authState: AuthStateStore
+    @ObservedObject var tutorialStore: TutorialStore
     
     let meetNS: Namespace.ID
     let authToken: String
@@ -860,6 +861,9 @@ struct OverlaysView: View
                 LoadingOverlay()
             }
         }
+        .sheet(isPresented: $uiState.showInbox) {
+            UserInboxView(onDismiss: { uiState.showInbox = false })
+        }
     }
     
     private func seedForCreate() -> LocationInfo?
@@ -924,13 +928,14 @@ struct OverlaysView: View
 }
 
 
-// MARK: - Controls View Component (Updated with Conditional Recenter)
+// MARK: - Controls View Component (Instagram-style layout)
 struct ControlsView: View
 {
     @ObservedObject var mapData     : MapDataStore
     @ObservedObject var locationData: LocationDataStore
     @ObservedObject var uiState     : UIStateStore
     @ObservedObject var authState   : AuthStateStore
+    @EnvironmentObject var inbox: InboxStore
     
     @State private var selectedRadius: Double = 2.0
     @State private var isBadgeExpanded = false
@@ -949,32 +954,64 @@ struct ControlsView: View
     {
         VStack {
             if !shouldHideDock {
-                HStack
-                {
-                    // Nearby Meets Badge
-                    NearbyMeetsBadgeView(
-                        meets: mapData.meets,
-                        userLocation: locationData.userLocation?.coordinate ?? CLLocationCoordinate2D(latitude: 41.9211, longitude: -87.6338),
-                        selectedRadius: $selectedRadius,
-                        onExpandedChange: { isExpanded in
-                            isBadgeExpanded = isExpanded
-                        },
-                        onRadiusSelectorChange: { showSelector in
-                            showBadgeRadiusSelector = showSelector
+                // TOP BAR: Centered badge with inbox on right
+                ZStack {
+                    // Centered nearby meets badge
+                    HStack {
+                        Spacer()
+                        NearbyMeetsBadgeView(
+                            meets: mapData.meets,
+                            userLocation: locationData.userLocation?.coordinate ?? CLLocationCoordinate2D(latitude: 41.9211, longitude: -87.6338),
+                            selectedRadius: $selectedRadius,
+                            onExpandedChange: { isExpanded in
+                                isBadgeExpanded = isExpanded
+                            },
+                            onRadiusSelectorChange: { showSelector in
+                                showBadgeRadiusSelector = showSelector
+                            }
+                        )
+                        Spacer()
+                    }
+                    
+                    // Inbox button - top right (Instagram style)
+                    HStack {
+                        Spacer()
+                        
+                        Button(action: {
+                            uiState.showInbox = true
+                        }) {
+                            ZStack(alignment: .topTrailing) {
+                                Image(systemName: "tray")
+                                    .font(.system(size: 18, weight: .medium))
+                                    .foregroundColor(AppPalette.Brand.neonPink)
+                                    .frame(width: 44, height: 44)
+                                    .background(
+                                        Circle()
+                                            .fill(AppPalette.Brand.japPurple)
+                                    )
+                                    .shadow(radius: 2)
+                                
+                                // Unread badge
+                                if inbox.unreadCount > 0 {
+                                    Text("\(inbox.unreadCount)")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundColor(.white)
+                                        .padding(4)
+                                        .background(Circle().fill(Color.red))
+                                        .offset(x: 6, y: -6)
+                                }
+                            }
                         }
-                    )
-                    .padding(.trailing, 16)
+                        .padding(.trailing, 20)
+                    }
                 }
                 .padding(.top, 16)
                 .transition(.move(edge: .top).combined(with: .opacity))
                     
                 Spacer()
                 
-                // ==========================================
-                // ABOVE DOCK (LEFT): Conditional Recenter button for map
-                // ==========================================
+                // RECENTER BUTTON - Left side, above dock
                 HStack {
-                    // Only show recenter button when user has moved away or zoomed out
                     if locationData.shouldShowRecenterButton {
                         Button(action: { locationData.centerOnUser() }) {
                             Image(systemName: "location.fill")
@@ -984,35 +1021,34 @@ struct ControlsView: View
                                 .background(
                                     Circle()
                                         .fill(AppPalette.Brand.japPurple)
-                                        //.overlay(Circle().stroke(AppPalette.Brand.japDarkerPurple, lineWidth: 6))
                                 )
                                 .shadow(radius: 2)
                         }
                         .disabled(locationData.userLocation == nil)
                         .transition(.scale.combined(with: .opacity))
+                        .padding(.leading, 20)
                     }
+                    
                     Spacer()
                 }
-                .padding(.leading, 36)
-                .padding(.bottom, 20) // slightly above the dock
+                .padding(.bottom, 20)
                 .animation(.spring(response: 0.4, dampingFraction: 0.8), value: locationData.shouldShowRecenterButton)
                 
-                HStack
-                {
+                // DOCK - Bottom center
+                HStack {
                     Spacer()
                     DockView(
                         baseURL: Env.apiBaseURL,
                         token: authState.currentToken,
-                        mapDataStore: mapData, // Pass the mapData store directly
+                        mapDataStore: mapData,
                         onSignOut: {
                             Task {
                                 await authState.signOut()
                             }
                         },
                         onCreateMeet: {
-                            // Set entry mode for create button
                             meetCreationMode = .createButton
-                            uiState.showLocationPopup = true  // Use same overlay
+                            uiState.showLocationPopup = true
                         },
                         onMeetSelected: { meet in
                             mapData.selectedMeet = meet
@@ -1020,7 +1056,6 @@ struct ControlsView: View
                         },
                         onUserSelected: { user in
                             print("Selected user: \(user.display_name)")
-                            // Handle user selection - maybe show user profile or invite to meet
                         }
                     )
                     Spacer()

@@ -384,6 +384,120 @@ struct AuthAPI
     }
     
     
+    // MARK: - Send Friend Request
+    static func sendFriendRequest(baseURL: URL,token: String,recipientUserUUID: UUID)
+        async throws -> SendFriendRequestModelResponse
+    {
+        var req = URLRequest(url: makeURL(baseURL, ["v", "friends", "request"]))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        
+        let body = SenSendFriendRequestModelBody(recipient_user_uuid: recipientUserUUID)
+        req.httpBody = try isoEncoder.encode(body)
+        
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else {
+            throw AuthAPIError.http(-1, "No HTTPURLResponse")
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            #if DEBUG
+            print("=== Send Friend Request Failed ===")
+            print("Status Code: \(http.statusCode)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        }
+        
+        do {
+            return try isoDecoder.decode(SendFriendRequestModelResponse.self, from: data)
+        } catch {
+            #if DEBUG
+            print("=== Decode Error in sendFriendRequest ===")
+            print("Error: \(error)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.decode(error.localizedDescription)
+        }
+    }
+
+    // MARK: - Respond to Friend Request
+    static func respondToFriendRequest(baseURL: URL,token: String,friendRequestId: Int,accept: Bool)
+        async throws -> RespondToFriendRequestModelResponse
+    {
+        var req = URLRequest(url: makeURL(baseURL, ["v", "friends", "respond"]))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        
+        let body = RespondToFriendRequestModelBody(
+            friend_request_id: friendRequestId,
+            accept: accept
+        )
+        req.httpBody = try isoEncoder.encode(body)
+        
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else {
+            throw AuthAPIError.http(-1, "No HTTPURLResponse")
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            #if DEBUG
+            print("=== Respond to Friend Request Failed ===")
+            print("Status Code: \(http.statusCode)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        }
+        
+        do {
+            return try isoDecoder.decode(RespondToFriendRequestModelResponse.self, from: data)
+        } catch {
+            #if DEBUG
+            print("=== Decode Error in respondToFriendRequest ===")
+            print("Error: \(error)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.decode(error.localizedDescription)
+        }
+    }
+
+    // MARK: - Get User Inbox
+    static func viewUserInbox(baseURL: URL,token: String) async throws -> [InboxNotificationModelBody]
+    {
+        var req = URLRequest(url: makeURL(baseURL, ["v", "inbox"]))
+        req.httpMethod = "GET"
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else {
+            throw AuthAPIError.http(-1, "No HTTPURLResponse")
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            #if DEBUG
+            print("=== Get Inbox Failed ===")
+            print("Status Code: \(http.statusCode)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        }
+        
+        do {
+            let response = try isoDecoder.decode(InboxNotificationModelResponse.self, from: data)
+            return response.notifications
+        } catch {
+            #if DEBUG
+            print("=== Decode Error in getUserInbox ===")
+            print("Error: \(error)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.decode(error.localizedDescription)
+        }
+    }
+    
+    
     // GET /auth/check  (protected; Bearer ID token)
     static func checkUsernameAvailability(baseURL: URL, body: CheckUsernameAvailabilityModelBody)
         async throws -> CheckUsernameAvailabilityModelResponse

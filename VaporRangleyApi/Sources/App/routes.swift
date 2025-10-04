@@ -237,7 +237,41 @@ public func routes(_ app: Application) throws
         return try await Func.ViewMeetCategories.fetchAll(on: sql)
     }
     
-    
+    v.get("inbox")
+    {
+        req async throws -> HTTPDTO.Inbox.GetInboxResponse in
+        
+        let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
+        
+        guard let sql = req.db as? any SQLDatabase
+        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+        
+        let input = Func.GetUserInbox.In(
+            cognito_sub: sub,
+            limit: 50
+        )
+        
+        let rs = try await sql.raw(Func.GetUserInbox.query(input)).all()
+        let rows: [Func.GetUserInbox.Results] = try rs.map(Func.GetUserInbox.decode)
+        
+        return .init(notifications: rows.map { row in
+            .init(
+                notification_id: row.notification_id,
+                notification_type_id: row.notification_type_id,
+                notification_type: row.notification_type,
+                meet_id_uuid: row.meet_id_uuid,
+                created_by_user_uuid: row.created_by_user_uuid,
+                created_by_username: row.created_by_username,
+                created_by_display_name: row.created_by_display_name,
+                payload_json: row.payload_json,
+                dttm_created_utc: row.dttm_created_utc,
+                dttm_received_utc: row.dttm_received_utc,
+                dttm_opened_utc: row.dttm_opened_utc,
+                is_read: row.is_read
+            )
+        })
+    }
 
     // MARK: - END VIEW (fn_* ) or GET ROUTES
 
@@ -901,6 +935,69 @@ public func routes(_ app: Application) throws
         let outputPlaceholder = Proc.SystemDeleteUser.Out(is_success: false)
         
         return try await Proc.SystemDeleteUser.call(on: sql, params, outputPlaceholder)
+    }
+    
+    // Friend request routes
+    s.post("friends", "request")
+    {
+        req async throws -> HTTPDTO.Friends.SendRequestResponse in
+        
+        let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
+        
+        let body = try req.content.decode(HTTPDTO.Friends.SendRequestBody.self)
+        
+        guard let sql = req.db as? any SQLDatabase
+        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+        
+        let input = Func.SendFriendRequest.In(
+            cognito_sub: sub,
+            recipient_user_uuid: body.recipient_user_uuid
+        )
+        
+        let rs = try await sql.raw(Func.SendFriendRequest.query(input)).all()
+        let rows: [Func.SendFriendRequest.Results] = try rs.map(Func.SendFriendRequest.decode)
+        
+        guard let result = rows.first else {
+            throw Abort(.internalServerError, reason: "No result from friend request")
+        }
+        
+        return .init(
+            friend_request_id: result.friend_request_id,
+            success: result.success,
+            message: result.message
+        )
+    }
+
+    s.post("friends", "respond")
+    {
+        req async throws -> HTTPDTO.Friends.RespondToRequestResponse in
+        
+        let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
+        
+        let body = try req.content.decode(HTTPDTO.Friends.RespondToRequestBody.self)
+        
+        guard let sql = req.db as? any SQLDatabase
+        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+        
+        let input = Func.RespondToFriendRequest.In(
+            cognito_sub: sub,
+            friend_request_id: body.friend_request_id,
+            accept: body.accept
+        )
+        
+        let rs = try await sql.raw(Func.RespondToFriendRequest.query(input)).all()
+        let rows: [Func.RespondToFriendRequest.Results] = try rs.map(Func.RespondToFriendRequest.decode)
+        
+        guard let result = rows.first else {
+            throw Abort(.internalServerError, reason: "No result from respond")
+        }
+        
+        return .init(
+            success: result.success,
+            message: result.message
+        )
     }
     
 

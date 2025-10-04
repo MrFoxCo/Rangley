@@ -51,6 +51,10 @@ enum RangleyFunc: String
     case check_username_availability               = "rangley.rgl_fn_check_username_availability"
     case validate_display_name                     = "rangley.rgl_fn_validate_display_name"
     case view_user_profile_by_uuid                 = "rangley.rgl_fn_v_user_profile_by_uuid"
+    
+    case send_friend_request                       = "rangley.rgl_fn_send_friend_request"
+    case view_user_inbox                           = "rangley.rgl_fn_v_user_inbox"
+    case respond_to_friend_request                 = "rangley.rgl_fn_respond_to_friend_request"
 }
 
 // MARK: - Generic call shapes
@@ -1072,6 +1076,119 @@ enum Func
                 discoverable_by_email:    r.decode(column: "discoverable_by_email",     as: Bool.self),
                 show_full_name:           r.decode(column: "show_full_name",            as: Bool.self),
                 allow_invites_from_anyone:r.decode(column: "allow_invites_from_anyone", as: Bool.self)
+            )
+        }
+    }
+    
+    // MARK: - Send Friend Request
+    enum SendFriendRequest: PgFunctionRows
+    {
+        static let funcName: RangleyFunc = .send_friend_request
+        
+        struct In: Sendable
+        {
+            let cognito_sub: String
+            let recipient_user_uuid: UUID
+        }
+        
+        struct Results: Content, Sendable
+        {
+            let friend_request_id: Int?
+            let success: Bool
+            let message: String
+        }
+        
+        static func query(_ input: In) -> SQLQueryString
+        {
+            "SELECT * FROM \(unsafeRaw: funcName.rawValue)(\(bind: input.cognito_sub), \(bind: input.recipient_user_uuid));"
+        }
+        
+        static func decode(_ r: any SQLRow) throws -> Results {
+            try .init(
+                friend_request_id: r.decode(column: "friend_request_id", as: Int?.self),
+                success: r.decode(column: "success", as: Bool.self),
+                message: r.decode(column: "message", as: String.self)
+            )
+        }
+    }
+
+    // MARK: - Respond to Friend Request
+    enum RespondToFriendRequest: PgFunctionRows
+    {
+        static let funcName: RangleyFunc = .respond_to_friend_request
+        
+        struct In: Sendable
+        {
+            let cognito_sub: String
+            let friend_request_id: Int
+            let accept: Bool
+        }
+        
+        struct Results: Content, Sendable
+        {
+            let success: Bool
+            let message: String
+        }
+        
+        static func query(_ input: In) -> SQLQueryString
+        {
+            "SELECT * FROM \(unsafeRaw: funcName.rawValue)(\(bind: input.cognito_sub), \(bind: input.friend_request_id), \(bind: input.accept));"
+        }
+        
+        static func decode(_ r: any SQLRow) throws -> Results {
+            try .init(
+                success: r.decode(column: "success", as: Bool.self),
+                message: r.decode(column: "message", as: String.self)
+            )
+        }
+    }
+
+    // MARK: - Get User Inbox
+    enum GetUserInbox: PgFunctionRows
+    {
+        static let funcName: RangleyFunc = .view_user_inbox
+        
+        struct In: Sendable
+        {
+            let cognito_sub: String
+            let limit: Int
+        }
+        
+        struct Results: Content, Sendable
+        {
+            let notification_id         : Int
+            let notification_type_id    : Int
+            let notification_type       : String
+            let meet_id_uuid            : UUID?
+            let created_by_user_uuid    : UUID
+            let created_by_username     : String
+            let created_by_display_name : String
+            let payload_json            : String  // JSONB as String, decode client-side
+            let dttm_created_utc        : Date
+            let dttm_received_utc       : Date
+            let dttm_opened_utc         : Date?
+            let is_read                 : Bool
+        }
+        
+        static func query(_ input: In) -> SQLQueryString
+        {
+            "SELECT * FROM \(unsafeRaw: funcName.rawValue)(\(bind: input.cognito_sub), \(bind: input.limit));"
+        }
+        
+        static func decode(_ r: any SQLRow) throws -> Results {
+            try .init(
+                notification_id:        r.decode(column: "notification_id",         as: Int.self),
+                notification_type_id:   r.decode(column: "notification_type_id",    as: Int.self),
+                notification_type:      r.decode(column: "notification_type",       as: String.self),
+                meet_id_uuid:           r.decode(column: "meet_id_uuid",            as: UUID?.self),
+                created_by_user_uuid:   r.decode(column: "created_by_user_uuid",    as: UUID.self),
+                created_by_username:    r.decode(column: "created_by_username",     as: String.self),
+                created_by_display_name:r.decode(column: "created_by_display_name", as: String.self),
+                payload_json:           r.decode(column: "payload_json",            as: String.self),
+                dttm_created_utc:       r.decode(column: "dttm_created_utc",        as: Date.self),
+                dttm_received_utc:      r.decode(column: "dttm_received_utc",       as: Date.self),
+                dttm_opened_utc:        r.decode(column: "dttm_opened_utc",         as: Date?.self),
+                is_read:                r.decode(column: "is_read",                 as: Bool.self)
             )
         }
     }

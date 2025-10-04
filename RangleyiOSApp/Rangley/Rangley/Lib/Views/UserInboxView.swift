@@ -9,41 +9,28 @@ import SwiftUI
 
 struct UserInboxView: View
 {
-    let baseURL: URL
-    let token: String
+    @EnvironmentObject var inbox: InboxStore
+
     let onDismiss: () -> Void
-    
-    @State private var notifications: [InboxNotificationModel] = []
-    @State private var isLoading = false
-    @State private var errorMessage: String?
+
     @State private var selectedTab: InboxTab = .all
     
     var body: some View
     {
-        ZStack {
-            AppPalette.Brand.formBlack
-                .ignoresSafeArea()
-            
-            VStack(spacing: 0) {
-                // Header
-                header
-                
-                // Tab selector
-                tabSelector
-                
-                // Content
-                if isLoading {
-                    loadingView
-                } else if filteredNotifications.isEmpty {
-                    emptyStateView
-                } else {
-                    notificationsList
-                }
-            }
+        VStack(spacing: 0) {
+             header
+             tabSelector
+             
+             if inbox.isLoading {
+                 loadingView
+             } else if filteredNotifications.isEmpty {
+                 emptyStateView
+             } else {
+                 notificationsList
+             }
         }
-        .task {
-            await loadNotifications()
-        }
+        .background(AppPalette.Brand.formBlack)
+        .ignoresSafeArea()
     }
     
     // MARK: - Header
@@ -163,54 +150,40 @@ struct UserInboxView: View
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 40)
     }
+
     
-    // MARK: - Computed Properties
-    private var filteredNotifications: [InboxNotificationModel]
-    {
-        switch selectedTab {
-        case .all:
-            return notifications
-        case .friendRequests:
-            return notifications.filter { $0.notification_type_id == 15 } // Friend Request Received
-        case .meets:
-            return notifications.filter { $0.isMeetRelated }
-        }
-    }
-    
-    // MARK: - Actions
-    private func loadNotifications() async
-    {
-        isLoading = true
-        defer { isLoading = false }
-        
-        do {
-            // TODO: Replace with actual API call when backend is ready
-            notifications = try await AuthAPI.getUserInbox(baseURL: baseURL, token: token)
-        } catch {
-            errorMessage = error.localizedDescription
-            print("Failed to load inbox: \(error)")
-        }
-    }
-    
-    private func handleNotificationTap(_ notification: InboxNotificationModel) async
+    private func handleNotificationTap(_ notification: InboxNotificationModelBody) async
     {
         // Mark as read
         // TODO: Implement mark as read API call
         print("Tapped notification: \(notification.notification_id)")
     }
     
-    private func acceptFriendRequest(_ notification: InboxNotificationModel) async
-    {
-        // TODO: Implement accept friend request API call
-        print("Accepting friend request from notification: \(notification.notification_id)")
-        await loadNotifications() // Refresh
+    private var filteredNotifications: [InboxNotificationModelBody] {
+        switch selectedTab {
+        case .all:
+            return inbox.inboxNotifications
+        case .friendRequests:
+            return inbox.inboxNotifications.filter { $0.notification_type_id == 15 }
+        case .meets:
+            return inbox.inboxNotifications.filter { $0.isMeetRelated }
+        }
     }
     
-    private func declineFriendRequest(_ notification: InboxNotificationModel) async
-    {
-        // TODO: Implement decline friend request API call
-        print("Declining friend request from notification: \(notification.notification_id)")
-        await loadNotifications() // Refresh
+    private func acceptFriendRequest(_ notification: InboxNotificationModelBody) async {
+        do {
+            try await inbox.respondToFriendRequest(notification, accept: true)
+        } catch {
+            print("Failed to accept: \(error)")
+        }
+    }
+    
+    private func declineFriendRequest(_ notification: InboxNotificationModelBody) async {
+        do {
+            try await inbox.respondToFriendRequest(notification, accept: false)
+        } catch {
+            print("Failed to decline: \(error)")
+        }
     }
 }
 
@@ -259,7 +232,7 @@ enum InboxTab: String, CaseIterable
 
 struct NotificationCard: View
 {
-    let notification: InboxNotificationModel
+    let notification: InboxNotificationModelBody
     let onTap: () async -> Void
     let onAcceptFriendRequest: () async -> Void
     let onDeclineFriendRequest: () async -> Void
@@ -370,7 +343,7 @@ struct NotificationCard: View
 
 // MARK: - Notification Model Extensions
 
-extension InboxNotificationModel
+extension InboxNotificationModelBody
 {
     var icon: String {
         switch notification_type_id {
@@ -401,4 +374,25 @@ extension InboxNotificationModel
         formatter.unitsStyle = .abbreviated
         return formatter.localizedString(for: dttm_created_utc, relativeTo: Date())
     }
+    
+    
+    var title: String {
+        // Parse from notification_type or payload_json
+        switch notification_type_id {
+        case 15: return "Friend Request"
+        case 16: return "Friend Request Accepted"
+        case 17: return "Friend Request Declined"
+        case 8: return "Meet Invitation"
+        default: return notification_type
+        }
+    }
+    
+    var message: String? {
+        // Parse from payload_json or use created_by_display_name
+        "\(created_by_display_name)"
+    }
+}
+// Make it Identifiable for ForEach
+extension InboxNotificationModelBody: Identifiable {
+    var id: Int { notification_id }
 }

@@ -11,25 +11,26 @@ import Foundation
 final class InboxStore: ObservableObject {
     // MARK: - Public state
     @Published private(set) var inviteCount = 0
+    @Published private(set) var friendRequestCount = 0
     @Published private(set) var notifications: [ViewNotificationsModel] = []
+    @Published private(set) var inboxNotifications: [InboxNotificationModelBody] = []  // NEW
     @Published private(set) var isLoading = false
     @Published private(set) var errorMessage: String?
     @Published private(set) var lastUpdated: Date?
+    @Published var unreadCount: Int = 0
 
     // MARK: - Config
     private let baseURL: URL
     private var token: String = ""
 
-    // Throttle refreshes a bit so we don’t spam the API
     private let minRefreshInterval: TimeInterval = 5
     private var lastRefreshAt: Date?
-
-    // Coalesce concurrent refreshes
     private var refreshTask: Task<Void, Never>?
 
-    // MARK: - Type-safe IDs (ditch magic numbers)
+    // MARK: - Type-safe IDs
     private enum NotificationTypeId: Int16 {
         case meetInvitationReceived = 8
+        case friendRequestReceived = 15
     }
     private enum ParticipantStatusId: Int16 {
         case pending = 4
@@ -38,13 +39,9 @@ final class InboxStore: ObservableObject {
     init(baseURL: URL) { self.baseURL = baseURL }
 
     // MARK: - Token wiring
-    /// Pass `""` or `nil` on sign-out to clear state.
     func setToken(_ new: String?) async {
         let newToken = (new ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard newToken != token else {
-            // Same token: still allow a refresh if the caller wants to.
-            return
-        }
+        guard newToken != token else { return }
         token = newToken
 
         if token.isEmpty {
@@ -58,36 +55,49 @@ final class InboxStore: ObservableObject {
     func refresh(force: Bool = false) async {
         guard !token.isEmpty else { return }
 
-        // Throttle
         if !force, let last = lastRefreshAt, Date().timeIntervalSince(last) < minRefreshInterval {
             return
         }
         lastRefreshAt = Date()
 
-        // Cancel any in-flight refresh so we don’t race
         refreshTask?.cancel()
         refreshTask = Task { [weak self] in
             guard let self else { return }
             await MainActor.run { self.isLoading = true; self.errorMessage = nil }
 
             do {
-                let all = try await AuthAPI.viewNotifications(baseURL: self.baseURL, token: self.token)
+                // Fetch both old and new notification systems
+                async let oldNotifs = AuthAPI.viewNotifications(baseURL: self.baseURL, token: self.token)
+                async let newInbox = AuthAPI.viewUserInbox(baseURL: self.baseURL, token: self.token)
+                
+                let (old, inbox) = try await (oldNotifs, newInbox)
 
-                // Pending invites: type == invitation + participant status == pending
-                let pending = all.filter {
+                // Count pending meet invites (old system)
+                let pendingInvites = old.filter {
                     $0.notification_type_id == NotificationTypeId.meetInvitationReceived.rawValue &&
                     $0.participant_status_id == ParticipantStatusId.pending.rawValue
                 }.count
+                
+                // Count pending friend requests (new system)
+                let pendingFriendRequests = inbox.filter {
+                    $0.notification_type_id == 15 && !$0.is_read
+                }.count
+                
+                // Total unread
+                let totalUnread = inbox.filter { !$0.is_read }.count
 
                 await MainActor.run {
-                    self.notifications = all
-                    self.inviteCount = pending
+                    self.notifications = old
+                    self.inboxNotifications = inbox
+                    self.inviteCount = pendingInvites
+                    self.friendRequestCount = pendingFriendRequests
+                    self.unreadCount = totalUnread
                     self.isLoading = false
                     self.errorMessage = nil
                     self.lastUpdated = Date()
                 }
             } catch is CancellationError {
-                // Silently ignore; a newer refresh will replace us
+                // Silently ignore
             } catch {
                 await MainActor.run {
                     self.errorMessage = error.localizedDescription
@@ -101,7 +111,7 @@ final class InboxStore: ObservableObject {
     func respondToInvitation(_ n: ViewNotificationsModel, statusId: Int16) async throws {
         guard !token.isEmpty else { throw AuthAPIError.http(-1, "No auth token") }
 
-        // Optimistic UI: remove the pending invite locally and update the badge
+        // Optimistic UI
         await MainActor.run {
             self.notifications.removeAll { $0.id == n.id }
             self.inviteCount = self.notifications.filter {
@@ -109,19 +119,46 @@ final class InboxStore: ObservableObject {
             }.count
         }
 
-        // Server call
         let body = RespondToInviteBody(meet_id_uuid: n.meet_id_uuid, response_status_id: statusId)
         _ = try await AuthAPI.respondToInvitation(baseURL: baseURL, token: token, body: body)
 
-        // Reconcile with backend
         await refresh(force: true)
     }
-
+    
+    // NEW: Respond to friend request
+    func respondToFriendRequest(_ notification: InboxNotificationModelBody, accept: Bool) async throws {
+        guard !token.isEmpty else { throw AuthAPIError.http(-1, "No auth token") }
+        
+        // Extract friend_request_id from payload_json
+        guard let data = notification.payload_json.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let friendRequestId = json["friend_request_id"] as? Int else {
+            throw AuthAPIError.http(-1, "Invalid payload")
+        }
+        
+        // Optimistic UI
+        await MainActor.run {
+            self.inboxNotifications.removeAll { $0.notification_id == notification.notification_id }
+            self.unreadCount = self.inboxNotifications.filter { !$0.is_read }.count
+        }
+        
+        _ = try await AuthAPI.respondToFriendRequest(
+            baseURL: baseURL,
+            token: token,
+            friendRequestId: friendRequestId,
+            accept: accept
+        )
+        
+        await refresh(force: true)
+    }
 
     // MARK: - Helpers
     func clear() {
         notifications = []
+        inboxNotifications = []
         inviteCount = 0
+        friendRequestCount = 0
+        unreadCount = 0
         isLoading = false
         errorMessage = nil
         lastUpdated = nil
