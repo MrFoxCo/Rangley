@@ -358,6 +358,18 @@ enum HTTPDTO
             let message      : String
             let cleared_count: Int32
         }
+        
+        struct DeleteNotificationBody: Content, Sendable
+        {
+            let notification_id: Int64
+        }
+        
+        struct DeleteNotificationResponse: Content, Sendable
+        {
+            let success: Bool
+            let message: String
+        }
+        
     }
     
     

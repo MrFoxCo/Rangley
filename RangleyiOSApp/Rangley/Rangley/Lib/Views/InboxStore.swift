@@ -176,7 +176,32 @@ final class InboxStore: ObservableObject {
         
         await refresh(force: true)
     }
+    
+    func clearInbox() async throws
+    {
+        guard !token.isEmpty else { throw AuthAPIError.http(-1, "No auth token") }
+        
+        _ = try await AuthAPI.clearInbox(baseURL: baseURL, token: token)
+        
+        await MainActor.run {
+            self.inboxNotifications = []
+            self.unreadCount = 0
+        }
+    }
 
+    func deleteNotification(_ notificationId: Int64) async throws
+    {
+        guard !token.isEmpty else { throw AuthAPIError.http(-1, "No auth token") }
+        
+        // Optimistic UI update
+        await MainActor.run {
+            self.inboxNotifications.removeAll { $0.notification_id == notificationId }
+            self.unreadCount = self.inboxNotifications.filter { !$0.is_read }.count
+        }
+        
+        _ = try await AuthAPI.deleteInboxNotification(baseURL: baseURL, token: token, notificationId: notificationId)
+    }
+    
     // MARK: - Helpers
     func clear() {
         notifications = []

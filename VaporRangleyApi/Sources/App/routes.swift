@@ -1023,6 +1023,32 @@ public func routes(_ app: Application) throws
         )
     }
     
+    s.delete("inbox", "notification")
+    {
+        req async throws -> HTTPDTO.Inbox.DeleteNotificationResponse in
+        let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
+        
+        guard let sql = req.db as? any SQLDatabase
+        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+        
+        let body = try req.content.decode(HTTPDTO.Inbox.DeleteNotificationBody.self)
+        
+        let input = Func.DeleteInboxNotification.In(
+            cognito_sub: sub,
+            notification_id: body.notification_id
+        )
+        
+        let rs = try await sql.raw(Func.DeleteInboxNotification.query(input)).all()
+        
+        guard let result = try rs.map(Func.DeleteInboxNotification.decode).first else {
+            throw Abort(.internalServerError, reason: "No result returned")
+        }
+        
+        return .init(success: result.success, message: result.message)
+    }
+    
+    
 
     // MARK: - END System INSERTS (s*) or POST ROUTES
     

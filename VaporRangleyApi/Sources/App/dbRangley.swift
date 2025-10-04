@@ -57,6 +57,7 @@ enum RangleyFunc: String
     case view_user_inbox                           = "rangley.rgl_fn_v_user_inbox"
     case respond_to_friend_request                 = "rangley.rgl_fn_respond_to_friend_request"
     case clear_user_inbox                          = "rangley.rgl_fn_clear_user_inbox"
+    case delete_inbox_notification                 = "rangley.rgl_fn_d_inbox_notification"
 
 }
 
@@ -1222,6 +1223,34 @@ enum Func
                 success      : r.decode(column: "success",       as: Bool.self),
                 message      : r.decode(column: "message",       as: String.self),
                 cleared_count: r.decode(column: "cleared_count", as: Int32.self)
+            )
+        }
+    }
+    
+    enum DeleteInboxNotification: PgFunctionRows
+    {
+        static let funcName: RangleyFunc = .delete_inbox_notification
+        
+        struct In: Sendable
+        {
+            let cognito_sub: String
+            let notification_id: Int64
+        }
+        
+        struct Results: Content, Sendable
+        {
+            let success: Bool
+            let message: String
+        }
+        
+        static func query(_ input: In) -> SQLQueryString {
+            "SELECT * FROM \(unsafeRaw: funcName.rawValue)(\(bind: input.cognito_sub), \(bind: input.notification_id));"
+        }
+        
+        static func decode(_ r: any SQLRow) throws -> Results {
+            try .init(
+                success: r.decode(column: "success", as: Bool.self),
+                message: r.decode(column: "message", as: String.self)
             )
         }
     }

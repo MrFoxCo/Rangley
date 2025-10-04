@@ -11,6 +11,7 @@
 // MARK: - IGNORE THE BELOW TODOs FOR NOW
 // MARK: - V2
 // TODO: - git commit -m "fix friends notifications meet notificaitons add friends and nearbymoving"
+// TODO: - User inbox needs to update on tap?? also should automatically get a ping when a notificaiton arrives
 // TODO: - Anyone can join a group if a link is sent?
 // TODO: - Banner Notificaitons from outside the app
 // TODO: - Joinable public groups by request to join

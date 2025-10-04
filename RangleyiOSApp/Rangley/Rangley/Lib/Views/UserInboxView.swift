@@ -54,14 +54,18 @@ struct UserInboxView: View
             
             Spacer()
             
-            // Placeholder for future "mark all read" button
-            Button(action: {}) {
-                Image(systemName: "checkmark.circle")
+            // Clear all button
+            Button(action: {
+                Task {
+                    try? await inbox.clearInbox()
+                }
+            }) {
+                Image(systemName: "trash")
                     .font(.system(size: 18, weight: .medium))
-                    .foregroundStyle(AppPalette.Text.secondary)
+                    .foregroundStyle(AppPalette.Action.delete)
             }
-            .disabled(true)
-            .opacity(0.6)
+            .disabled(inbox.inboxNotifications.isEmpty)
+            .opacity(inbox.inboxNotifications.isEmpty ? 0.3 : 1.0)
         }
         .padding(.horizontal, 20)
         .padding(.top, 20)
@@ -103,6 +107,7 @@ struct UserInboxView: View
                     NotificationCard(
                         notification: notification,
                         onTap: { await handleNotificationTap(notification) },
+                        onDelete: { await deleteNotification(notification) },  // Add this
                         onAcceptFriendRequest: { await acceptFriendRequest(notification) },
                         onDeclineFriendRequest: { await declineFriendRequest(notification) }
                     )
@@ -110,6 +115,15 @@ struct UserInboxView: View
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
+        }
+    }
+
+    private func deleteNotification(_ notification: InboxNotificationModelBody) async
+    {
+        do {
+            try await inbox.deleteNotification(notification.notification_id)
+        } catch {
+            print("Failed to delete: \(error)")
         }
     }
     
@@ -234,6 +248,7 @@ struct NotificationCard: View
 {
     let notification: InboxNotificationModelBody
     let onTap: () async -> Void
+    let onDelete: () async -> Void
     let onAcceptFriendRequest: () async -> Void
     let onDeclineFriendRequest: () async -> Void
     
@@ -241,89 +256,97 @@ struct NotificationCard: View
     
     var body: some View
     {
-        Button(action: { Task { await onTap() } }) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .top, spacing: 12) {
-                    // Icon
-                    Circle()
-                        .fill(notification.iconColor.opacity(0.2))
-                        .frame(width: 44, height: 44)
-                        .overlay(
-                            Image(systemName: notification.icon)
-                                .font(.system(size: 18, weight: .medium))
-                                .foregroundStyle(notification.iconColor)
-                        )
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                // Icon
+                Circle()
+                    .fill(notification.iconColor.opacity(0.2))
+                    .frame(width: 44, height: 44)
+                    .overlay(
+                        Image(systemName: notification.icon)
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundStyle(notification.iconColor)
+                    )
+                
+                // Content
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(notification.title)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(AppPalette.Text.primary)
+                        .lineLimit(2)
                     
-                    // Content
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(notification.title)
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(AppPalette.Text.primary)
-                            .lineLimit(2)
-                        
-                        if let message = notification.message {
-                            Text(message)
-                                .font(.system(size: 14))
-                                .foregroundStyle(AppPalette.Text.secondary)
-                                .lineLimit(3)
-                        }
-                        
-                        Text(notification.timeAgo)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(AppPalette.Text.tertiary)
+                    if let message = notification.message {
+                        Text(message)
+                            .font(.system(size: 14))
+                            .foregroundStyle(AppPalette.Text.secondary)
+                            .lineLimit(3)
                     }
                     
-                    Spacer()
-                    
-                    // Unread indicator
-                    if !notification.is_read {
-                        Circle()
-                            .fill(AppPalette.Brand.neonPink)
-                            .frame(width: 8, height: 8)
-                    }
+                    Text(notification.timeAgo)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(AppPalette.Text.tertiary)
                 }
                 
-                // Friend request actions
-                if notification.notification_type_id == 15 { // Friend Request Received
-                    HStack(spacing: 12) {
-                        Button(action: { Task { await handleAccept() } }) {
-                            Text("Accept")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 10)
-                                .background(AppPalette.Brand.neonPink)
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
-                        }
-                        .disabled(isProcessing)
-                        
-                        Button(action: { Task { await handleDecline() } }) {
-                            Text("Decline")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(AppPalette.Brand.neonPink)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 10)
-                                .background(Color.clear)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(AppPalette.Brand.neonPink.opacity(0.5), lineWidth: 1)
-                                )
-                        }
-                        .disabled(isProcessing)
-                    }
+                Spacer()
+                
+                // Unread indicator
+                if !notification.is_read {
+                    Circle()
+                        .fill(AppPalette.Brand.neonPink)
+                        .frame(width: 8, height: 8)
                 }
             }
-            .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(notification.is_read ? Color(AppPalette.Brand.formBlack) : Color(AppPalette.Brand.japPurple))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(AppPalette.Brand.neonPink.opacity(0.2), lineWidth: 1)
-                    )
-            )
+            .contentShape(Rectangle())
+            .onTapGesture {
+                Task { await onTap() }
+            }
+            
+            // Friend request actions
+            if notification.notification_type_id == 15 {
+                HStack(spacing: 12) {
+                    Button(action: { Task { await handleAccept() } }) {
+                        Text("Accept")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(AppPalette.Brand.neonPink)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                    .disabled(isProcessing)
+                    
+                    Button(action: { Task { await handleDecline() } }) {
+                        Text("Decline")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(AppPalette.Brand.neonPink)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(Color.clear)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(AppPalette.Brand.neonPink.opacity(0.5), lineWidth: 1)
+                            )
+                    }
+                    .disabled(isProcessing)
+                }
+            }
         }
-        .buttonStyle(PlainButtonStyle())
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(notification.is_read ? Color(AppPalette.Brand.formBlack) : Color(AppPalette.Brand.japPurple))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(AppPalette.Brand.neonPink.opacity(0.2), lineWidth: 1)
+                )
+        )
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button(role: .destructive) {
+                Task { await onDelete() }
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
     }
     
     private func handleAccept() async
@@ -392,6 +415,9 @@ extension InboxNotificationModelBody
         "\(created_by_display_name)"
     }
 }
+
+
+
 // Make it Identifiable for ForEach
 extension InboxNotificationModelBody: Identifiable {
     var id: Int64 { notification_id }

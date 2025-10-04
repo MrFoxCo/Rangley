@@ -34,3 +34,15 @@ struct ClearInboxResponse: Codable, Sendable
     let message      : String
     let cleared_count: Int32
 }
+
+
+struct DeleteNotificationBody: Codable, Sendable
+{
+    let notification_id: Int64
+}
+
+struct DeleteNotificationResponse: Codable, Sendable
+{
+    let success: Bool
+    let message: String
+}

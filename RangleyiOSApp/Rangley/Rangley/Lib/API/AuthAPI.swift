@@ -581,7 +581,46 @@ struct AuthAPI
     }
 
     
-
+    static func clearInbox(baseURL: URL, token: String) async throws -> ClearInboxResponse
+    {
+        var req = URLRequest(url: makeURL(baseURL, ["s", "inbox", "clear"]))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else {
+            throw AuthAPIError.http(-1, "No HTTPURLResponse")
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        }
+        
+        return try isoDecoder.decode(ClearInboxResponse.self, from: data)
+    }
+    
+    static func deleteInboxNotification(baseURL: URL, token: String, notificationId: Int64)
+        async throws -> DeleteNotificationResponse
+    {
+        var req = URLRequest(url: makeURL(baseURL, ["s", "inbox", "notification"]))
+        req.httpMethod = "DELETE"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        
+        let body = DeleteNotificationBody(notification_id: notificationId)
+        req.httpBody = try isoEncoder.encode(body)
+        
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else {
+            throw AuthAPIError.http(-1, "No HTTPURLResponse")
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        }
+        
+        return try isoDecoder.decode(DeleteNotificationResponse.self, from: data)
+    }
     
     // MARK: - Optional debug helper (pretty raw JSON)
     static func whoAmIPrettyRaw(baseURL: URL, token: String) async throws -> String
