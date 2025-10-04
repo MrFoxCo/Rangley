@@ -18,9 +18,9 @@ struct ViewUserProfileModelResponse: Codable, Sendable
     let username                 : String
     let display_name             : String
     let member_since             : Date
-    let meets_created            : Int
-    let meets_attended           : Int
-    let friend_count             : Int
+    let meets_created            : Int8
+    let meets_attended           : Int8
+    let friend_count             : Int8
     let discoverable_by_username : Bool
     let discoverable_by_phone    : Bool
     let discoverable_by_email    : Bool

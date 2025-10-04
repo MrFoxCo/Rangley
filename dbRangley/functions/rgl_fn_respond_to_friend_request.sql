@@ -3,9 +3,9 @@
 -- ============================================
 CREATE OR REPLACE FUNCTION rangley.rgl_fn_respond_to_friend_request
 (
-    p_recipient_cognito_sub text,
-    p_friend_request_id     bigint,
-    p_accept                boolean
+    p_recipient_cognito_sub TEXT,
+    p_friend_request_id     INT8,
+    p_accept                BOOLEAN
 )
 RETURNS table
 (
@@ -15,11 +15,11 @@ RETURNS table
 LANGUAGE plpgsql
 AS $$
 DECLARE
-    v_recipient_user_id bigint;
-    v_requester_user_id bigint;
-    v_request_status_id int2;
-    v_notification_id   bigint;
-    v_notification_type_id int2;
+    v_recipient_user_id 	int8;
+    v_requester_user_id 	int8;
+    v_request_status_id 	int2;
+    v_notification_id   	int8;
+    v_notification_type_id 	int2;
 BEGIN
     -- Get recipient user_id from view
     SELECT user_id INTO v_recipient_user_id

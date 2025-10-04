@@ -14,8 +14,8 @@ struct InboxNotificationModelResponse: Codable, Sendable
 
 struct InboxNotificationModelBody: Codable, Sendable
 {
-    let notification_id: Int
-    let notification_type_id: Int
+    let notification_id: Int64
+    let notification_type_id: Int16
     let notification_type: String
     let meet_id_uuid: UUID?
     let created_by_user_uuid: UUID

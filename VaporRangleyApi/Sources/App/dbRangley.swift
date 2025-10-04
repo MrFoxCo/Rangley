@@ -38,6 +38,7 @@ enum RangleyFunc: String
     case v_user_by_cognito_sub_dep                 = "rangley.rangley_fn_v_user_by_cognito_sub"
     case v_user_by_cognito_sub_new                 = "rangley.rangley_fn_v_user_by_cognito_sub_patch_dob"
     case v_users_by_cognito_sub                    = "rangley.rangley_fn_v_users_by_cognito_sub"
+    // TODO: remove deprecated when update is complete
     case v_user_inbox_notifications_by_cognito_sub = "rangley.rangley_fn_v_user_inbox_notifications_by_cognito_sub"
     
     case v_meet_categories                         = "rangley.rangley_fn_v_meet_categories"
@@ -723,7 +724,8 @@ enum Func
     }
     
 
-    enum ViewUserInboxNotifications: PgFunctionRows
+    // TODO: remove deprecated when update is complete
+    enum ViewUserInboxNotificationsDep: PgFunctionRows
     {
         static let funcName: RangleyFunc = .v_user_inbox_notifications_by_cognito_sub
 
@@ -1087,15 +1089,15 @@ enum Func
         
         struct In: Sendable
         {
-            let cognito_sub: String
-            let recipient_user_uuid: UUID
+            let cognito_sub         : String
+            let recipient_user_uuid : UUID
         }
         
         struct Results: Content, Sendable
         {
-            let friend_request_id: Int?
-            let success: Bool
-            let message: String
+            let friend_request_id   : Int64?
+            let success             : Bool
+            let message             : String
         }
         
         static func query(_ input: In) -> SQLQueryString
@@ -1105,7 +1107,7 @@ enum Func
         
         static func decode(_ r: any SQLRow) throws -> Results {
             try .init(
-                friend_request_id: r.decode(column: "friend_request_id", as: Int?.self),
+                friend_request_id: r.decode(column: "friend_request_id", as: Int64?.self),
                 success: r.decode(column: "success", as: Bool.self),
                 message: r.decode(column: "message", as: String.self)
             )
@@ -1119,9 +1121,9 @@ enum Func
         
         struct In: Sendable
         {
-            let cognito_sub: String
-            let friend_request_id: Int
-            let accept: Bool
+            let cognito_sub         : String
+            let friend_request_id   : Int64
+            let accept              : Bool
         }
         
         struct Results: Content, Sendable
@@ -1144,20 +1146,20 @@ enum Func
     }
 
     // MARK: - Get User Inbox
-    enum GetUserInbox: PgFunctionRows
+    enum ViewUserInbox: PgFunctionRows
     {
         static let funcName: RangleyFunc = .view_user_inbox
         
         struct In: Sendable
         {
             let cognito_sub: String
-            let limit: Int
+            let limit: Int16
         }
         
         struct Results: Content, Sendable
         {
-            let notification_id         : Int
-            let notification_type_id    : Int
+            let notification_id         : Int64
+            let notification_type_id    : Int16
             let notification_type       : String
             let meet_id_uuid            : UUID?
             let created_by_user_uuid    : UUID
@@ -1177,8 +1179,8 @@ enum Func
         
         static func decode(_ r: any SQLRow) throws -> Results {
             try .init(
-                notification_id:        r.decode(column: "notification_id",         as: Int.self),
-                notification_type_id:   r.decode(column: "notification_type_id",    as: Int.self),
+                notification_id:        r.decode(column: "notification_id",         as: Int64.self),
+                notification_type_id:   r.decode(column: "notification_type_id",    as: Int16.self),
                 notification_type:      r.decode(column: "notification_type",       as: String.self),
                 meet_id_uuid:           r.decode(column: "meet_id_uuid",            as: UUID?.self),
                 created_by_user_uuid:   r.decode(column: "created_by_user_uuid",    as: UUID.self),

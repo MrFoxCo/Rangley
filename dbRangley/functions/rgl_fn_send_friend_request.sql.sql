@@ -4,22 +4,22 @@
 
 CREATE OR REPLACE FUNCTION rangley.rgl_fn_send_friend_request
 (
-    p_requester_cognito_sub text,
-    p_recipient_user_uuid   uuid
+    p_requester_cognito_sub TEXT,
+    p_recipient_user_uuid   UUID
 )
 RETURNS table
 (
-    friend_request_id bigint,
-    success           boolean,
-    message           text
+    friend_request_id INT8,
+    success           BOOLEAN,
+    message           TEXT
 )
 LANGUAGE plpgsql
 AS $$
 DECLARE
-    v_requester_user_id bigint;
-    v_recipient_user_id bigint;
-    v_friend_request_id bigint;
-    v_notification_id   bigint;
+    v_requester_user_id INT8;
+    v_recipient_user_id INT8;
+    v_friend_request_id INT8;
+    v_notification_id   INT8;
 BEGIN
     -- Get requester user_id from view
     SELECT user_id INTO v_requester_user_id

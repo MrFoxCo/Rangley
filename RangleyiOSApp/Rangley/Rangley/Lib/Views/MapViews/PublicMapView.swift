@@ -10,6 +10,7 @@
 // ==========================================================================================================
 // MARK: - IGNORE THE BELOW TODOs FOR NOW
 // MARK: - V2
+// TODO: - git commit -m "fix friends notifications meet notificaitons add friends and nearbymoving"
 // TODO: - Anyone can join a group if a link is sent?
 // TODO: - Banner Notificaitons from outside the app
 // TODO: - Joinable public groups by request to join
@@ -955,8 +956,8 @@ struct ControlsView: View
         VStack {
             if !shouldHideDock {
                 // TOP BAR: Centered badge with inbox on right
-                ZStack {
-                    // Centered nearby meets badge
+                ZStack(alignment: .topTrailing) {
+                    // Centered badge - truly centered
                     HStack {
                         Spacer()
                         NearbyMeetsBadgeView(
@@ -973,40 +974,36 @@ struct ControlsView: View
                         Spacer()
                     }
                     
-                    // Inbox button - top right (Instagram style)
-                    HStack {
-                        Spacer()
-                        
-                        Button(action: {
-                            uiState.showInbox = true
-                        }) {
-                            ZStack(alignment: .topTrailing) {
-                                Image(systemName: "tray")
-                                    .font(.system(size: 18, weight: .medium))
-                                    .foregroundColor(AppPalette.Brand.neonPink)
-                                    .frame(width: 44, height: 44)
-                                    .background(
-                                        Circle()
-                                            .fill(AppPalette.Brand.japPurple)
-                                    )
-                                    .shadow(radius: 2)
-                                
-                                // Unread badge
-                                if inbox.unreadCount > 0 {
-                                    Text("\(inbox.unreadCount)")
-                                        .font(.system(size: 10, weight: .bold))
-                                        .foregroundColor(.white)
-                                        .padding(4)
-                                        .background(Circle().fill(Color.red))
-                                        .offset(x: 6, y: -6)
-                                }
+                    // Inbox button - overlaid on top right
+                    Button(action: {
+                        uiState.showInbox = true
+                    }) {
+                        ZStack(alignment: .topTrailing) {
+                            Image(systemName: "tray")
+                                .font(.system(size: 18, weight: .medium))
+                                .foregroundColor(AppPalette.Brand.neonPink)
+                                .frame(width: 44, height: 44)
+                                .background(
+                                    Circle()
+                                        .fill(AppPalette.Brand.japPurple)
+                                )
+                                .shadow(radius: 2)
+                            
+                            // Unread badge
+                            if inbox.unreadCount > 0 {
+                                Text("\(inbox.unreadCount)")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundColor(.white)
+                                    .padding(4)
+                                    .background(Circle().fill(Color.red))
+                                    .offset(x: 6, y: -6)
                             }
                         }
-                        .padding(.trailing, 20)
                     }
+                    .frame(width: 44, height: 44)
+                    .padding(.trailing, 20)
                 }
                 .padding(.top, 16)
-                .transition(.move(edge: .top).combined(with: .opacity))
                     
                 Spacer()
                 

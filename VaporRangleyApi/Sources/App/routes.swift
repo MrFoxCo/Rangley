@@ -203,9 +203,9 @@ public func routes(_ app: Application) throws
         else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
 
         // Call the function
-        let rows: [Func.ViewUserInboxNotifications.Results] = try await sql
-            .raw(Func.ViewUserInboxNotifications.query(.init(cognitoSub: sub)))
-            .all(decoding: Func.ViewUserInboxNotifications.Results.self)
+        let rows: [Func.ViewUserInboxNotificationsDep.Results] = try await sql
+            .raw(Func.ViewUserInboxNotificationsDep.query(.init(cognitoSub: sub)))
+            .all(decoding: Func.ViewUserInboxNotificationsDep.Results.self)
 
         // Map to HTTP payload
         return .init(results: rows.map {
@@ -239,7 +239,7 @@ public func routes(_ app: Application) throws
     
     v.get("inbox")
     {
-        req async throws -> HTTPDTO.Inbox.GetInboxResponse in
+        req async throws -> HTTPDTO.Inbox.ViewInboxResponse in
         
         let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
@@ -247,13 +247,13 @@ public func routes(_ app: Application) throws
         guard let sql = req.db as? any SQLDatabase
         else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
         
-        let input = Func.GetUserInbox.In(
+        let input = Func.ViewUserInbox.In(
             cognito_sub: sub,
             limit: 50
         )
         
-        let rs = try await sql.raw(Func.GetUserInbox.query(input)).all()
-        let rows: [Func.GetUserInbox.Results] = try rs.map(Func.GetUserInbox.decode)
+        let rs = try await sql.raw(Func.ViewUserInbox.query(input)).all()
+        let rows: [Func.ViewUserInbox.Results] = try rs.map(Func.ViewUserInbox.decode)
         
         return .init(notifications: rows.map { row in
             .init(

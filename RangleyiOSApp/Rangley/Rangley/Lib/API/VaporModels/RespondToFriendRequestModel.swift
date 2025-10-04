@@ -9,8 +9,8 @@ import SwiftUI
 
 struct RespondToFriendRequestModelBody: Codable, Sendable
 {
-    let friend_request_id: Int
-    let accept: Bool
+    let friend_request_id   : Int64
+    let accept              : Bool
 }
 
 struct RespondToFriendRequestModelResponse: Codable, Sendable
