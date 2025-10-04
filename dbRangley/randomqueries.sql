@@ -15,7 +15,7 @@ select * from rangley.vw_meet_status;
 
 select * from rangley.vw_user_inboxes where user_id = 2;
 
-select * from rangley.vw_notifications;
+select * from rangley.vw_notifications;`
 
 select * from rangley.vw_friend_requests;
 

@@ -273,7 +273,6 @@ enum InboxTab: String, CaseIterable
 }
 
 // MARK: - Notification Card
-
 struct NotificationCard: View
 {
     let notification: InboxNotificationModelBody
@@ -287,6 +286,7 @@ struct NotificationCard: View
     var body: some View
     {
         VStack(alignment: .leading, spacing: 12) {
+            // Main content area - only tappable for non-friend-requests
             HStack(alignment: .top, spacing: 12) {
                 // Icon
                 Circle()
@@ -328,37 +328,71 @@ struct NotificationCard: View
             }
             .contentShape(Rectangle())
             .onTapGesture {
-                Task { await onTap() }
+                // Only allow general tap for non-friend-request notifications
+                if notification.notification_type_id != 15 {
+                    Task { await onTap() }
+                }
             }
             
             // Friend request actions
             if notification.notification_type_id == 15 {
                 HStack(spacing: 12) {
-                    Button(action: { Task { await handleAccept() } }) {
-                        Text("Accept")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .background(AppPalette.Brand.neonPink)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                    Button {
+                        Task {
+                            isProcessing = true
+                            await onAcceptFriendRequest()
+                            isProcessing = false
+                        }
+                    } label: {
+                        HStack {
+                            if isProcessing {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                                    .tint(.white)
+                            } else {
+                                Text("Accept")
+                            }
+                        }
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(AppPalette.Brand.neonPink)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
                     .disabled(isProcessing)
+                    .buttonStyle(.plain)
                     
-                    Button(action: { Task { await handleDecline() } }) {
-                        Text("Decline")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(AppPalette.Brand.neonPink)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .background(Color.clear)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(AppPalette.Brand.neonPink.opacity(0.5), lineWidth: 1)
-                            )
+                    Button {
+                        Task {
+                            isProcessing = true
+                            await onDeclineFriendRequest()
+                            isProcessing = false
+                        }
+                    } label: {
+                        HStack {
+                            if isProcessing {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                                    .tint(AppPalette.Brand.neonPink)
+                            } else {
+                                Text("Decline")
+                            }
+                        }
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(AppPalette.Brand.neonPink)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(Color.clear)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(AppPalette.Brand.neonPink.opacity(0.5), lineWidth: 1)
+                        )
                     }
                     .disabled(isProcessing)
+                    .buttonStyle(.plain)
                 }
+                .allowsHitTesting(!isProcessing)
             }
         }
         .padding(16)
@@ -370,20 +404,6 @@ struct NotificationCard: View
                         .stroke(AppPalette.Brand.neonPink.opacity(0.2), lineWidth: 1)
                 )
         )
-    }
-    
-    private func handleAccept() async
-    {
-        isProcessing = true
-        defer { isProcessing = false }
-        await onAcceptFriendRequest()
-    }
-    
-    private func handleDecline() async
-    {
-        isProcessing = true
-        defer { isProcessing = false }
-        await onDeclineFriendRequest()
     }
 }
 
@@ -438,7 +458,8 @@ extension InboxNotificationModelBody
     }
 }
 
-struct FriendRequestNotificationCard: View {
+struct FriendRequestNotificationCard: View
+{
     let notification: InboxNotificationModelBody
     let baseURL: URL
     let token: String
@@ -533,6 +554,7 @@ struct FriendRequestNotificationCard: View {
 
 
 // Make it Identifiable for ForEach
-extension InboxNotificationModelBody: Identifiable {
+extension InboxNotificationModelBody: Identifiable
+{
     var id: Int64 { notification_id }
 }
