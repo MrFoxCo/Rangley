@@ -327,6 +327,33 @@ enum HTTPDTO
             let success: Bool
             let message: String
         }
+        
+        // MARK: - Get Friendship Status
+        struct StatusResponse: Content, Sendable {
+            let status: FriendshipStatus
+            let friend_request_id: Int64?
+        }
+        
+        // MARK: - Get Friends List
+        struct FriendItem: Content, Sendable {
+            let user_uuid: UUID
+            let username: String
+            let display_name: String
+            let friend_since: Date
+        }
+        
+        // MARK: - Unfriend/Remove Friend
+        struct UnfriendResponse: Content, Sendable {
+            let success: Bool
+            let message: String
+        }
+        
+        enum FriendshipStatus: String, Codable, Sendable {
+            case none = "none"
+            case pendingSent = "pending_sent"
+            case pendingReceived = "pending_received"
+            case friends = "friends"
+        }
     }
         
     enum Inbox

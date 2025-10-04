@@ -388,7 +388,7 @@ struct AuthAPI
     static func sendFriendRequest(baseURL: URL,token: String,recipientUserUUID: UUID)
         async throws -> SendFriendRequestModelResponse
     {
-        var req = URLRequest(url: makeURL(baseURL, ["v", "friends", "request"]))
+        var req = URLRequest(url: makeURL(baseURL, ["s", "friends", "request"]))
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -426,7 +426,7 @@ struct AuthAPI
     static func respondToFriendRequest(baseURL: URL,token: String,friendRequestId: Int64,accept: Bool)
         async throws -> RespondToFriendRequestModelResponse
     {
-        var req = URLRequest(url: makeURL(baseURL, ["v", "friends", "respond"]))
+        var req = URLRequest(url: makeURL(baseURL, ["s", "friends", "respond"]))
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -462,6 +462,108 @@ struct AuthAPI
             throw AuthAPIError.decode(error.localizedDescription)
         }
     }
+    
+    
+    /// GET /v/friends/status/:user_uuid - Check friendship status with a user
+    static func getFriendshipStatus(baseURL: URL, token: String, userUUID: UUID)
+        async throws -> FriendshipStatusResponse
+    {
+        var req = URLRequest(url: makeURL(baseURL, ["v", "friends", "status", userUUID.uuidString]))
+        req.httpMethod = "GET"
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else {
+            throw AuthAPIError.http(-1, "No HTTPURLResponse")
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            #if DEBUG
+            print("=== Get Friendship Status Failed ===")
+            print("Status Code: \(http.statusCode)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        }
+        
+        do {
+            return try isoDecoder.decode(FriendshipStatusResponse.self, from: data)
+        } catch {
+            #if DEBUG
+            print("=== Decode Error in getFriendshipStatus ===")
+            print("Error: \(error)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.decode(error.localizedDescription)
+        }
+    }
+    
+    /// GET /v/friends - Get list of all friends
+    static func getFriendsList(baseURL: URL, token: String) async throws -> [FriendItem]
+    {
+        var req = URLRequest(url: makeURL(baseURL, ["v", "friends"]))
+        req.httpMethod = "GET"
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else {
+            throw AuthAPIError.http(-1, "No HTTPURLResponse")
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            #if DEBUG
+            print("=== Get Friends List Failed ===")
+            print("Status Code: \(http.statusCode)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        }
+        
+        do {
+            return try isoDecoder.decode([FriendItem].self, from: data)
+        } catch {
+            #if DEBUG
+            print("=== Decode Error in getFriendsList ===")
+            print("Error: \(error)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.decode(error.localizedDescription)
+        }
+    }
+    
+    /// DELETE /s/friends/:user_uuid - Remove a friend
+    static func unfriend(baseURL: URL, token: String, userUUID: UUID) async throws -> UnfriendResponse
+    {
+        var req = URLRequest(url: makeURL(baseURL, ["s", "friends", userUUID.uuidString]))
+        req.httpMethod = "DELETE"
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else {
+            throw AuthAPIError.http(-1, "No HTTPURLResponse")
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            #if DEBUG
+            print("=== Unfriend Failed ===")
+            print("Status Code: \(http.statusCode)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        }
+        
+        do {
+            return try isoDecoder.decode(UnfriendResponse.self, from: data)
+        } catch {
+            #if DEBUG
+            print("=== Decode Error in unfriend ===")
+            print("Error: \(error)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.decode(error.localizedDescription)
+        }
+    }
+    
 
     // MARK: - Get User Inbox
     static func viewUserInbox(baseURL: URL,token: String) async throws -> [InboxNotificationModelBody]

@@ -189,6 +189,54 @@ public func routes(_ app: Application) throws
         )
     }
     
+    // GET /v/friends/status/:user_uuid
+    v.get("friends", "status", ":user_uuid") { req async throws -> HTTPDTO.Friends.StatusResponse in
+        let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
+        
+        guard let userUUIDString = req.parameters.get("user_uuid"),
+              let targetUserUUID = UUID(uuidString: userUUIDString)
+        else { throw Abort(.badRequest, reason: "Invalid user_uuid") }
+        
+        guard let sql = req.db as? any SQLDatabase
+        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+        
+        let input = Func.ViewFriendshipStatus.In(
+            cognito_sub: sub,
+            target_user_uuid: targetUserUUID
+        )
+        
+        let result = try await Func.ViewFriendshipStatus.fetchOne(on: sql, input)
+        
+        // Convert string to enum, default to .none if invalid
+        let status = HTTPDTO.Friends.FriendshipStatus(rawValue: result.status) ?? .none
+        
+        return .init(
+            status: status,
+            friend_request_id: result.friend_request_id
+        )
+    }
+    
+    // GET /v/friends - List all friends
+    v.get("friends") { req async throws -> [HTTPDTO.Friends.FriendItem] in
+        let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
+        
+        guard let sql = req.db as? any SQLDatabase
+        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+        
+        let input = Func.ViewFriendsList.In(cognito_sub: sub)
+        let rs = try await sql.raw(Func.ViewFriendsList.query(input)).all()
+        let friends: [Func.ViewFriendsList.Results] = try rs.map(Func.ViewFriendsList.decode)
+        
+        return friends.map { .init(
+            user_uuid: $0.user_uuid,
+            username: $0.username,
+            display_name: $0.display_name,
+            friend_since: $0.friend_since
+        )}
+    }
+    
     
     
     v.get("notifications")
@@ -1048,7 +1096,29 @@ public func routes(_ app: Application) throws
         return .init(success: result.success, message: result.message)
     }
     
-    
+    // DELETE /s/friends/:user_uuid - Remove friend
+    s.delete("friends", ":user_uuid")
+    {
+        req async throws -> HTTPDTO.Friends.UnfriendResponse in
+        let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
+        
+        guard let userUUIDString = req.parameters.get("user_uuid"),
+              let targetUserUUID = UUID(uuidString: userUUIDString)
+        else { throw Abort(.badRequest, reason: "Invalid user_uuid") }
+        
+        guard let sql = req.db as? any SQLDatabase
+        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+        
+        let input = Func.DeleteFriend.In(
+            cognito_sub: sub,
+            target_user_uuid: targetUserUUID
+        )
+        
+        let result = try await Func.DeleteFriend.fetchOne(on: sql, input)
+        
+        return .init(success: result.success, message: result.message)
+    }
 
     // MARK: - END System INSERTS (s*) or POST ROUTES
     

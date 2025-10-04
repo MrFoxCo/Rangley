@@ -36,8 +36,10 @@ enum RangleyFunc: String
 {
     // TODO: remove deprecated when update is complete
     case v_user_by_cognito_sub_dep                 = "rangley.rangley_fn_v_user_by_cognito_sub"
+    
     case v_user_by_cognito_sub_new                 = "rangley.rangley_fn_v_user_by_cognito_sub_patch_dob"
     case v_users_by_cognito_sub                    = "rangley.rangley_fn_v_users_by_cognito_sub"
+    
     // TODO: remove deprecated when update is complete
     case v_user_inbox_notifications_by_cognito_sub = "rangley.rangley_fn_v_user_inbox_notifications_by_cognito_sub"
     
@@ -58,6 +60,10 @@ enum RangleyFunc: String
     case respond_to_friend_request                 = "rangley.rgl_fn_respond_to_friend_request"
     case clear_user_inbox                          = "rangley.rgl_fn_clear_user_inbox"
     case delete_inbox_notification                 = "rangley.rgl_fn_d_inbox_notification"
+    
+    case view_friendship_status                     = "rangley.rgl_fn_v_friendship_status"
+    case view_friends_list                         = "rangley.rgl_fn_v_friends_list"
+    case delete_friend                             = "rangley.rgl_fn_d_friend"
 
 }
 
@@ -987,7 +993,124 @@ enum Func
         }
     }
 
+    // MARK: - Get Friendship Status
+    enum ViewFriendshipStatus: PgFunctionRows
+    {
+        static let funcName: RangleyFunc = .view_friendship_status
+        
+        struct Param: Content, Sendable
+        {
+            let cognito_sub: String
+            let target_user_uuid: UUID
+        }
+        
+        struct Results: Content, Sendable
+        {
+            let status: String
+            let friend_request_id: Int64?
+        }
+        
+        struct In: Sendable {
+            let cognito_sub: String
+            let target_user_uuid: UUID
+        }
+        
+        static func query(_ input: In) -> SQLQueryString {
+            "SELECT * FROM \(unsafeRaw: funcName.rawValue)(\(bind: input.cognito_sub), \(bind: input.target_user_uuid));"
+        }
+        
+        static func decode(_ r: any SQLRow) throws -> Results
+        {
+            try .init(
+                status: r.decode(column: "status", as: String.self),
+                friend_request_id: r.decode(column: "friend_request_id", as: Int64?.self)
+            )
+        }
+        
+        static func fetchOne(on sql: any SQLDatabase, _ input: In) async throws -> Results {
+            let rows = try await fetchAll(on: sql, input)
+            guard let first = rows.first else { throw Abort(.notFound, reason: "Friendship status not found") }
+            return first
+        }
+    }
 
+    // MARK: - Get Friends List
+    enum ViewFriendsList: PgFunctionRows
+    {
+        static let funcName: RangleyFunc = .view_friends_list
+        
+        struct Param: Content, Sendable
+        {
+            let cognito_sub: String
+        }
+        
+        struct Results: Content, Sendable
+        {
+            let user_uuid: UUID
+            let username: String
+            let display_name: String
+            let friend_since: Date
+        }
+        
+        struct In: Sendable {
+            let cognito_sub: String
+        }
+        
+        static func query(_ input: In) -> SQLQueryString {
+            "SELECT * FROM \(unsafeRaw: funcName.rawValue)(\(bind: input.cognito_sub));"
+        }
+        
+        static func decode(_ r: any SQLRow) throws -> Results
+        {
+            try .init(
+                user_uuid: r.decode(column: "user_uuid", as: UUID.self),
+                username: r.decode(column: "username", as: String.self),
+                display_name: r.decode(column: "display_name", as: String.self),
+                friend_since: r.decode(column: "friend_since", as: Date.self)
+            )
+        }
+    }
+
+    // MARK: - Remove Friend (Unfriend)
+    enum DeleteFriend: PgFunctionRows
+    {
+        static let funcName: RangleyFunc = .delete_friend
+        
+        struct Param: Content, Sendable
+        {
+            let cognito_sub: String
+            let target_user_uuid: UUID
+        }
+        
+        struct Results: Content, Sendable
+        {
+            let success: Bool
+            let message: String
+        }
+        
+        struct In: Sendable {
+            let cognito_sub: String
+            let target_user_uuid: UUID
+        }
+        
+        static func query(_ input: In) -> SQLQueryString {
+            "SELECT * FROM \(unsafeRaw: funcName.rawValue)(\(bind: input.cognito_sub), \(bind: input.target_user_uuid));"
+        }
+        
+        static func decode(_ r: any SQLRow) throws -> Results
+        {
+            try .init(
+                success: r.decode(column: "success", as: Bool.self),
+                message: r.decode(column: "message", as: String.self)
+            )
+        }
+        
+        static func fetchOne(on sql: any SQLDatabase, _ input: In) async throws -> Results {
+            let rows = try await fetchAll(on: sql, input)
+            guard let first = rows.first else { throw Abort(.internalServerError, reason: "No result from remove friend") }
+            return first
+        }
+    }
     
     enum ViewUsers: PgFunctionRows
     {

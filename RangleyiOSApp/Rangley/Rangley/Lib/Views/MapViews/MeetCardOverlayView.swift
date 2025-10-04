@@ -85,6 +85,7 @@ struct MeetCardOverlay: View
     let currentUserUUID         : UUID?
     let baseURL                 : URL
     let token                   : String
+    @ObservedObject var mapDataStore: MapDataStore
     
     var onEdit              :   (ViewMeetsModel) -> Void = { _ in }
     var onDelete            :   (ViewMeetsModel) -> Void = { _ in }
@@ -132,6 +133,10 @@ struct MeetCardOverlay: View
             }
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.88), value: isPresented)
+        .task(id: selectedMeet?.meet_id_uuid) {
+            guard isPresented, selectedMeet != nil else { return }
+            await mapDataStore.forceRefresh()
+        }
     }
 
     private func close()

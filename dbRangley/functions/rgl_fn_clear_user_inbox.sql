@@ -26,13 +26,53 @@ BEGIN
         RETURN;
     END IF;
     
-    -- Only delete informational notifications, preserve actionable ones
+    -- Delete notifications that:
+    -- 1. Are NOT meet invitations (type 8) or friend requests (type 15)
+    -- 2. OR are meet invitations that have been responded to (status != 4 invited)
+    -- 3. OR are meet invitations for ended meets
+    -- 4. OR are friend requests that have been responded to (status != 1 pending)
     DELETE FROM rangley.tb_user_inboxes ui
     WHERE ui.user_id = v_user_id
-      AND ui.notification_id IN (
-          SELECT n.notification_id 
-          FROM rangley.tb_notifications n
-          WHERE n.notification_type_id NOT IN (8, 15)  -- Keep invitations and friend requests
+      AND (
+          -- Delete all non-actionable notifications
+          ui.notification_id IN (
+              SELECT n.notification_id
+              FROM rangley.tb_notifications n
+              WHERE n.notification_type_id NOT IN (8, 15)
+          )
+          OR
+          -- Delete responded-to meet invitations
+          ui.notification_id IN (
+              SELECT n.notification_id
+              FROM rangley.tb_notifications n
+              JOIN rangley.tb_meet_participants mp 
+                  ON mp.meet_id = n.meet_id 
+                  AND mp.user_id = v_user_id
+              WHERE n.notification_type_id = 8
+                AND mp.participant_status_id NOT IN (4)  -- Not pending
+          )
+          OR
+          -- Delete invitations for ended meets
+          ui.notification_id IN (
+              SELECT n.notification_id
+              FROM rangley.tb_notifications n
+              JOIN rangley.vw_meet_change_stamps_desc mcsd ON mcsd.meet_id = n.meet_id
+              JOIN rangley.vw_meets m ON m.meet_id = mcsd.meet_id AND m.change_stamp = mcsd.change_stamp
+              WHERE n.notification_type_id = 8
+                AND m.dttm_end_utc < NOW()
+          )
+          OR
+          -- Delete responded-to friend requests
+          ui.notification_id IN (
+              SELECT n.notification_id
+              FROM rangley.tb_notifications n
+              WHERE n.notification_type_id = 15
+                AND (n.payload_json->>'friend_request_id')::INT8 IN (
+                    SELECT friend_request_id 
+                    FROM rangley.tb_friend_requests
+                    WHERE friend_request_status_id != 1  -- Not pending
+                )
+          )
       );
     
     GET DIAGNOSTICS v_deleted_count = ROW_COUNT;

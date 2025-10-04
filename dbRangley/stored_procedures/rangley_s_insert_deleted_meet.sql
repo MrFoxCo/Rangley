@@ -22,6 +22,7 @@ DECLARE
     v_new_change_stamp    int8;
 	v_meet_status_id      int2;
 	v_change_reason       varchar(50);
+	v_notification_id 		int8;
 
     -- Current values
     current_coordinate_id   int8;
@@ -150,6 +151,44 @@ BEGIN
           MESSAGE='[ERRO] Unexpected insert count for tb_meets',
           DETAIL=format('rows=%s meet_id=%s change_stamp=%s', num_inserted, v_meet_id, v_new_change_stamp);
     END IF;
+
+
+	INSERT INTO rangley.tb_notifications (
+	    notification_type_id,
+	    meet_id,
+	    created_by_user_id,
+	    payload_json
+	)
+	SELECT 
+	    18,  -- Meet Deleted
+	    v_meet_id,
+	    v_user_id,
+	    jsonb_build_object(
+	        'meet_name', current_name,
+	        'deleted_by_user_id', v_user_id,
+	        'deletion_timestamp', NOW()
+	    )
+	FROM (SELECT 1) dummy  -- Just to make SELECT work
+	RETURNING notification_id INTO v_notification_id;
+	
+	-- Add to all participants' inboxes (except the deleter)
+	INSERT INTO rangley.tb_user_inboxes (user_id, notification_id)
+	SELECT DISTINCT mp.user_id, v_notification_id
+	FROM rangley.tb_meet_participants mp
+	WHERE mp.meet_id = v_meet_id
+	  AND mp.user_id != v_user_id  -- Don't notify yourself
+	  AND mp.participant_status_id IN (4, 6, 7);  -- Invited, Accepted, Owner
+
+	
+	-- Delete the original invitation notifications for this meet from all inboxes
+	DELETE FROM rangley.tb_user_inboxes ui
+	WHERE ui.notification_id IN (
+	    SELECT n.notification_id 
+	    FROM rangley.tb_notifications n
+	    WHERE n.meet_id = v_meet_id
+	      AND n.notification_type_id = 8  -- Meet Invitation Received
+	);
+
 	
     RAISE LOG '[INFO] Updated meet_id=% with change_stamp=% and meet_coordinate_id=% by user_id=%',
         v_meet_id, v_new_change_stamp, current_coordinate_id, v_user_id;

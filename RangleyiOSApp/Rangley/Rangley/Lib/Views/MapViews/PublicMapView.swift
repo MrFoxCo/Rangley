@@ -10,8 +10,12 @@
 // ==========================================================================================================
 // MARK: - IGNORE THE BELOW TODOs FOR NOW
 // MARK: - V2
+// TODO: fix the App Icon it appears fussy on the iphone 17 max pro... probably need a cleaner logo or soethign 
+// TODO: - figure out why the meet detail doesn't update the participant status... need to tap on
+//          -- ^^need to tap on my meets for it to update
 // TODO: - git commit -m "fix friends notifications meet notificaitons add friends and nearbymoving"
 // TODO: - User inbox needs to update on tap?? also should automatically get a ping when a notificaiton arrives
+// TODO: - make delete notifications look a little better also add a are you sure you want to clear/delete
 // TODO: - Anyone can join a group if a link is sent?
 // TODO: - Banner Notificaitons from outside the app
 // TODO: - Joinable public groups by request to join
@@ -39,19 +43,8 @@
 // TODO: - Consider adding other POI's to the map
 // TODO: - Users can create groups... sorta like on iMessage. ex: invite their usual friend groups out
 // TODO: - filtering mechanism for my meets... might get really cluttered for super active users
-// MARK: - V2
-// MARK: - IGNORE THE ABOVE TODOs FOR NOW
-// ==========================================================================================================
-// ==========================================================================================================
-// ==========================================================================================================
-
-// ==========================================================================================================
-// ==========================================================================================================
-// ==========================================================================================================
-// MARK: - IGNORE THE BELOW TODOs FOR NOW
-// MARK: - V1
 // TODO: - NEED TO FIX THE FUCKING locaiton bubble it's not shrinking
-// MARK: - V1
+// MARK: - V2
 // MARK: - IGNORE THE ABOVE TODOs FOR NOW
 // ==========================================================================================================
 // ==========================================================================================================
@@ -710,7 +703,7 @@ struct MapView: View
                             anchor: .center
                         ) {
                             MeetBubbleButton(meet: meet, ns: meetNS) {
-                                mapData.selectedMeet = meet
+                                mapData.selectedMeet = mapData.meets.first { $0.meet_id_uuid == meet.meet_id_uuid }
                                 uiState.showMeetOverlay = true
                             }
                         }
@@ -804,6 +797,7 @@ struct OverlaysView: View
                 currentUserUUID: authState.currentUser?.user_uuid,
                 baseURL: Env.apiBaseURL,
                 token: authToken,
+                mapDataStore: mapData,
                 onEdit: { meet in
                     uiState.meetToEdit = meet
                     uiState.showUpdateOverlay = true

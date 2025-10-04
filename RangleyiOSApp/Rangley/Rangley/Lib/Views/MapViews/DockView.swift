@@ -19,7 +19,6 @@
 // =========================================================
 // =========================================================
 
-
 import SwiftUI
 
 public struct DockView: View
@@ -36,11 +35,12 @@ public struct DockView: View
     
     @State private var isAnimating = false
     @State private var showSearch = false
+    @State private var showMyProfile = false  // Add this
     
     init(
         baseURL: URL,
         token: String,
-        mapDataStore: MapDataStore, // ADD THIS PARAMETER
+        mapDataStore: MapDataStore,
         onSignOut: @escaping () -> Void,
         onCreateMeet: @escaping () -> Void,
         onMeetSelected: @escaping (ViewMeetsModel) -> Void,
@@ -48,7 +48,7 @@ public struct DockView: View
     ) {
         self.baseURL = baseURL
         self.token = token
-        self.mapDataStore = mapDataStore // ADD THIS LINE
+        self.mapDataStore = mapDataStore
         self.onSignOut = onSignOut
         self.onCreateMeet = onCreateMeet
         self.onMeetSelected = onMeetSelected
@@ -64,7 +64,7 @@ public struct DockView: View
                 // Hamburger menu (your existing component)
                 HamburgerMenu(onSignOut: onSignOut)
                 
-                // My Meets button - now using the actual MyMeetsView component
+                // My Meets button
                 MyMeetsView(
                     baseURL: baseURL,
                     authToken: token,
@@ -151,25 +151,10 @@ public struct DockView: View
                 .onAppear {
                     isAnimating = true
                 }
-//                Button(action: onCreateMeet) {
-//                    Image(systemName: "plus")
-//                        .font(.system(size: 18, weight: .semibold))
-//                        .imageScale(.large)
-//                        .foregroundStyle(AppPalette.Brand.neonPink)
-//                        .frame(width: 48, height: 48)
-//                        .background(
-//                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-//                                .fill(AppPalette.Brand.neonPink.opacity(0.14))
-//                        )
-//                        .overlay(
-//                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-//                                .stroke(AppPalette.Brand.neonPink.opacity(0.55), lineWidth: 1)
-//                        )
-//                        .contentShape(RoundedRectangle(cornerRadius: 16))
-//                }
-//                .accessibilityLabel("Create Meet")
+                
                 // Search button
-                Button(action: { showSearch = true }) {
+                Button(action: { showSearch = true })
+                {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: 18, weight: .semibold))
                         .imageScale(.large)
@@ -186,7 +171,26 @@ public struct DockView: View
                         .contentShape(RoundedRectangle(cornerRadius: 16))
                 }
                 .accessibilityLabel("Search")
-                // COMPLETE
+                
+                // My Profile button - NEW
+                Button(action: { showMyProfile = true })
+                {
+                    Image(systemName: "person.circle.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .imageScale(.large)
+                        .foregroundStyle(AppPalette.Brand.neonPink)
+                        .frame(width: 48, height: 48)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(AppPalette.Brand.neonPink.opacity(0.14))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .stroke(AppPalette.Brand.neonPink.opacity(0.55), lineWidth: 1)
+                        )
+                        .contentShape(RoundedRectangle(cornerRadius: 16))
+                }
+                .accessibilityLabel("My Profile")
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
@@ -216,6 +220,13 @@ public struct DockView: View
                 }
             )
         }
+        .fullScreenCover(isPresented: $showMyProfile)  // Add this
+        {
+            MyProfileView(
+                baseURL: baseURL,
+                token: token,
+                onDismiss: { showMyProfile = false }
+            )
+        }
     }
 }
-

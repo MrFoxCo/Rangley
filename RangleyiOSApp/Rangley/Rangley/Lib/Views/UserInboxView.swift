@@ -14,6 +14,7 @@ struct UserInboxView: View
     let onDismiss: () -> Void
 
     @State private var selectedTab: InboxTab = .all
+    @State private var showClearConfirmation = false
     
     var body: some View
     {
@@ -31,6 +32,9 @@ struct UserInboxView: View
         }
         .background(AppPalette.Brand.formBlack)
         .ignoresSafeArea()
+        .task {
+            await inbox.refresh(force: true)
+        }
     }
     
     // MARK: - Header
@@ -56,9 +60,7 @@ struct UserInboxView: View
             
             // Clear all button
             Button(action: {
-                Task {
-                    try? await inbox.clearInbox()
-                }
+                showClearConfirmation = true
             }) {
                 Image(systemName: "trash")
                     .font(.system(size: 18, weight: .medium))
@@ -66,11 +68,26 @@ struct UserInboxView: View
             }
             .disabled(inbox.inboxNotifications.isEmpty)
             .opacity(inbox.inboxNotifications.isEmpty ? 0.3 : 1.0)
+            .confirmationDialog(
+                "Clear Inbox",
+                isPresented: $showClearConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Clear All Notifications", role: .destructive) {
+                    Task {
+                        try? await inbox.clearInbox()
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This will clear all read notifications. Pending invitations and friend requests will remain.")
+            }
         }
         .padding(.horizontal, 20)
         .padding(.top, 20)
         .padding(.bottom, 16)
     }
+
     
     // MARK: - Tab Selector
     private var tabSelector: some View
@@ -101,21 +118,31 @@ struct UserInboxView: View
     // MARK: - Notifications List
     private var notificationsList: some View
     {
-        ScrollView {
-            LazyVStack(spacing: 12) {
-                ForEach(filteredNotifications) { notification in
-                    NotificationCard(
-                        notification: notification,
-                        onTap: { await handleNotificationTap(notification) },
-                        onDelete: { await deleteNotification(notification) },  // Add this
-                        onAcceptFriendRequest: { await acceptFriendRequest(notification) },
-                        onDeclineFriendRequest: { await declineFriendRequest(notification) }
-                    )
+        List {
+            ForEach(filteredNotifications) { notification in
+                NotificationCard(
+                    notification: notification,
+                    onTap: { await handleNotificationTap(notification) },
+                    onDelete: { await deleteNotification(notification) },
+                    onAcceptFriendRequest: { await acceptFriendRequest(notification) },
+                    onDeclineFriendRequest: { await declineFriendRequest(notification) }
+                )
+                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                    Button(role: .destructive) {
+                        Task {
+                            await deleteNotification(notification)
+                        }
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
                 }
+                .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 6, trailing: 20))
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 16)
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
     }
 
     private func deleteNotification(_ notification: InboxNotificationModelBody) async
@@ -173,7 +200,8 @@ struct UserInboxView: View
         print("Tapped notification: \(notification.notification_id)")
     }
     
-    private var filteredNotifications: [InboxNotificationModelBody] {
+    private var filteredNotifications: [InboxNotificationModelBody]
+    {
         switch selectedTab {
         case .all:
             return inbox.inboxNotifications
@@ -184,7 +212,8 @@ struct UserInboxView: View
         }
     }
     
-    private func acceptFriendRequest(_ notification: InboxNotificationModelBody) async {
+    private func acceptFriendRequest(_ notification: InboxNotificationModelBody) async
+    {
         do {
             try await inbox.respondToFriendRequest(notification, accept: true)
         } catch {
@@ -192,7 +221,8 @@ struct UserInboxView: View
         }
     }
     
-    private func declineFriendRequest(_ notification: InboxNotificationModelBody) async {
+    private func declineFriendRequest(_ notification: InboxNotificationModelBody) async
+    {
         do {
             try await inbox.respondToFriendRequest(notification, accept: false)
         } catch {
@@ -340,13 +370,6 @@ struct NotificationCard: View
                         .stroke(AppPalette.Brand.neonPink.opacity(0.2), lineWidth: 1)
                 )
         )
-        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-            Button(role: .destructive) {
-                Task { await onDelete() }
-            } label: {
-                Label("Delete", systemImage: "trash")
-            }
-        }
     }
     
     private func handleAccept() async
@@ -411,11 +434,102 @@ extension InboxNotificationModelBody
     }
     
     var message: String? {
-        // Parse from payload_json or use created_by_display_name
-        "\(created_by_display_name)"
+        created_by_display_name
     }
 }
 
+struct FriendRequestNotificationCard: View {
+    let notification: InboxNotificationModelBody
+    let baseURL: URL
+    let token: String
+    let onRespond: () -> Void
+    
+    @State private var isResponding = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Circle()
+                    .fill(AppPalette.Brand.neonPink.opacity(0.2))
+                    .frame(width: 40, height: 40)
+                    .overlay(
+                        Image(systemName: "person.badge.plus")
+                            .foregroundStyle(AppPalette.Brand.neonPink)
+                    )
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Friend Request")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(AppPalette.Text.primary)
+                    
+                    if let message = notification.message {
+                        Text(message)
+                            .font(.system(size: 14))
+                            .foregroundStyle(AppPalette.Text.secondary)
+                            .lineLimit(3)
+                    }
+                }
+                
+                Spacer()
+            }
+            
+            // Accept/Decline buttons
+            if notification.notification_type == "friend_request" {
+                HStack(spacing: 12) {
+                    Button(action: { Task { await respond(accept: true) } }) {
+                        Text("Accept")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(Color.green)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                    
+                    Button(action: { Task { await respond(accept: false) } }) {
+                        Text("Decline")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(Color.red.opacity(0.8))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                }
+                .disabled(isResponding)
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(AppPalette.Brand.japPurple))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(AppPalette.Brand.neonPink.opacity(0.2), lineWidth: 1)
+                )
+        )
+    }
+    
+    // In the FriendRequestNotificationCard's respond function:
+    private func respond(accept: Bool) async {
+        guard let friendRequestId = notification.friendRequestId else { return }
+        
+        isResponding = true
+        defer { isResponding = false }
+        
+        do {
+            _ = try await AuthAPI.respondToFriendRequest(
+                baseURL: baseURL,
+                token: token,
+                friendRequestId: friendRequestId,
+                accept: accept
+            )
+            onRespond()
+        } catch {
+            print("Failed to respond to friend request: \(error)")
+        }
+    }
+}
 
 
 // Make it Identifiable for ForEach

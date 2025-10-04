@@ -2,7 +2,6 @@ import SwiftUI
 
 public struct HamburgerMenu: View {
     public var onSignOut: () -> Void
-    @State private var showAccount = false
     @State private var showMenu = false
 
     public init(onSignOut: @escaping () -> Void) { self.onSignOut = onSignOut }
@@ -27,10 +26,6 @@ public struct HamburgerMenu: View {
         .accessibilityLabel("Menu")
         .sheet(isPresented: $showMenu) {
             CustomMenuView(
-                onAccount: {
-                    showMenu = false
-                    showAccount = true
-                },
                 onSignOut: {
                     showMenu = false
                     onSignOut()
@@ -39,15 +34,10 @@ public struct HamburgerMenu: View {
             .presentationDetents([.height(280)])
             .presentationDragIndicator(.visible)
         }
-        .sheet(isPresented: $showAccount) {
-            AccountView()
-                .preferredColorScheme(.dark)
-        }
     }
 }
 
 struct CustomMenuView: View {
-    let onAccount: () -> Void
     let onSignOut: () -> Void
     @State private var isAnimating = false
 
@@ -68,14 +58,6 @@ struct CustomMenuView: View {
 
             // Menu items
             VStack(spacing: 16) {
-                MenuItemButton(
-                    icon: "person.crop.circle.fill",
-                    title: "Account Settings",
-                    subtitle: "Manage your profile",
-                    isDestructive: false,
-                    action: onAccount
-                )
-
                 MenuItemButton(
                     icon: "rectangle.portrait.and.arrow.right",
                     title: "Sign Out",

@@ -1,0 +1,378 @@
+//
+//  MyProfileView.swift
+//  Rangley
+//
+//  Created by Anthony Guzzardo on 10/4/25.
+//
+
+import SwiftUI
+
+// Add this struct at the top of MyProfileView
+struct IdentifiableFriendsList: Identifiable {
+    let id = UUID()
+    let friends: [FriendItem]
+}
+
+struct MyProfileView: View
+{
+    let baseURL: URL
+    let token: String
+    let onDismiss: () -> Void
+    
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+    @State private var myProfile: ViewUserMeModel?
+    @State private var profileStats: ViewUserProfileModelResponse?
+    @State private var presentedFriendsList: IdentifiableFriendsList?
+    @State private var showUnfriendConfirmation = false
+    @State private var friendToRemove: FriendItem?
+    @State private var showSettings = false
+    
+    var body: some View
+    {
+        ZStack {
+            AppPalette.Brand.formBlack
+                .ignoresSafeArea()
+            
+            ScrollView {
+                VStack(spacing: 24) {
+                    header
+                    
+                    if let profile = myProfile {
+                        profileHeader(profile)
+                        statsSection
+                        bioSection
+                        activitySection
+                    }
+                    
+                    Spacer(minLength: 40)
+                }
+                .padding(.horizontal, 20)
+            }
+            
+            if isLoading {
+                ProgressView()
+                    .scaleEffect(1.2)
+                    .tint(AppPalette.Brand.neonPink)
+            }
+        }
+        .alert("Error", isPresented: .constant(errorMessage != nil)) {
+            Button("OK") { errorMessage = nil }
+        } message: {
+            if let errorMessage = errorMessage {
+                Text(errorMessage)
+            }
+        }
+        .confirmationDialog(
+            "Remove Friend",
+            isPresented: $showUnfriendConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Remove Friend", role: .destructive) {
+                if let friend = friendToRemove {
+                    Task { await unfriend(friend) }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            if let friend = friendToRemove {
+                Text("Are you sure you want to remove \(friend.display_name) from your friends?")
+            }
+        }
+        .sheet(item: $presentedFriendsList) { wrapper in
+            FriendsListView(
+                friends: wrapper.friends,
+                baseURL: baseURL,
+                token: token,
+                onUnfriend: { friend in
+                    friendToRemove = friend
+                    showUnfriendConfirmation = true
+                },
+                onDismiss: { presentedFriendsList = nil }
+            )
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsPlaceholderView(onDismiss: { showSettings = false })
+        }
+        .task {
+            await loadMyProfile()
+        }
+    }
+    
+    // MARK: - Header
+    private var header: some View
+    {
+        HStack {
+            Button(action: onDismiss) {
+                HStack(spacing: 6) {
+                    Image(systemName: "chevron.left")
+                    Text("Back")
+                }
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(AppPalette.Brand.neonPink)
+            }
+            
+            Spacer()
+            
+            Text("My Profile")
+                .font(.system(size: 20, weight: .bold))
+                .foregroundStyle(AppPalette.Text.primary)
+            
+            Spacer()
+            
+            Button(action: { showSettings = true }) {
+                Image(systemName: "gear")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(AppPalette.Brand.neonPink)
+            }
+        }
+        .padding(.top, 20)
+    }
+    
+    // MARK: - Profile Header
+    private func profileHeader(_ profile: ViewUserMeModel) -> some View
+    {
+        VStack(spacing: 16) {
+            Circle()
+                .fill(AppPalette.Brand.neonPink.opacity(0.2))
+                .frame(width: 100, height: 100)
+                .overlay(
+                    Text(profile.display_name.prefix(1))
+                        .font(.system(size: 44, weight: .bold))
+                        .foregroundStyle(AppPalette.Brand.neonPink)
+                )
+            
+            VStack(spacing: 6) {
+                Text(profile.display_name)
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundStyle(AppPalette.Text.primary)
+                
+                Text("@\(profile.username)")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(AppPalette.Text.secondary)
+            }
+            
+            // Edit Profile Button
+            Button(action: { /* TODO: Edit profile */ }) {
+                HStack(spacing: 6) {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 14))
+                    Text("Edit Profile")
+                        .font(.system(size: 15, weight: .medium))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(Color.clear)
+                .foregroundStyle(AppPalette.Brand.neonPink)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(AppPalette.Brand.neonPink.opacity(0.5), lineWidth: 1)
+                )
+            }
+            .disabled(true)
+            .opacity(0.6)
+        }
+    }
+    
+    // MARK: - Stats Section
+    private var statsSection: some View
+    {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Activity")
+                .font(.system(size: 20, weight: .bold))
+                .foregroundStyle(AppPalette.Text.primary)
+            
+            if let stats = profileStats {
+                HStack(spacing: 16) {
+                    statCard(
+                        value: "\(stats.meets_created)",
+                        label: "Meets Created",
+                        icon: "plus.circle.fill"
+                    )
+                    
+                    statCard(
+                        value: "\(stats.meets_attended)",
+                        label: "Meets Attended",
+                        icon: "checkmark.circle.fill"
+                    )
+                    
+                    // Tappable friends count
+                    Button(action: {
+                        if stats.friend_count > 0 {
+                            Task { await loadFriendsList() }
+                        }
+                    }) {
+                        statCard(
+                            value: "\(stats.friend_count)",
+                            label: "Friends",
+                            icon: "person.2.fill"
+                        )
+                    }
+                    .disabled(stats.friend_count == 0)
+                }
+            }
+        }
+        .padding(.top, 8)
+    }
+    
+    private func statCard(value: String, label: String, icon: String) -> some View
+    {
+        VStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 20))
+                .foregroundStyle(AppPalette.Brand.neonPink)
+            
+            Text(value)
+                .font(.system(size: 24, weight: .bold))
+                .foregroundStyle(AppPalette.Text.primary)
+            
+            Text(label)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(AppPalette.Text.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 16)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(AppPalette.Brand.japPurple))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(AppPalette.Brand.neonPink.opacity(0.2), lineWidth: 1)
+                )
+        )
+    }
+    
+    // MARK: - Bio Section
+    private var bioSection: some View
+    {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("About")
+                .font(.system(size: 20, weight: .bold))
+                .foregroundStyle(AppPalette.Text.primary)
+            
+            Text("Add a bio to tell others about yourself.")
+                .font(.system(size: 15))
+                .foregroundStyle(AppPalette.Text.secondary)
+                .italic()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, 8)
+    }
+    
+    // MARK: - Activity Section
+    private var activitySection: some View
+    {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Recent Activity")
+                .font(.system(size: 20, weight: .bold))
+                .foregroundStyle(AppPalette.Text.primary)
+            
+            Text("Your recent meets will appear here.")
+                .font(.system(size: 15))
+                .foregroundStyle(AppPalette.Text.secondary)
+                .italic()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, 8)
+    }
+    
+    // MARK: - Data Loading
+    private func loadMyProfile() async
+    {
+        isLoading = true
+        defer { isLoading = false }
+        
+        do {
+            // Load my profile info
+            let profile = try await AuthAPI.viewUserMe(baseURL: baseURL, token: token)
+            myProfile = profile
+            
+            // Load my stats
+            let stats = try await AuthAPI.viewUsersProfile(
+                baseURL: baseURL,
+                token: token,
+                userUUID: profile.user_uuid
+            )
+            profileStats = stats
+        } catch {
+            print("Failed to load my profile: \(error)")
+            errorMessage = "Failed to load profile data"
+        }
+    }
+    
+    private func loadFriendsList() async
+    {
+        do {
+            let friends = try await AuthAPI.getFriendsList(baseURL: baseURL, token: token)
+            presentedFriendsList = IdentifiableFriendsList(friends: friends)
+        } catch {
+            print("Failed to load friends: \(error)")
+            errorMessage = "Failed to load friends list"
+        }
+    }
+    
+    private func unfriend(_ friend: FriendItem) async
+    {
+        do {
+            let response = try await AuthAPI.unfriend(
+                baseURL: baseURL,
+                token: token,
+                userUUID: friend.user_uuid
+            )
+            
+            if response.success {
+                // Update the presented list
+                if let currentList = presentedFriendsList {
+                    let updated = currentList.friends.filter { $0.id != friend.id }
+                    presentedFriendsList = IdentifiableFriendsList(friends: updated)
+                }
+                await loadMyProfile()
+            } else {
+                errorMessage = response.message
+            }
+        } catch {
+            errorMessage = "Failed to remove friend: \(error.localizedDescription)"
+        }
+    }
+}
+
+// MARK: - Settings Placeholder
+
+struct SettingsPlaceholderView: View
+{
+    let onDismiss: () -> Void
+    
+    var body: some View
+    {
+        NavigationView {
+            ZStack {
+                AppPalette.Brand.formBlack
+                    .ignoresSafeArea()
+                
+                VStack(spacing: 20) {
+                    Image(systemName: "gear")
+                        .font(.system(size: 48, weight: .light))
+                        .foregroundStyle(AppPalette.Brand.neonPink.opacity(0.4))
+                    
+                    Text("Settings")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(AppPalette.Text.primary)
+                    
+                    Text("Settings coming soon")
+                        .font(.system(size: 16))
+                        .foregroundStyle(AppPalette.Text.secondary)
+                }
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        onDismiss()
+                    }
+                    .foregroundStyle(AppPalette.Brand.neonPink)
+                }
+            }
+        }
+    }
+}

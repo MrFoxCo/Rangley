@@ -16,7 +16,6 @@ public struct SearchView: View
     @State private var errorMessage: String?
     @State private var showError = false
     @State private var selectedUser: ViewUsersModel?
-    @State private var showUserOverlay = false
     @State private var showUserProfile = false
     
     // Dependencies
@@ -76,28 +75,17 @@ public struct SearchView: View
         } message: {
             Text(errorMessage ?? "An unknown error occurred")
         }
-        .overlay {
-            if let user = selectedUser, !showUserProfile {  // Only show overlay if NOT showing full profile
-                UserProfilePreviewOverlay(user: user) {
+        .sheet(item: $selectedUser) { user in
+            UserProfileView(
+                user: user,
+                baseURL: baseURL,
+                token: token,
+                onDismiss: {
                     selectedUser = nil
-                } onViewFullProfile: {
-                    showUserProfile = true
                 }
-            }
+            )
         }
-        .sheet(isPresented: $showUserProfile) {
-            if let user = selectedUser {
-                UserProfileView(
-                    user: user,
-                    baseURL: baseURL,
-                    token: token,
-                    onDismiss: {
-                        showUserProfile = false
-                        selectedUser = nil
-                    }
-                )
-            }
-        }
+
         .onChange(of: searchText) { _, newValue in
             performSearch(query: newValue)
         }
@@ -285,7 +273,6 @@ public struct SearchView: View
                         ForEach(searchResults.users) { user in
                             UserSearchResultCard(user: user) {
                                 selectedUser = user
-                                showUserOverlay = true
                             }
                         }
                     }
@@ -622,93 +609,3 @@ struct UserSearchResultCard: View
     }
 }
 
-// MARK: - User Profile Overlay
-
-private struct UserProfilePreviewOverlay: View
-{
-    let user: ViewUsersModel
-    let onDismiss: () -> Void
-    let onViewFullProfile: () -> Void  // Add this
-    
-    var body: some View {
-        ZStack {
-            Color.black.opacity(0.6)
-                .ignoresSafeArea()
-                .onTapGesture { onDismiss() }
-            
-            VStack(spacing: 24) {
-                HStack {
-                    Spacer()
-                    Button(action: onDismiss) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 28))
-                            .foregroundStyle(AppPalette.Text.secondary)
-                    }
-                }
-                
-                Circle()
-                    .fill(AppPalette.Brand.neonPink.opacity(0.2))
-                    .frame(width: 80, height: 80)
-                    .overlay(
-                        Text(user.display_name.prefix(1))
-                            .font(.system(size: 36, weight: .bold))
-                            .foregroundStyle(AppPalette.Brand.neonPink)
-                    )
-                
-                VStack(spacing: 8) {
-                    Text(user.display_name)
-                        .font(.system(size: 24, weight: .bold))
-                        .foregroundStyle(AppPalette.Text.primary)
-                    
-                    Text("@\(user.username)")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundStyle(AppPalette.Text.secondary)
-                }
-                
-                VStack(spacing: 12) {
-                    // NEW: View Profile button (enabled)
-                    Button(action: onViewFullProfile) {
-                        HStack {
-                            Image(systemName: "person.circle")
-                            Text("View Profile")
-                                .font(.system(size: 16, weight: .semibold))
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(AppPalette.Brand.neonPink)
-                        .foregroundStyle(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                    }
-                    
-                    // Keep disabled placeholder buttons
-                    actionButton(icon: "person.badge.plus", text: "Add Friend", outlined: true)
-                }
-            }
-            .padding(32)
-            .background(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(Color(AppPalette.Brand.japPurple))
-                    .shadow(color: .black.opacity(0.3), radius: 20, y: 10)
-            )
-            .padding(.horizontal, 40)
-        }
-    }
-    
-    private func actionButton(icon: String, text: String, outlined: Bool = false) -> some View {
-        HStack {
-            Image(systemName: icon)
-            Text(text)
-                .font(.system(size: 16, weight: .semibold))
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 14)
-        .background(outlined ? Color.clear : AppPalette.Brand.neonPink)
-        .foregroundStyle(outlined ? AppPalette.Brand.neonPink : .white)
-        .overlay(
-            outlined ? RoundedRectangle(cornerRadius: 12)
-                .stroke(AppPalette.Brand.neonPink.opacity(0.5), lineWidth: 1) : nil
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .opacity(0.6)
-    }
-}
