@@ -411,20 +411,23 @@ class UIStateStore: ObservableObject
     @Published var showContentViolation: ContentViolation?
     
     // Day/Night theme
-    @Published var isDaylight = true
-    @Published var showInbox = false
+    @Published var isDaylight          = true
+    @Published var showInbox           = false
+    @Published var showMessenger       = false
     private let dayNightTimer = Timer.publish(every: 300, on: .main, in: .common).autoconnect()
     
     init() {
         updateDaylightStatus()
     }
     
-    private func updateDaylightStatus() {
+    private func updateDaylightStatus()
+    {
         let hour = Calendar.current.component(.hour, from: Date())
         isDaylight = hour >= 6 && hour < 20
     }
     
-    func startDayNightTimer() {
+    func startDayNightTimer()
+    {
         dayNightTimer
             .sink { [weak self] _ in
                 self?.updateDaylightStatus()
@@ -434,7 +437,8 @@ class UIStateStore: ObservableObject
     
     private var cancellables = Set<AnyCancellable>()
     
-    private func checkTutorialDisplay() {
+    private func checkTutorialDisplay()
+    {
         if shouldShowTutorialWhenReady && canShowTutorial {
             shouldShowTutorialWhenReady = false
             startTutorial()
@@ -451,22 +455,26 @@ class UIStateStore: ObservableObject
     }
     
     // Tutorial state checks
-    var hasActiveOverlays: Bool {
+    var hasActiveOverlays: Bool
+    {
         showLocationPopup || showMeetOverlay || showCreateForm || showUpdateOverlay || showTutorial
     }
     
-    var canShowTutorial: Bool {
+    var canShowTutorial: Bool
+    {
         !showLocationPopup && !showMeetOverlay && !showCreateForm && !showUpdateOverlay
     }
     
     // Tutorial control methods
-    func dismissAllIncludingTutorial() {
+    func dismissAllIncludingTutorial()
+    {
         dismissAllOverlays()
         showTutorial = false
         tutorialStep = 0
     }
     
-    func startTutorial() {
+    func startTutorial()
+    {
         // CRITICAL FIX: Check if user has already seen tutorial
         guard !UserDefaults.standard.bool(forKey: "hasSeenTutorial") else { return }
         guard canShowTutorial else {
@@ -478,7 +486,8 @@ class UIStateStore: ObservableObject
         showTutorial = true
     }
     
-    func nextTutorialStep() {
+    func nextTutorialStep()
+    {
         let maxSteps = TutorialConfig.steps.count - 1
         if tutorialStep < maxSteps {
             tutorialStep += 1
@@ -487,7 +496,8 @@ class UIStateStore: ObservableObject
         }
     }
     
-    func completeTutorial() {
+    func completeTutorial()
+    {
         UserDefaults.standard.set(true, forKey: "hasSeenTutorial")
         showTutorial = false
         tutorialStep = 0
@@ -600,34 +610,42 @@ public struct PublicMapView: View
     @ViewBuilder
     private var content: some View
     {
-        ZStack {
-
-            MapView(
-                mapData: mapData,
-                locationData: locationData,
-                uiState: uiState,
-                meetNS: meetNS,
-                onMapTap: handleMapTap
+        HStack(spacing: 0) {
+            // Left sidebar - ALWAYS VISIBLE
+            FriendGroupBarContainer(
+                baseURL: Env.apiBaseURL,
+                token: authState.currentToken
             )
+            
+            // Main map view
+            ZStack {
+                MapView(
+                    mapData: mapData,
+                    locationData: locationData,
+                    uiState: uiState,
+                    meetNS: meetNS,
+                    onMapTap: handleMapTap
+                )
 
-            OverlaysView(
-                mapData: mapData,
-                locationData: locationData,
-                uiState: uiState,
-                authState: authState,
-                tutorialStore: tutorialStore,
-                meetNS: meetNS,
-                authToken: authState.currentToken,
-                meetCreationMode: $meetCreationMode
-            )
+                OverlaysView(
+                    mapData: mapData,
+                    locationData: locationData,
+                    uiState: uiState,
+                    authState: authState,
+                    tutorialStore: tutorialStore,
+                    meetNS: meetNS,
+                    authToken: authState.currentToken,
+                    meetCreationMode: $meetCreationMode
+                )
 
-            ControlsView(
-                mapData: mapData,
-                locationData: locationData,
-                uiState: uiState,
-                authState: authState,
-                meetCreationMode: $meetCreationMode
-            )
+                ControlsView(
+                    mapData: mapData,
+                    locationData: locationData,
+                    uiState: uiState,
+                    authState: authState,
+                    meetCreationMode: $meetCreationMode
+                )
+            }
         }
         .environment(\.colorScheme, uiState.isDaylight ? .light : .dark)
         .task {
@@ -860,6 +878,13 @@ struct OverlaysView: View
         .sheet(isPresented: $uiState.showInbox) {
             UserInboxView(onDismiss: { uiState.showInbox = false })
         }
+        .sheet(isPresented: $uiState.showMessenger) {
+            MessengerView(
+                baseURL: Env.apiBaseURL,
+                token: authState.currentToken,
+                onDismiss: { uiState.showMessenger = false }
+            )
+        }
     }
     
     private func seedForCreate() -> LocationInfo?
@@ -923,7 +948,8 @@ struct OverlaysView: View
     }
 }
 
-
+// TODO: --- THE FRIENDS GROUP BAR IS GONNA BE A FACTOR HERE SOMEHOW... ON THE LEFT VERTICAL
+// PART OF THE FUCKING SCREEN ^^^
 // MARK: - Controls View Component (Instagram-style layout)
 struct ControlsView: View
 {
@@ -969,12 +995,11 @@ struct ControlsView: View
                         Spacer()
                     }
                     
-                    // Inbox button - overlaid on top right
-                    Button(action: {
-                        uiState.showInbox = true
-                    }) {
-                        ZStack(alignment: .topTrailing) {
-                            Image(systemName: "tray")
+                    HStack(spacing: 12) {
+                        Button(action: {
+                            uiState.showMessenger = true
+                        }) {
+                            Image(systemName: "message")
                                 .font(.system(size: 18, weight: .medium))
                                 .foregroundColor(AppPalette.Brand.neonPink)
                                 .frame(width: 44, height: 44)
@@ -983,20 +1008,39 @@ struct ControlsView: View
                                         .fill(AppPalette.Brand.japPurple)
                                 )
                                 .shadow(radius: 2)
-                            
-                            // Unread badge
-                            if inbox.unreadCount > 0 {
-                                Text("\(inbox.unreadCount)")
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundColor(.white)
-                                    .padding(4)
-                                    .background(Circle().fill(Color.red))
-                                    .offset(x: 6, y: -6)
+                        }
+                        .frame(width: 44, height: 44)
+                        
+                        Button(action: {
+                            uiState.showInbox = true
+                        }) {
+                            ZStack(alignment: .topTrailing) {
+                                Image(systemName: "tray")
+                                    .font(.system(size: 18, weight: .medium))
+                                    .foregroundColor(AppPalette.Brand.neonPink)
+                                    .frame(width: 44, height: 44)
+                                    .background(
+                                        Circle()
+                                            .fill(AppPalette.Brand.japPurple)
+                                    )
+                                    .shadow(radius: 2)
+                                
+                                if inbox.unreadCount > 0 {
+                                    Text("\(inbox.unreadCount)")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundColor(.white)
+                                        .padding(4)
+                                        .background(Circle().fill(Color.red))
+                                        .offset(x: 6, y: -6)
+                                }
                             }
                         }
+                        .frame(width: 44, height: 44)
                     }
-                    .frame(width: 44, height: 44)
                     .padding(.trailing, 20)
+                    
+                    
+                    
                 }
                 .padding(.top, 16)
                     

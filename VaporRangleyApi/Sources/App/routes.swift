@@ -385,11 +385,7 @@ public func routes(_ app: Application) throws
 
             return try await Proc.InsertUserByAuthRegister.call(on: sql, p, .init(is_success: nil))
     }
-    
-//    auth.post("forgot-password")
-//    {
-//
-//    }
+
 //
 //    auth.post("forgot-email")
 //    {

@@ -31,7 +31,7 @@ BEGIN
     RETURN QUERY
     SELECT 
         fg.friend_group_id,
-        fg.name,
+        fg.name::text,
         COALESCE(COUNT(fgm.user_id), 0) AS member_count,
         fg.dttm_created_utc,
         fg.dttm_modified_utc
