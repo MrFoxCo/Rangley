@@ -1,10 +1,11 @@
 -- ============================================
--- CREATE MEET GROUP
+-- CREATE MEET GROUP (UPDATED)
 -- ============================================
 CREATE OR REPLACE FUNCTION rangley.rgl_fn_i_meet_group
 (
     p_cognito_sub TEXT,
-    p_group_name TEXT
+    p_group_name TEXT,
+    p_image_reference TEXT DEFAULT 'person.3.fill'
 )
 RETURNS TABLE
 (
@@ -50,8 +51,8 @@ BEGIN
     END IF;
 
     -- Create the group
-    INSERT INTO rangley.tb_meet_groups (created_by_user_id, name)
-    VALUES (v_user_id, trim(p_group_name))
+    INSERT INTO rangley.tb_meet_groups (created_by_user_id, name, image_type, image_reference)
+    VALUES (v_user_id, trim(p_group_name), 'stock', p_image_reference)
     RETURNING rangley.tb_meet_groups.meet_group_id INTO v_meet_group_id;
 
     RETURN QUERY SELECT TRUE, 'Meet group created successfully'::TEXT, v_meet_group_id;
@@ -61,6 +62,7 @@ EXCEPTION
         RETURN QUERY SELECT FALSE, ('Error: ' || SQLERRM)::TEXT, NULL::INT8;
 END;
 $$;
+
 
 /*
 

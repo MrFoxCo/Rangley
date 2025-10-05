@@ -410,27 +410,29 @@ enum HTTPDTO
         
     }
     
-    enum FriendGroups
+    enum MeetGroups
     {
-        struct CreateGroupBody: Content, Sendable
+        struct InsertGroupBody: Content, Sendable
         {
             let group_name: String
+            let image_reference: String?  // Optional, defaults to 'person.3.fill' in PostgreSQL
         }
         
-        struct CreateGroupResponse: Content, Sendable
+        struct InsertGroupResponse: Content, Sendable
         {
             let success: Bool
             let message: String
-            let friend_group_id: Int64?
+            let meet_group_id: Int64?
         }
         
-        struct AddFriendsBody: Content, Sendable
+        // NEW DTO: For adding members directly (not inviting)
+        struct InsertMembersBody: Content, Sendable
         {
-            let friend_group_id: Int64
-            let friend_uuids: [UUID]
+            let meet_group_id: Int64
+            let user_uuids: [UUID]
         }
         
-        struct AddFriendsResponse: Content, Sendable
+        struct InsertMembersResponse: Content, Sendable
         {
             let success: Bool
             let message: String
@@ -438,13 +440,39 @@ enum HTTPDTO
             let skipped_count: Int32
         }
         
-        struct RemoveFriendsBody: Content, Sendable
+        struct InviteMembersBody: Content, Sendable
         {
-            let friend_group_id: Int64
-            let friend_uuids: [UUID]
+            let meet_group_id: Int64
+            let user_uuids: [UUID]
         }
         
-        struct RemoveFriendsResponse: Content, Sendable
+        struct InviteMembersResponse: Content, Sendable
+        {
+            let success: Bool
+            let message: String
+            let invited_count: Int32
+            let skipped_count: Int32
+        }
+        
+        struct RespondInvitationBody: Content, Sendable
+        {
+            let invitation_id: Int64
+            let accept: Bool
+        }
+        
+        struct RespondInvitationResponse: Content, Sendable
+        {
+            let success: Bool
+            let message: String
+        }
+        
+        struct RemoveMembersBody: Content, Sendable
+        {
+            let meet_group_id: Int64
+            let user_uuids: [UUID]
+        }
+        
+        struct RemoveMembersResponse: Content, Sendable
         {
             let success: Bool
             let message: String
@@ -453,7 +481,7 @@ enum HTTPDTO
         
         struct DeleteGroupBody: Content, Sendable
         {
-            let friend_group_id: Int64
+            let meet_group_id: Int64
         }
         
         struct DeleteGroupResponse: Content, Sendable
@@ -462,10 +490,13 @@ enum HTTPDTO
             let message: String
         }
         
-        struct FriendGroup: Content, Sendable
+        struct MeetGroup: Content, Sendable
         {
-            let friend_group_id: Int64
+            let meet_group_id: Int64
             let name: String
+            let image_type: String
+            let image_reference: String
+            let image_url: String?
             let member_count: Int64
             let dttm_created_utc: Date
             let dttm_modified_utc: Date?
@@ -479,9 +510,21 @@ enum HTTPDTO
             let dttm_added_utc: Date
         }
         
-        struct GetMembersBody: Content, Sendable
+        struct ViewMembersBody: Content, Sendable
         {
-            let friend_group_id: Int64
+            let meet_group_id: Int64
+        }
+        
+        struct ModifyImageBody: Content, Sendable
+        {
+            let meet_group_id: Int64
+            let image_reference: String
+        }
+        
+        struct ModifyImageResponse: Content, Sendable
+        {
+            let success: Bool
+            let message: String
         }
     }
     

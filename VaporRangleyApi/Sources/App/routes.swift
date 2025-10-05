@@ -321,9 +321,10 @@ public func routes(_ app: Application) throws
         })
     }
     
-    v.get("friend-groups", "list")
+    // List user's meet groups
+    v.get("meet-groups", "list")
     {
-        req async throws -> [HTTPDTO.FriendGroups.FriendGroup] in
+        req async throws -> [HTTPDTO.MeetGroups.MeetGroup] in
         
         let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
@@ -332,14 +333,17 @@ public func routes(_ app: Application) throws
         else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
         
         do {
-            let results = try await Func.SystemViewFriendGroups.fetchAll(on: sql, .init(
+            let results = try await Func.SystemViewMeetGroups.fetchAll(on: sql, .init(
                 cognito_sub: sub
             ))
             
             return results.map { result in
-                HTTPDTO.FriendGroups.FriendGroup(
-                    friend_group_id: result.friend_group_id,
+                HTTPDTO.MeetGroups.MeetGroup(
+                    meet_group_id: result.meet_group_id,
                     name: result.name,
+                    image_type: result.image_type,
+                    image_reference: result.image_reference,
+                    image_url: result.image_url,
                     member_count: result.member_count,
                     dttm_created_utc: result.dttm_created_utc,
                     dttm_modified_utc: result.dttm_modified_utc
@@ -347,8 +351,44 @@ public func routes(_ app: Application) throws
             }
             
         } catch let error as PSQLError {
-            req.logger.error("Database error listing friend groups: \(error)")
-            throw Abort(.internalServerError, reason: "Failed to list friend groups")
+            req.logger.error("Database error listing meet groups: \(error)")
+            throw Abort(.internalServerError, reason: "Failed to list meet groups")
+        }
+    }
+    
+    // Get group members
+    v.get("meet-groups", ":meetGroupID", "members")
+    {
+        req async throws -> [HTTPDTO.MeetGroups.GroupMember] in
+        
+        let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
+        
+        guard let meetGroupID = req.parameters.get("meetGroupID", as: Int64.self) else {
+            throw Abort(.badRequest, reason: "Invalid meet group ID")
+        }
+        
+        guard let sql = req.db as? any SQLDatabase
+        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+        
+        do {
+            let results = try await Func.SystemViewMeetGroupMembers.fetchAll(on: sql, .init(
+                cognito_sub: sub,
+                meet_group_id: meetGroupID
+            ))
+            
+            return results.map { result in
+                HTTPDTO.MeetGroups.GroupMember(
+                    user_uuid: result.user_uuid,
+                    username: result.username,
+                    display_name: result.display_name,
+                    dttm_added_utc: result.dttm_added_utc
+                )
+            }
+            
+        } catch let error as PSQLError {
+            req.logger.error("Database error getting group members: \(error)")
+            throw Abort(.internalServerError, reason: "Failed to get group members")
         }
     }
 
@@ -1181,54 +1221,217 @@ public func routes(_ app: Application) throws
     // MARK: - Friend GRoup Stuff
     // =========================================================
     // Create friend group
-    s.post("friend-groups", "create")
+    // =========================================================
+    // MARK: - Meet Group Routes
+    // =========================================================
+
+    // Create meet group
+    s.post("meet-groups", "insert")
     {
-        req async throws -> HTTPDTO.FriendGroups.CreateGroupResponse in
+        req async throws -> HTTPDTO.MeetGroups.InsertGroupResponse in
         
         let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
         
-        let body = try req.content.decode(HTTPDTO.FriendGroups.CreateGroupBody.self)
+        let body = try req.content.decode(HTTPDTO.MeetGroups.InsertGroupBody.self)
         
         guard let sql = req.db as? any SQLDatabase
         else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
         
         do {
-            let result = try await Func.SystemCreateFriendGroup.call(on: sql, .init(
+            let result = try await Func.SystemInsertMeetGroup.call(on: sql, .init(
                 cognito_sub: sub,
-                group_name: body.group_name
+                group_name: body.group_name,
+                image_reference: body.image_reference ?? "person.3.fill"
             ))
             
             return .init(
                 success: result.success,
                 message: result.message,
-                friend_group_id: result.friend_group_id
+                meet_group_id: result.meet_group_id
             )
             
         } catch let error as PSQLError {
-            req.logger.error("Database error creating friend group: \(error)")
-            throw Abort(.internalServerError, reason: "Failed to create friend group")
+            req.logger.error("Database error creating meet group: \(error)")
+            throw Abort(.internalServerError, reason: "Failed to create meet group")
         }
     }
 
-    // Add friends to group
-    s.post("friend-groups", "add-members")
+    // Invite members to group
+    s.post("meet-groups", "invite")
     {
-        req async throws -> HTTPDTO.FriendGroups.AddFriendsResponse in
+        req async throws -> HTTPDTO.MeetGroups.InviteMembersResponse in
         
         let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
         
-        let body = try req.content.decode(HTTPDTO.FriendGroups.AddFriendsBody.self)
+        let body = try req.content.decode(HTTPDTO.MeetGroups.InviteMembersBody.self)
         
         guard let sql = req.db as? any SQLDatabase
         else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
         
         do {
-            let result = try await Func.SystemAddFriendsToGroup.call(on: sql, .init(
+            let result = try await Func.SystemInviteToMeetGroup.call(on: sql, .init(
                 cognito_sub: sub,
-                friend_group_id: body.friend_group_id,
-                friend_uuids: body.friend_uuids
+                meet_group_id: body.meet_group_id,
+                user_uuids: body.user_uuids
+            ))
+            
+            return .init(
+                success: result.success,
+                message: result.message,
+                invited_count: result.invited_count,
+                skipped_count: result.skipped_count
+            )
+            
+        } catch let error as PSQLError {
+            req.logger.error("Database error inviting to meet group: \(error)")
+            throw Abort(.internalServerError, reason: "Failed to invite members")
+        }
+    }
+
+    // Respond to invitation
+    s.post("meet-groups", "respond")
+    {
+        req async throws -> HTTPDTO.MeetGroups.RespondInvitationResponse in
+        
+        let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
+        
+        let body = try req.content.decode(HTTPDTO.MeetGroups.RespondInvitationBody.self)
+        
+        guard let sql = req.db as? any SQLDatabase
+        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+        
+        do {
+            let result = try await Func.SystemRespondMeetGroupInvitation.call(on: sql, .init(
+                cognito_sub: sub,
+                invitation_id: body.invitation_id,
+                accept: body.accept
+            ))
+            
+            return .init(
+                success: result.success,
+                message: result.message
+            )
+            
+        } catch let error as PSQLError {
+            req.logger.error("Database error responding to invitation: \(error)")
+            throw Abort(.internalServerError, reason: "Failed to respond to invitation")
+        }
+    }
+
+    // Remove members from group
+    s.post("meet-groups", "delete-members")
+    {
+        req async throws -> HTTPDTO.MeetGroups.RemoveMembersResponse in
+        
+        let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
+        
+        let body = try req.content.decode(HTTPDTO.MeetGroups.RemoveMembersBody.self)
+        
+        guard let sql = req.db as? any SQLDatabase
+        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+        
+        do {
+            let result = try await Func.SystemDeleteMembersFromMeetGroup.call(on: sql, .init(
+                cognito_sub: sub,
+                meet_group_id: body.meet_group_id,
+                user_uuids: body.user_uuids
+            ))
+            
+            return .init(
+                success: result.success,
+                message: result.message,
+                removed_count: result.removed_count
+            )
+            
+        } catch let error as PSQLError {
+            req.logger.error("Database error removing members from group: \(error)")
+            throw Abort(.internalServerError, reason: "Failed to remove members")
+        }
+    }
+
+    // Delete meet group
+    s.post("meet-groups", "delete")
+    {
+        req async throws -> HTTPDTO.MeetGroups.DeleteGroupResponse in
+        
+        let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
+        
+        let body = try req.content.decode(HTTPDTO.MeetGroups.DeleteGroupBody.self)
+        
+        guard let sql = req.db as? any SQLDatabase
+        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+        
+        do {
+            let result = try await Func.SystemDeleteMeetGroup.call(on: sql, .init(
+                cognito_sub: sub,
+                meet_group_id: body.meet_group_id
+            ))
+            
+            return .init(
+                success: result.success,
+                message: result.message
+            )
+            
+        } catch let error as PSQLError {
+            req.logger.error("Database error deleting meet group: \(error)")
+            throw Abort(.internalServerError, reason: "Failed to delete meet group")
+        }
+    }
+
+    // Update group image
+    s.post("meet-groups", "modify-image")
+    {
+        req async throws -> HTTPDTO.MeetGroups.ModifyImageResponse in
+        
+        let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
+        
+        let body = try req.content.decode(HTTPDTO.MeetGroups.ModifyImageBody.self)
+        
+        guard let sql = req.db as? any SQLDatabase
+        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+        
+        do {
+            let result = try await Func.SystemModifyMeetGroupImage.call(on: sql, .init(
+                cognito_sub: sub,
+                meet_group_id: body.meet_group_id,
+                image_reference: body.image_reference
+            ))
+            
+            return .init(
+                success: result.success,
+                message: result.message
+            )
+            
+        } catch let error as PSQLError {
+            req.logger.error("Database error updating group image: \(error)")
+            throw Abort(.internalServerError, reason: "Failed to update group image")
+        }
+    }
+    
+    
+    s.post("meet-groups", "insert-members")
+    {
+        req async throws -> HTTPDTO.MeetGroups.InsertMembersResponse in
+        
+        let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
+        
+        let body = try req.content.decode(HTTPDTO.MeetGroups.InsertMembersBody.self)
+        
+        guard let sql = req.db as? any SQLDatabase
+        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+        
+        do {
+            let result = try await Func.SystemInsertMembersToMeetGroup.call(on: sql, .init(
+                cognito_sub: sub,
+                meet_group_id: body.meet_group_id,
+                user_uuids: body.user_uuids
             ))
             
             return .init(
@@ -1239,110 +1442,12 @@ public func routes(_ app: Application) throws
             )
             
         } catch let error as PSQLError {
-            req.logger.error("Database error adding friends to group: \(error)")
-            throw Abort(.internalServerError, reason: "Failed to add friends to group")
+            req.logger.error("Database error adding members to meet group: \(error)")
+            throw Abort(.internalServerError, reason: "Failed to add members")
         }
     }
+    
 
-    // Remove friends from group
-    s.post("friend-groups", "remove-members")
-    {
-        req async throws -> HTTPDTO.FriendGroups.RemoveFriendsResponse in
-        
-        let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
-        
-        let body = try req.content.decode(HTTPDTO.FriendGroups.RemoveFriendsBody.self)
-        
-        guard let sql = req.db as? any SQLDatabase
-        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
-        
-        do {
-            let result = try await Func.SystemDeleteFriendsFromGroup.call(on: sql, .init(
-                cognito_sub: sub,
-                friend_group_id: body.friend_group_id,
-                friend_uuids: body.friend_uuids
-            ))
-            
-            return .init(
-                success: result.success,
-                message: result.message,
-                removed_count: result.removed_count
-            )
-            
-        } catch let error as PSQLError {
-            req.logger.error("Database error removing friends from group: \(error)")
-            throw Abort(.internalServerError, reason: "Failed to remove friends from group")
-        }
-    }
-
-    // Delete friend group
-    s.post("friend-groups", "delete")
-    {
-        req async throws -> HTTPDTO.FriendGroups.DeleteGroupResponse in
-        
-        let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
-        
-        let body = try req.content.decode(HTTPDTO.FriendGroups.DeleteGroupBody.self)
-        
-        guard let sql = req.db as? any SQLDatabase
-        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
-        
-        do {
-            let result = try await Func.SystemDeleteFriendGroup.call(on: sql, .init(
-                cognito_sub: sub,
-                friend_group_id: body.friend_group_id
-            ))
-            
-            return .init(
-                success: result.success,
-                message: result.message
-            )
-            
-        } catch let error as PSQLError {
-            req.logger.error("Database error deleting friend group: \(error)")
-            throw Abort(.internalServerError, reason: "Failed to delete friend group")
-        }
-    }
-
-    // Get friend group members
-    // List user's friend groups
-
-
-    // Get friend group members
-    s.post("friend-groups", "members")
-    {
-        req async throws -> [HTTPDTO.FriendGroups.GroupMember] in
-        
-        let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
-        
-        let body = try req.content.decode(HTTPDTO.FriendGroups.GetMembersBody.self)
-        
-        guard let sql = req.db as? any SQLDatabase
-        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
-        
-        do {
-            let results = try await Func.SystemViewFriendGroupMembers.fetchAll(on: sql, .init(
-                cognito_sub: sub,
-                friend_group_id: body.friend_group_id
-            ))
-            
-            return results.map { result in
-                HTTPDTO.FriendGroups.GroupMember(
-                    user_uuid: result.user_uuid,
-                    username: result.username,
-                    display_name: result.display_name,
-                    dttm_added_utc: result.dttm_added_utc
-                )
-            }
-            
-        } catch let error as PSQLError {
-            req.logger.error("Database error getting group members: \(error)")
-            throw Abort(.internalServerError, reason: "Failed to get group members")
-        }
-    }
     // =========================================================
     // MARK: - END Friend GRoup Stuff
     // =========================================================

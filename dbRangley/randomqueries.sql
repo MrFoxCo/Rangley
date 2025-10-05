@@ -19,8 +19,6 @@ select * from rangley.vw_notifications;`
 
 select * from rangley.vw_friend_requests;
 
-select * FROM rangley.vw_friend_requests
-
 select * FROM rangley.vw_friend_request_status;
 
 select * FROM rangley.vw_meet_group_members;

@@ -90,7 +90,20 @@ INSERT INTO rangley.td_notification_type (notification_type_id, name) VALUES (11
 INSERT INTO rangley.td_notification_type (notification_type_id, name) VALUES (12, 'Meet Full');
 INSERT INTO rangley.td_notification_type (notification_type_id, name) VALUES (13, 'Meet Role Changed');
 INSERT INTO rangley.td_notification_type (notification_type_id, name) VALUES (14, 'Meet Location Changed');
+INSERT INTO rangley.td_notification_type (notification_type_id, name) VALUES
+(15, 'Friend Request Received'),
+(16, 'Friend Request Accepted'),
+(17, 'Friend Request Declined')
+ON CONFLICT (notification_type_id) DO NOTHING;
+INSERT INTO rangley.td_notification_type (notification_type_id, name) VALUES (18, 'Meet Deleted');
+INSERT INTO rangley.td_notification_type (notification_type_id, name, created_by)
+VALUES (19, 'Meet Group Invitation Received', 'system');
 
+INSERT INTO rangley.td_notification_type (notification_type_id, name, created_by)
+VALUES (20, 'Meet Group Invitation Accepted', 'system');
+
+INSERT INTO rangley.td_notification_type (notification_type_id, name, created_by)
+VALUES (21, 'Meet Group Invitation Declined', 'system');
 
 select * from  rangley.td_violation_categories;
 
@@ -126,3 +139,37 @@ INSERT INTO rangley.td_violation_categories (violation_category_id, name, descri
 
 
 select * from rangley.td_meet_category;
+
+
+INSERT INTO rangley.td_friend_request_status (friend_request_status_id, name) VALUES
+(1, 'Pending'),
+(2, 'Accepted'),
+(3, 'Declined'),
+(4, 'Blocked'),
+(5, 'Cancelled');
+
+
+
+INSERT INTO rangley.td_stock_assets (asset_id, asset_name, asset_category, display_name, file_extension, sort_order) VALUES
+(1, 'person.3.fill', 'meet_group', 'Default', 'symbol', 0),
+(2, 'basketball.fill', 'meet_group', 'Basketball', 'symbol', 1),
+(3, 'football.fill', 'meet_group', 'Football', 'symbol', 2),
+(4, 'fork.knife', 'meet_group', 'Dining', 'symbol', 3),
+(5, 'book.fill', 'meet_group', 'Study', 'symbol', 4),
+(6, 'figure.run', 'meet_group', 'Fitness', 'symbol', 5),
+(7, 'gamecontroller.fill', 'meet_group', 'Gaming', 'symbol', 6),
+(8, 'music.note', 'meet_group', 'Music', 'symbol', 7),
+(9, 'airplane', 'meet_group', 'Travel', 'symbol', 8),
+(10, 'cup.and.saucer.fill', 'meet_group', 'Coffee', 'symbol', 9),
+(11, 'film.fill', 'meet_group', 'Movies', 'symbol', 10),
+(12, 'paintbrush.fill', 'meet_group', 'Art', 'symbol', 11),
+(13, 'leaf.fill', 'meet_group', 'Outdoors', 'symbol', 12),
+(14, 'brain.head.profile', 'meet_group', 'Mental Health', 'symbol', 13),
+(15, 'heart.fill', 'meet_group', 'Social', 'symbol', 14);
+(16, 'wineglass.fill', 'meet_group', 'Drinks', 'symbol', 15),
+(17, 'tennis.racket', 'meet_group', 'Tennis', 'symbol', 16);
+
+
+
+
+
