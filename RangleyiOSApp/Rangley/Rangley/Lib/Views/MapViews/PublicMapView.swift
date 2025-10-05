@@ -193,6 +193,34 @@ class MapDataStore: ObservableObject
     }
 }
 
+@MainActor
+class FriendGroupsStore: ObservableObject
+{
+    @Published var groups: [FriendGroup] = []
+    @Published var selectedGroup: FriendGroup?
+    @Published var isLoading = false
+    
+    private let baseURL: URL
+    
+    init(baseURL: URL) {
+        self.baseURL = baseURL
+    }
+    
+    func loadGroups(token: String) async {
+        isLoading = true
+        defer { isLoading = false }
+        
+        do {
+            let fetchedGroups = try await AuthAPI.viewFriendGroups(
+                baseURL: baseURL,
+                token: token
+            )
+            groups = fetchedGroups
+        } catch {
+            print("Failed to load friend groups: \(error)")
+        }
+    }
+}
 
 
 
@@ -414,6 +442,11 @@ class UIStateStore: ObservableObject
     @Published var isDaylight          = true
     @Published var showInbox           = false
     @Published var showMessenger       = false
+    
+    @Published var friendGroups: [FriendGroup] = []
+    @Published var selectedFriendGroup: FriendGroup?
+    @Published var isLoadingFriendGroups = false
+    
     private let dayNightTimer = Timer.publish(every: 300, on: .main, in: .common).autoconnect()
     
     init() {
@@ -503,6 +536,17 @@ class UIStateStore: ObservableObject
         tutorialStep = 0
         shouldShowTutorialWhenReady = false // Clear the flag
     }
+    
+    func loadFriendGroups(baseURL: URL, token: String) async {
+        isLoadingFriendGroups = true
+        defer { isLoadingFriendGroups = false }
+        
+        do {
+            friendGroups = try await AuthAPI.viewFriendGroups(baseURL: baseURL, token: token)
+        } catch {
+            print("Failed to load friend groups: \(error)")
+        }
+    }
 }
 
 
@@ -564,24 +608,23 @@ public struct PublicMapView: View
     @Environment(\.scenePhase) private var scenePhase
     
     @StateObject private var locationData   = LocationDataStore()
-
-
     @StateObject private var mapData        = MapDataStore()
     @StateObject private var uiState        = UIStateStore()
-    @StateObject private var inbox = InboxStore(baseURL: Env.apiBaseURL)
+    @StateObject private var inbox          = InboxStore(baseURL: Env.apiBaseURL)
+    @StateObject private var friendGroupsStore = FriendGroupsStore(baseURL: Env.apiBaseURL)
     
     @Namespace private var meetNS
     @State private var tapTask: Task<Void, Never>?
     @State private var meetCreationMode: MeetCreationEntryMode?
     
     @StateObject private var tutorialStore = TutorialStore()
-
-
+    
+    
     public var body: some View
     {
         content
             .environmentObject(inbox)
-
+        
             .onChange(of: scenePhase) { oldPhase, phase in
                 guard phase == .active else { return }
                 Task {
@@ -589,63 +632,55 @@ public struct PublicMapView: View
                     await inbox.refresh()
                 }
             }
-
+        
             .onChange(of: authState.isAuthenticated) { _, signedIn in
                 if !signedIn {
                     Task { await inbox.setToken(nil) }
                 }
             }
-            // TODO: - bad was screwing up account creation
-//            .onReceive(NotificationCenter.default.publisher(for: .init("amplify.auth.signedIn"))) { _ in
-//                authState.checkAuthenticationStatus()
-//            }
-//            .onReceive(NotificationCenter.default.publisher(for: .init("amplify.auth.signedOut"))) { _ in
-//                authState.checkAuthenticationStatus()
-//            }
+        // TODO: - bad was screwing up account creation
+        //            .onReceive(NotificationCenter.default.publisher(for: .init("amplify.auth.signedIn"))) { _ in
+        //                authState.checkAuthenticationStatus()
+        //            }
+        //            .onReceive(NotificationCenter.default.publisher(for: .init("amplify.auth.signedOut"))) { _ in
+        //                authState.checkAuthenticationStatus()
+        //            }
         
         
     }
-
+    
     
     @ViewBuilder
     private var content: some View
     {
-        HStack(spacing: 0) {
-            // Left sidebar - ALWAYS VISIBLE
-            FriendGroupBarContainer(
-                baseURL: Env.apiBaseURL,
-                token: authState.currentToken
+            // Main map view
+        ZStack {
+            MapView(
+                mapData: mapData,
+                locationData: locationData,
+                uiState: uiState,
+                meetNS: meetNS,
+                onMapTap: handleMapTap
             )
             
-            // Main map view
-            ZStack {
-                MapView(
-                    mapData: mapData,
-                    locationData: locationData,
-                    uiState: uiState,
-                    meetNS: meetNS,
-                    onMapTap: handleMapTap
-                )
-
-                OverlaysView(
-                    mapData: mapData,
-                    locationData: locationData,
-                    uiState: uiState,
-                    authState: authState,
-                    tutorialStore: tutorialStore,
-                    meetNS: meetNS,
-                    authToken: authState.currentToken,
-                    meetCreationMode: $meetCreationMode
-                )
-
-                ControlsView(
-                    mapData: mapData,
-                    locationData: locationData,
-                    uiState: uiState,
-                    authState: authState,
-                    meetCreationMode: $meetCreationMode
-                )
-            }
+            OverlaysView(
+                mapData: mapData,
+                locationData: locationData,
+                uiState: uiState,
+                authState: authState,
+                tutorialStore: tutorialStore,
+                meetNS: meetNS,
+                authToken: authState.currentToken,
+                meetCreationMode: $meetCreationMode
+            )
+            
+            ControlsView(
+                mapData: mapData,
+                locationData: locationData,
+                uiState: uiState,
+                authState: authState,
+                meetCreationMode: $meetCreationMode
+            )
         }
         .environment(\.colorScheme, uiState.isDaylight ? .light : .dark)
         .task {
@@ -660,6 +695,7 @@ public struct PublicMapView: View
                 await mapData.loadMeets()
             }
             await mapData.loadMeets()
+            await uiState.loadFriendGroups(baseURL: Env.apiBaseURL, token: authState.currentToken)
             uiState.startDayNightTimer()
         }
         .task(id: authState.currentToken) {
@@ -684,7 +720,8 @@ public struct PublicMapView: View
                 uiState.showLocationPopup = true
             }
         }
-    }}
+    }
+}
 
 
 // MARK: - Map View Component
@@ -974,48 +1011,35 @@ struct ControlsView: View
     
     var body: some View
     {
-        VStack {
-            if !shouldHideDock {
-                // TOP BAR: Centered badge with inbox on right
-                ZStack(alignment: .topTrailing) {
-                    // Centered badge - truly centered
-                    HStack {
-                        Spacer()
-                        NearbyMeetsBadgeView(
-                            meets: mapData.meets,
-                            userLocation: locationData.userLocation?.coordinate ?? CLLocationCoordinate2D(latitude: 41.9211, longitude: -87.6338),
-                            selectedRadius: $selectedRadius,
-                            onExpandedChange: { isExpanded in
-                                isBadgeExpanded = isExpanded
-                            },
-                            onRadiusSelectorChange: { showSelector in
-                                showBadgeRadiusSelector = showSelector
-                            }
-                        )
-                        Spacer()
-                    }
-                    
-                    HStack(spacing: 12) {
-                        Button(action: {
-                            uiState.showMessenger = true
-                        }) {
-                            Image(systemName: "message")
-                                .font(.system(size: 18, weight: .medium))
-                                .foregroundColor(AppPalette.Brand.neonPink)
-                                .frame(width: 44, height: 44)
-                                .background(
-                                    Circle()
-                                        .fill(AppPalette.Brand.japPurple)
-                                )
-                                .shadow(radius: 2)
+        ZStack(alignment: .leading)
+        {  // Add ZStack wrapper
+            VStack
+            {
+                if !shouldHideDock {
+                    // TOP BAR: Centered badge with inbox on right
+                    ZStack(alignment: .topTrailing) {
+                        // Centered badge - truly centered
+                        HStack {
+                            Spacer()
+                            NearbyMeetsBadgeView(
+                                meets: mapData.meets,
+                                userLocation: locationData.userLocation?.coordinate ?? CLLocationCoordinate2D(latitude: 41.9211, longitude: -87.6338),
+                                selectedRadius: $selectedRadius,
+                                onExpandedChange: { isExpanded in
+                                    isBadgeExpanded = isExpanded
+                                },
+                                onRadiusSelectorChange: { showSelector in
+                                    showBadgeRadiusSelector = showSelector
+                                }
+                            )
+                            Spacer()
                         }
-                        .frame(width: 44, height: 44)
                         
-                        Button(action: {
-                            uiState.showInbox = true
-                        }) {
-                            ZStack(alignment: .topTrailing) {
-                                Image(systemName: "tray")
+                        HStack(spacing: 12) {
+                            Button(action: {
+                                uiState.showMessenger = true
+                            }) {
+                                Image(systemName: "message")
                                     .font(.system(size: 18, weight: .medium))
                                     .foregroundColor(AppPalette.Brand.neonPink)
                                     .frame(width: 44, height: 44)
@@ -1024,86 +1048,123 @@ struct ControlsView: View
                                             .fill(AppPalette.Brand.japPurple)
                                     )
                                     .shadow(radius: 2)
-                                
-                                if inbox.unreadCount > 0 {
-                                    Text("\(inbox.unreadCount)")
-                                        .font(.system(size: 10, weight: .bold))
-                                        .foregroundColor(.white)
-                                        .padding(4)
-                                        .background(Circle().fill(Color.red))
-                                        .offset(x: 6, y: -6)
+                            }
+                            .frame(width: 44, height: 44)
+                            
+                            Button(action: {
+                                uiState.showInbox = true
+                            }) {
+                                ZStack(alignment: .topTrailing) {
+                                    Image(systemName: "tray")
+                                        .font(.system(size: 18, weight: .medium))
+                                        .foregroundColor(AppPalette.Brand.neonPink)
+                                        .frame(width: 44, height: 44)
+                                        .background(
+                                            Circle()
+                                                .fill(AppPalette.Brand.japPurple)
+                                        )
+                                        .shadow(radius: 2)
+                                    
+                                    if inbox.unreadCount > 0 {
+                                        Text("\(inbox.unreadCount)")
+                                            .font(.system(size: 10, weight: .bold))
+                                            .foregroundColor(.white)
+                                            .padding(4)
+                                            .background(Circle().fill(Color.red))
+                                            .offset(x: 6, y: -6)
+                                    }
                                 }
                             }
+                            .frame(width: 44, height: 44)
                         }
-                        .frame(width: 44, height: 44)
+                        .padding(.trailing, 20)
+                        
+                        
+                        
                     }
-                    .padding(.trailing, 20)
-                    
-                    
-                    
-                }
-                .padding(.top, 16)
-                    
-                Spacer()
-                
-                // RECENTER BUTTON - Left side, above dock
-                HStack {
-                    if locationData.shouldShowRecenterButton {
-                        Button(action: { locationData.centerOnUser() }) {
-                            Image(systemName: "location.fill")
-                                .font(.system(size: 18, weight: .medium))
-                                .foregroundColor(locationData.userLocation != nil ? AppPalette.Brand.neonPink : .gray)
-                                .frame(width: 44, height: 44)
-                                .background(
-                                    Circle()
-                                        .fill(AppPalette.Brand.japPurple)
-                                )
-                                .shadow(radius: 2)
-                        }
-                        .disabled(locationData.userLocation == nil)
-                        .transition(.scale.combined(with: .opacity))
-                        .padding(.leading, 20)
-                    }
+                    .padding(.top, 16)
                     
                     Spacer()
+                    
+                    // RECENTER BUTTON - Left side, above dock
+                    HStack {
+                        Spacer()
+                        
+                        if locationData.shouldShowRecenterButton {
+                            Button(action: { locationData.centerOnUser() }) {
+                                Image(systemName: "location.fill")
+                                    .font(.system(size: 18, weight: .medium))
+                                    .foregroundColor(locationData.userLocation != nil ? AppPalette.Brand.neonPink : .gray)
+                                    .frame(width: 44, height: 44)
+                                    .background(
+                                        Circle()
+                                            .fill(AppPalette.Brand.japPurple)
+                                    )
+                                    .shadow(radius: 2)
+                            }
+                            .disabled(locationData.userLocation == nil)
+                            .transition(.scale.combined(with: .opacity))
+                            .padding(.trailing, 20)
+                        }
+                        
+                        
+                    }
+                    .padding(.bottom, 20)
+                    .animation(.spring(response: 0.4, dampingFraction: 0.8), value: locationData.shouldShowRecenterButton)
+                    
+                    // DOCK - Bottom center
+                    HStack {
+                        Spacer()
+                        DockView(
+                            baseURL: Env.apiBaseURL,
+                            token: authState.currentToken,
+                            mapDataStore: mapData,
+                            onSignOut: {
+                                Task {
+                                    await authState.signOut()
+                                }
+                            },
+                            onCreateMeet: {
+                                meetCreationMode = .createButton
+                                uiState.showLocationPopup = true
+                            },
+                            onMeetSelected: { meet in
+                                mapData.selectedMeet = meet
+                                uiState.showMeetOverlay = true
+                            },
+                            onUserSelected: { user in
+                                print("Selected user: \(user.display_name)")
+                            }
+                        )
+                        Spacer()
+                    }
+                    .padding(.bottom, 8)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
-                .padding(.bottom, 20)
-                .animation(.spring(response: 0.4, dampingFraction: 0.8), value: locationData.shouldShowRecenterButton)
-                
-                // DOCK - Bottom center
-                HStack {
-                    Spacer()
-                    DockView(
+            }
+            // Friend Groups Bar - Left side (will hide with shouldHideDock)
+            if !shouldHideDock {
+                VStack {
+                    FriendGroupBar(
+                        groups: uiState.friendGroups,
+                        selectedGroup: $uiState.selectedFriendGroup,
                         baseURL: Env.apiBaseURL,
                         token: authState.currentToken,
-                        mapDataStore: mapData,
-                        onSignOut: {
-                            Task {
-                                await authState.signOut()
-                            }
-                        },
-                        onCreateMeet: {
-                            meetCreationMode = .createButton
-                            uiState.showLocationPopup = true
-                        },
-                        onMeetSelected: { meet in
-                            mapData.selectedMeet = meet
-                            uiState.showMeetOverlay = true
-                        },
-                        onUserSelected: { user in
-                            print("Selected user: \(user.display_name)")
+                        onGroupsChanged: {
+                            await uiState.loadFriendGroups(baseURL: Env.apiBaseURL, token: authState.currentToken)
                         }
                     )
-                    Spacer()
+                    .padding(.leading, 12)
+                    .padding(.top, 80)
+                    .padding(.bottom, 100)
                 }
-                .padding(.bottom, 8)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
+            }    
         }
         .task {
             await authState.updateToken()
         }
         .animation(.easeInOut(duration: 0.1), value: shouldHideDock)
+        
     }
 }
 

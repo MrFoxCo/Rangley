@@ -104,7 +104,7 @@ struct FriendGroupBarContainer: View
     }
 }
 
-// MARK: - Friend Group Bar
+// MARK: - Friend Group Bar (Floating Vertical Dock Style)
 struct FriendGroupBar: View
 {
     let groups: [FriendGroup]
@@ -117,34 +117,38 @@ struct FriendGroupBar: View
     
     var body: some View
     {
-        VStack(spacing: 12) {
+        VStack(spacing: 0) {
             // Create group button at the top
             Button(action: { showCreateGroup = true }) {
-                ZStack {
-                    Circle()
-                        .fill(AppPalette.Brand.japPurple)
-                        .frame(width: 48, height: 48)
-                        .overlay(
-                            Circle()
-                                .stroke(AppPalette.Brand.neonPink, lineWidth: 2)
-                        )
-                    
-                    Image(systemName: "plus")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(AppPalette.Brand.neonPink)
-                }
+                Image(systemName: "plus")
+                    .font(.system(size: 20, weight: .bold))
+                    .imageScale(.large)
+                    .foregroundStyle(AppPalette.Brand.neonPink)
+                    .frame(width: 56, height: 56)
+                    .background(
+                        Circle()
+                            .fill(AppPalette.Brand.neonPink.opacity(0.14))
+                    )
+                    .overlay(
+                        Circle()
+                            .stroke(AppPalette.Brand.neonPink.opacity(0.55), lineWidth: 1)
+                    )
             }
             .buttonStyle(.plain)
+            .padding(.bottom, 16)
             
-            Divider()
-                .background(AppPalette.Surface.fieldStroke)
+            // Divider
+            Rectangle()
+                .fill(AppPalette.Brand.neonPink.opacity(0.3))
+                .frame(height: 1)
                 .padding(.horizontal, 8)
+                .padding(.bottom, 16)
             
             // Scrollable group list
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 12) {
                     ForEach(groups, id: \.friend_group_id) { group in
-                        GroupCircleButton(
+                        GroupDockButton(
                             group: group,
                             isSelected: selectedGroup?.friend_group_id == group.friend_group_id,
                             onTap: {
@@ -157,10 +161,19 @@ struct FriendGroupBar: View
             
             Spacer()
         }
+        .padding(.top, 20)
+        .padding(.horizontal, 12)
         .padding(.vertical, 16)
-        .padding(.horizontal, 8)
-        .frame(width: 72)
-        .background(AppPalette.Brand.formBlack)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(AppPalette.Brand.japDarkerPurple.opacity(0.95))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1)
+                )
+        )
+        .shadow(color: AppPalette.Brand.neonPink.opacity(0.2), radius: 10, x: 0, y: 5)
+        .frame(width: 80)
         .sheet(isPresented: $showCreateGroup) {
             CreateFriendGroupView(
                 baseURL: baseURL,
@@ -174,8 +187,8 @@ struct FriendGroupBar: View
     }
 }
 
-// MARK: - Group Circle Button
-private struct GroupCircleButton: View
+// MARK: - Group Dock Button
+private struct GroupDockButton: View
 {
     let group: FriendGroup
     let isSelected: Bool
@@ -196,22 +209,35 @@ private struct GroupCircleButton: View
     var body: some View
     {
         Button(action: onTap) {
-            ZStack {
-                Circle()
-                    .fill(isSelected ? AppPalette.Brand.neonPink.opacity(0.3) : AppPalette.Brand.japPurple)
-                    .frame(width: 48, height: 48)
-                    .overlay(
-                        Circle()
-                            .stroke(
-                                isSelected ? AppPalette.Brand.neonPink : AppPalette.Surface.fieldStroke,
-                                lineWidth: isSelected ? 2 : 1
-                            )
-                    )
-                
-                Text(initials)
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(isSelected ? AppPalette.Brand.neonPink : AppPalette.Text.primary)
-            }
+            Text(initials)
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(
+                    isSelected ? AppPalette.Brand.neonPink : AppPalette.Text.primary
+                )
+                .frame(width: 56, height: 56)
+                .background(
+                    Circle()
+                        .fill(
+                            isSelected
+                                ? AppPalette.Brand.neonPink.opacity(0.2)
+                                : AppPalette.Brand.japPurple
+                        )
+                )
+                .overlay(
+                    Circle()
+                        .stroke(
+                            isSelected
+                                ? AppPalette.Brand.neonPink.opacity(0.8)
+                                : AppPalette.Brand.neonPink.opacity(0.3),
+                            lineWidth: isSelected ? 2 : 1
+                        )
+                )
+                .shadow(
+                    color: isSelected ? AppPalette.Brand.neonPink.opacity(0.3) : .clear,
+                    radius: isSelected ? 8 : 0,
+                    x: 0,
+                    y: 0
+                )
         }
         .buttonStyle(.plain)
     }
