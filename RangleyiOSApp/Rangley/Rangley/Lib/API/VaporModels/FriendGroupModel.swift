@@ -5,6 +5,8 @@
 //  Created by Anthony Guzzardo on 10/4/25.
 //
 
+// TODO: NEED A WAY TO REFRESH FRIEND GROUPS FOR NEW INCOMING ONES
+
 import Foundation
 
 struct CreateGroupBody: Codable, Sendable
@@ -21,8 +23,8 @@ struct CreateGroupResponse: Codable, Sendable
 
 struct AddFriendsBody: Codable, Sendable
 {
-    let friend_group_id: Int64
-    let friend_uuids: [UUID]
+    let friend_group_id : Int64
+    let friend_uuids    : [UUID]
 }
 
 struct AddFriendsResponse: Codable, Sendable

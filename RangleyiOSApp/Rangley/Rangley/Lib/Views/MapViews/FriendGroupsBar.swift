@@ -16,6 +16,7 @@ struct FriendGroupBarContainer: View
     @State private var friendGroups: [FriendGroup] = []
     @State private var selectedGroup: FriendGroup?
     @State private var isLoading = false
+    @State private var showGroupDetail = false
     
     var body: some View
     {
@@ -26,7 +27,10 @@ struct FriendGroupBarContainer: View
                     selectedGroup: $selectedGroup,
                     baseURL: baseURL,
                     token: token,
-                    onGroupsChanged: { await loadFriendGroups() }
+                    onGroupsChanged: { await loadFriendGroups() },
+                    onGroupTapped: {
+                        showGroupDetail = true
+                    }
                 )
                 
                 VStack {
@@ -83,6 +87,18 @@ struct FriendGroupBarContainer: View
         .task {
             await loadFriendGroups()
         }
+        .sheet(isPresented: $showGroupDetail) {
+            if let group = selectedGroup {
+                FriendGroupDetailView(
+                    group: group,
+                    baseURL: baseURL,
+                    token: token,
+                    onDismiss: {
+                        showGroupDetail = false
+                    }
+                )
+            }
+        }
     }
     
     private func loadFriendGroups() async
@@ -112,6 +128,7 @@ struct FriendGroupBar: View
     let baseURL: URL
     let token: String
     let onGroupsChanged: () async -> Void
+    let onGroupTapped: () -> Void
     
     @State private var showCreateGroup = false
     
@@ -121,10 +138,10 @@ struct FriendGroupBar: View
             // Create group button at the top
             Button(action: { showCreateGroup = true }) {
                 Image(systemName: "plus")
-                    .font(.system(size: 20, weight: .bold))
+                    .font(.system(size: 16, weight: .bold))
                     .imageScale(.large)
                     .foregroundStyle(AppPalette.Brand.neonPink)
-                    .frame(width: 56, height: 56)
+                    .frame(width: 44, height: 44)
                     .background(
                         Circle()
                             .fill(AppPalette.Brand.neonPink.opacity(0.14))
@@ -135,7 +152,7 @@ struct FriendGroupBar: View
                     )
             }
             .buttonStyle(.plain)
-            .padding(.bottom, 16)
+            .padding(.bottom, 12)
             
             // Divider
             Rectangle()
@@ -146,13 +163,14 @@ struct FriendGroupBar: View
             
             // Scrollable group list
             ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 12) {
+                VStack(spacing: 10) {
                     ForEach(groups, id: \.friend_group_id) { group in
                         GroupDockButton(
                             group: group,
                             isSelected: selectedGroup?.friend_group_id == group.friend_group_id,
                             onTap: {
                                 selectedGroup = group
+                                onGroupTapped()
                             }
                         )
                     }
@@ -162,18 +180,18 @@ struct FriendGroupBar: View
             Spacer()
         }
         .padding(.top, 20)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 16)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 14)
         .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(AppPalette.Brand.japDarkerPurple.opacity(0.95))
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(AppPalette.Brand.neonPink.opacity(0.12))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(AppPalette.Brand.neonPink.opacity(0.25), lineWidth: 1)
                 )
         )
-        .shadow(color: AppPalette.Brand.neonPink.opacity(0.2), radius: 10, x: 0, y: 5)
-        .frame(width: 80)
+        .shadow(color: AppPalette.Brand.neonPink.opacity(0.15), radius: 8, x: 0, y: 4)
+        .frame(width: 64)
         .sheet(isPresented: $showCreateGroup) {
             CreateFriendGroupView(
                 baseURL: baseURL,
@@ -210,11 +228,11 @@ private struct GroupDockButton: View
     {
         Button(action: onTap) {
             Text(initials)
-                .font(.system(size: 18, weight: .bold))
+                .font(.system(size: 16, weight: .bold))
                 .foregroundStyle(
                     isSelected ? AppPalette.Brand.neonPink : AppPalette.Text.primary
                 )
-                .frame(width: 56, height: 56)
+                .frame(width: 44, height: 44)
                 .background(
                     Circle()
                         .fill(
@@ -243,7 +261,181 @@ private struct GroupDockButton: View
     }
 }
 
-// MARK: - Create Friend Group View
+// MARK: - Friend Group Detail View
+struct FriendGroupDetailView: View
+{
+    let group: FriendGroup
+    let baseURL: URL
+    let token: String
+    let onDismiss: () -> Void
+    
+    @State private var members: [GroupMember] = []
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+    
+    var body: some View
+    {
+        NavigationView {
+            ZStack {
+                AppPalette.Brand.formBlack.ignoresSafeArea()
+                
+                VStack(spacing: 0) {
+                    // Group info header
+                    VStack(spacing: 12) {
+                        Text(group.name)
+                            .font(.system(size: 24, weight: .bold))
+                            .foregroundStyle(AppPalette.Text.primary)
+                        
+                        Text("\(members.count) member\(members.count == 1 ? "" : "s")")
+                            .font(.system(size: 14))
+                            .foregroundStyle(AppPalette.Text.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 20)
+                    .padding(.bottom, 24)
+                    
+                    // Content area
+                    if isLoading {
+                        Spacer()
+                        ProgressView()
+                            .tint(AppPalette.Brand.neonPink)
+                        Spacer()
+                    } else if let error = errorMessage {
+                        Spacer()
+                        Text(error)
+                            .font(.system(size: 14))
+                            .foregroundStyle(.red)
+                            .padding()
+                        Spacer()
+                    } else if members.isEmpty {
+                        VStack(spacing: 0) {
+                            Spacer()
+                            VStack(spacing: 16) {
+                                Image(systemName: "person.2.slash")
+                                    .font(.system(size: 48, weight: .light))
+                                    .foregroundStyle(AppPalette.Text.tertiary)
+                                
+                                Text("No members yet")
+                                    .font(.system(size: 16))
+                                    .foregroundStyle(AppPalette.Text.secondary)
+                            }
+                            Spacer()
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        // Members list - FIXED
+                        ScrollView {
+                            VStack(spacing: 12) {
+                                ForEach(members, id: \.user_uuid) { member in
+                                    HStack(spacing: 12) {
+                                        // Avatar
+                                        Circle()
+                                            .fill(AppPalette.Brand.japPurple)
+                                            .frame(width: 44, height: 44)
+                                            .overlay(
+                                                Text(String(member.display_name.prefix(1)))
+                                                    .font(.system(size: 18, weight: .semibold))
+                                                    .foregroundStyle(AppPalette.Text.primary)
+                                            )
+                                        
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(member.display_name)
+                                                .font(.system(size: 16, weight: .semibold))
+                                                .foregroundStyle(AppPalette.Text.primary)
+                                            
+                                            Text("@\(member.username)")
+                                                .font(.system(size: 14))
+                                                .foregroundStyle(AppPalette.Text.secondary)
+                                        }
+                                        
+                                        Spacer()
+                                    }
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 12)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .fill(AppPalette.Surface.fieldFill)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 12)
+                                                    .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
+                                            )
+                                    )
+                                }
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.bottom, 100)
+                        }
+                    }
+                    
+                    // Create Meet button at bottom
+                    if !members.isEmpty {
+                        VStack(spacing: 0) {
+                            Divider()
+                                .background(AppPalette.Surface.fieldStroke)
+                            
+                            Button {
+                                // TODO: Navigate to create meet with this group
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "calendar.badge.plus")
+                                        .font(.system(size: 16, weight: .semibold))
+                                    
+                                    Text("Create Meet with Group")
+                                        .font(.system(size: 16, weight: .semibold))
+                                }
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 50)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .fill(AppPalette.Brand.neonPink)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 16)
+                        }
+                        .background(AppPalette.Brand.formBlack)
+                    }
+                }
+            }
+            .navigationTitle("Group Details")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") { onDismiss() }
+                        .foregroundStyle(AppPalette.Brand.neonPink)
+                }
+            }
+        }
+        .task {
+            await loadMembers()
+        }
+    }
+    
+    private func loadMembers() async
+    {
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            let body = ViewMembersBody(friend_group_id: group.friend_group_id)
+            let fetchedMembers = try await AuthAPI.viewFriendGroupMembers(baseURL: baseURL, token: token, body: body)
+            
+            await MainActor.run {
+                members = fetchedMembers
+                isLoading = false
+            }
+        } catch {
+            await MainActor.run {
+                errorMessage = "Failed to load members"
+                isLoading = false
+            }
+            print("Failed to load group members: \(error)")
+        }
+    }
+}
+
 struct CreateFriendGroupView: View
 {
     let baseURL: URL
@@ -252,11 +444,14 @@ struct CreateFriendGroupView: View
     
     @State private var groupName = ""
     @State private var isCreating = false
-    @State private var errorMessage: String?
+    @State private var errorMessage     : String?
+    @State private var navigationPath = NavigationPath()
+    @State private var createdGroupId   : Int64?
+    @State private var selectedUsers    : [ViewUsersModel] = []
     
     var body: some View
     {
-        NavigationView {
+        NavigationStack(path: $navigationPath) {
             VStack(spacing: 24) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Group Name")
@@ -301,11 +496,30 @@ struct CreateFriendGroupView: View
                                 .scaleEffect(0.8)
                                 .tint(AppPalette.Brand.neonPink)
                         } else {
-                            Text("Create")
+                            Text("Next")
                                 .foregroundStyle(groupName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? AppPalette.Text.tertiary : AppPalette.Brand.neonPink)
                         }
                     }
                     .disabled(groupName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isCreating)
+                }
+            }
+            .navigationDestination(for: Int64.self) { groupId in
+                AddMembersInlineView(
+                    groupId: groupId,
+                    groupName: groupName,
+                    baseURL: baseURL,
+                    token: token,
+                    selectedUsers: $selectedUsers,
+                    onComplete: onDismiss
+                )
+            }
+            .navigationDestination(for: String.self) { destination in
+                if destination == "userSearch" {
+                    UserSearchInlineView(
+                        baseURL: baseURL,
+                        token: token,
+                        selectedUsers: $selectedUsers
+                    )
                 }
             }
         }
@@ -319,11 +533,353 @@ struct CreateFriendGroupView: View
             
             do {
                 let body = CreateGroupBody(group_name: groupName.trimmingCharacters(in: .whitespacesAndNewlines))
-                _ = try await AuthAPI.createFriendGroup(baseURL: baseURL, token: token, body: body)
-                onDismiss()
+                let response = try await AuthAPI.createFriendGroup(baseURL: baseURL, token: token, body: body)
+                
+                guard let groupId = response.friend_group_id else {
+                    errorMessage = "Failed to create group: No group ID returned"
+                    isCreating = false
+                    return
+                }
+                
+                navigationPath.append(groupId)
+                isCreating = false
             } catch {
                 errorMessage = "Failed to create group"
                 isCreating = false
+            }
+        }
+    }
+}
+
+// MARK: - Add Group Members View
+struct AddGroupMembersView: View
+{
+    let group: FriendGroup
+    let baseURL: URL
+    let token: String
+    let onDismiss: () -> Void
+    
+    @State private var selectedUsers: [ViewUsersModel] = []
+    @State private var showUserSearch = false
+    @State private var isAdding = false
+    @State private var errorMessage: String?
+    
+    var body: some View
+    {
+        NavigationView {
+            VStack(spacing: 24) {
+                VStack(spacing: 12) {
+                    Text("Add members to")
+                        .font(.system(size: 14))
+                        .foregroundStyle(AppPalette.Text.secondary)
+                    
+                    Text(group.name)
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(AppPalette.Text.primary)
+                }
+                .padding(.top, 20)
+                
+                if !selectedUsers.isEmpty {
+                    VStack(spacing: 12) {
+                        HStack {
+                            Text("Selected (\(selectedUsers.count))")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundStyle(AppPalette.Text.primary)
+                            Spacer()
+                        }
+                        
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 12) {
+                                ForEach(selectedUsers, id: \.user_uuid) { user in
+                                    HStack(spacing: 8) {
+                                        Text(user.display_name)
+                                            .font(.system(size: 14, weight: .medium))
+                                            .foregroundStyle(AppPalette.Text.primary)
+                                        
+                                        Button {
+                                            selectedUsers.removeAll { $0.user_uuid == user.user_uuid }
+                                        } label: {
+                                            Image(systemName: "xmark.circle.fill")
+                                                .foregroundStyle(AppPalette.Text.tertiary)
+                                        }
+                                    }
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(
+                                        Capsule()
+                                            .fill(AppPalette.Brand.neonPink.opacity(0.2))
+                                            .overlay(
+                                                Capsule().stroke(AppPalette.Brand.neonPink.opacity(0.4), lineWidth: 1)
+                                            )
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                Button {
+                    showUserSearch = true
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "person.badge.plus")
+                            .font(.system(size: 16, weight: .semibold))
+                        
+                        Text(selectedUsers.isEmpty ? "Search Friends to Add" : "Add More Friends")
+                            .font(.system(size: 16, weight: .semibold))
+                    }
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(AppPalette.Brand.neonPink)
+                    )
+                }
+                .buttonStyle(.plain)
+                
+                if let error = errorMessage {
+                    Text(error)
+                        .font(.system(size: 14))
+                        .foregroundStyle(.red)
+                }
+                
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .background(AppPalette.Brand.formBlack)
+            .navigationTitle("Add Members")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Skip") { onDismiss() }
+                        .foregroundStyle(AppPalette.Text.secondary)
+                }
+                
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    if !selectedUsers.isEmpty {
+                        Button(action: addMembers) {
+                            if isAdding {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                                    .tint(AppPalette.Brand.neonPink)
+                            } else {
+                                Text("Done")
+                                    .foregroundStyle(AppPalette.Brand.neonPink)
+                            }
+                        }
+                        .disabled(isAdding)
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showUserSearch) {
+            UserSearchView(
+                baseURL: baseURL,
+                token: token,
+                selectedUsers: $selectedUsers,
+                excludedUserUUIDs: [],
+                onDismiss: {
+                    showUserSearch = false
+                }
+            )
+        }
+    }
+    
+    private func addMembers()
+    {
+        Task {
+            isAdding = true
+            errorMessage = nil
+            
+            do {
+                let friendUUIDs = selectedUsers.map { $0.user_uuid }
+                let body = AddFriendsBody(
+                    friend_group_id: group.friend_group_id,
+                    friend_uuids: friendUUIDs
+                )
+                let response = try await AuthAPI.addFriendsToGroup(baseURL: baseURL, token: token, body: body)
+                
+                print("Add members result: added=\(response.added_count), skipped=\(response.skipped_count)")
+                print("   Message: \(response.message)")
+                
+                onDismiss()
+            } catch {
+                errorMessage = "Failed to add members"
+                isAdding = false
+            }
+        }
+    }
+}
+
+struct SelectedUsersChips: View
+{
+    @Binding var selectedUsers: [ViewUsersModel]
+    
+    var body: some View
+    {
+        VStack(spacing: 12) {
+            HStack {
+                Text("Selected (\(selectedUsers.count))")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(AppPalette.Text.primary)
+                Spacer()
+            }
+            
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    ForEach(selectedUsers, id: \.user_uuid) { user in
+                        HStack(spacing: 8) {
+                            Text(user.display_name)
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundStyle(AppPalette.Text.primary)
+                            
+                            Button {
+                                selectedUsers.removeAll { $0.user_uuid == user.user_uuid }
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundStyle(AppPalette.Text.tertiary)
+                            }
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            Capsule()
+                                .fill(AppPalette.Brand.neonPink.opacity(0.2))
+                                .overlay(
+                                    Capsule().stroke(AppPalette.Brand.neonPink.opacity(0.4), lineWidth: 1)
+                                )
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Inline user search (no sheet)
+struct UserSearchInlineView: View
+{
+    let baseURL: URL
+    let token: String
+    @Binding var selectedUsers: [ViewUsersModel]
+    
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View
+    {
+        UserSearchView(
+            baseURL: baseURL,
+            token: token,
+            selectedUsers: $selectedUsers,
+            excludedUserUUIDs: [],
+            onDismiss: { dismiss() }
+        )
+        .navigationTitle("Search Friends")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+
+struct AddMembersInlineView: View
+{
+    let groupId: Int64
+    let groupName: String
+    let baseURL: URL
+    let token: String
+    @Binding var selectedUsers: [ViewUsersModel]
+    let onComplete: () -> Void
+    
+    @Environment(\.dismiss) private var dismiss
+    @State private var isAdding = false
+    @State private var errorMessage: String?
+    
+    var body: some View
+    {
+        VStack(spacing: 24) {
+            VStack(spacing: 12) {
+                Text("Add members to")
+                    .font(.system(size: 14))
+                    .foregroundStyle(AppPalette.Text.secondary)
+                
+                Text(groupName)
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(AppPalette.Text.primary)
+            }
+            .padding(.top, 20)
+            
+            if !selectedUsers.isEmpty {
+                SelectedUsersChips(selectedUsers: $selectedUsers)
+            }
+            
+            NavigationLink(value: "userSearch") {
+                HStack(spacing: 12) {
+                    Image(systemName: "person.badge.plus")
+                        .font(.system(size: 16, weight: .semibold))
+                    
+                    Text(selectedUsers.isEmpty ? "Search Friends to Add" : "Add More Friends")
+                        .font(.system(size: 16, weight: .semibold))
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 50)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(AppPalette.Brand.neonPink)
+                )
+            }
+            .buttonStyle(.plain)
+            
+            if let error = errorMessage {
+                Text(error)
+                    .font(.system(size: 14))
+                    .foregroundStyle(.red)
+            }
+            
+            Spacer()
+        }
+        .padding(.horizontal, 20)
+        .background(AppPalette.Brand.formBlack)
+        .navigationTitle("Add Members")
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(false)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(action: finishCreation) {
+                    if isAdding {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                            .tint(AppPalette.Brand.neonPink)
+                    } else {
+                        Text(selectedUsers.isEmpty ? "Skip" : "Done")
+                            .foregroundStyle(AppPalette.Brand.neonPink)
+                    }
+                }
+                .disabled(isAdding)
+            }
+        }
+    }
+    
+    private func finishCreation()
+    {
+        guard !selectedUsers.isEmpty else {
+            onComplete()
+            return
+        }
+        
+        Task {
+            isAdding = true
+            
+            do {
+                let body = AddFriendsBody(
+                    friend_group_id: groupId,
+                    friend_uuids: selectedUsers.map { $0.user_uuid }
+                )
+                _ = try await AuthAPI.addFriendsToGroup(baseURL: baseURL, token: token, body: body)
+                onComplete()
+            } catch {
+                errorMessage = "Failed to add members"
+                isAdding = false
             }
         }
     }

@@ -446,6 +446,7 @@ class UIStateStore: ObservableObject
     @Published var friendGroups: [FriendGroup] = []
     @Published var selectedFriendGroup: FriendGroup?
     @Published var isLoadingFriendGroups = false
+    @Published var showFriendGroupDetail = false
     
     private let dayNightTimer = Timer.publish(every: 300, on: .main, in: .common).autoconnect()
     
@@ -922,6 +923,18 @@ struct OverlaysView: View
                 onDismiss: { uiState.showMessenger = false }
             )
         }
+        .sheet(isPresented: $uiState.showFriendGroupDetail) {
+            if let group = uiState.selectedFriendGroup {
+                FriendGroupDetailView(
+                    group: group,
+                    baseURL: Env.apiBaseURL,
+                    token: authState.currentToken,
+                    onDismiss: {
+                        uiState.showFriendGroupDetail = false
+                    }
+                )
+            }
+        }
     }
     
     private func seedForCreate() -> LocationInfo?
@@ -1152,13 +1165,16 @@ struct ControlsView: View
                         token: authState.currentToken,
                         onGroupsChanged: {
                             await uiState.loadFriendGroups(baseURL: Env.apiBaseURL, token: authState.currentToken)
+                        },
+                        onGroupTapped: {
+                            uiState.showFriendGroupDetail = true
                         }
                     )
-                    .padding(.leading, 12)
+                    .padding(.leading, 8)
                     .padding(.top, 80)
                     .padding(.bottom, 100)
                 }
-            }    
+            }
         }
         .task {
             await authState.updateToken()

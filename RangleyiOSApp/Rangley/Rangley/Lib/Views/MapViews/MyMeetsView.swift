@@ -86,7 +86,7 @@ struct MyMeetsView: View
                 onInvitationResponse: { n, status in
                     Task {
                         try? await inbox.respondToInvitation(n, statusId: status)
-                        await mapDataStore.forceRefresh()
+                        await mapDataStore.loadMeets()
                     }
                 }
             )
@@ -186,7 +186,7 @@ struct MyMeetsOverlay: View
                                         let body = DeletedMeetInsertBody(meet_id_uuid: meet.meet_id_uuid)
                                         _ = try await AuthAPI.deleteMeet(baseURL: baseURL, token: token, body: body)
                                         
-                                        await mapDataStore.forceRefresh()
+                                        await mapDataStore.loadMeets()
                                         await inbox.refresh(force: true)
                                     } catch {
                                         print("Failed to delete meet: \(error)")
@@ -199,7 +199,7 @@ struct MyMeetsOverlay: View
                                         let body = LeaveMeetBody(meet_id_uuid: meet.meet_id_uuid)
                                         _ = try await AuthAPI.leaveMeet(baseURL: baseURL, token: token, body: body)
                                         
-                                        await mapDataStore.forceRefresh()
+                                        await mapDataStore.loadMeets()
                                         await inbox.refresh(force: true)
                                     } catch {
                                         print("Failed to leave meet: \(error)")
@@ -213,7 +213,7 @@ struct MyMeetsOverlay: View
             .navigationBarHidden(true)
         }
         .task {
-            await mapDataStore.forceRefresh()
+            await mapDataStore.loadMeets()
             await inbox.refresh(force: true)
         }
     }
@@ -288,7 +288,7 @@ private extension MyMeetsOverlay
 
             Button("Retry") {
                 Task {
-                    await mapDataStore.forceRefresh()
+                    await mapDataStore.loadMeets()
                     await inbox.refresh(force: true)
                 }
             }
@@ -1219,209 +1219,231 @@ struct CollapsibleMeetCard: View
     }
     
     private var canDelete: Bool {
-        meet.is_owner  // participant_status_id == 7
+        meet.is_owner
     }
     
     private var canLeave: Bool {
-        !meet.is_owner  // Just check if they're not the owner
-        // The meet wouldn't be in their "Joined Meets" list if they weren't accepted
+        !meet.is_owner
     }
     
-    var body: some View
-    {
-            VStack(alignment: .leading, spacing: 12) {
-                // Header Row - Always Visible
-                HStack(alignment: .center, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(meet.name)
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(AppPalette.Text.primary)
-                            .lineLimit(isExpanded ? nil : 2)
-                        
-                        Text(meet.category_name)
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(AppPalette.Brand.neonPink)
-                        
-                        if !meet.is_owner {
-                            Text("Hosted by \(meet.display_name)")
-                                .font(.system(size: 12, weight: .regular))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                    }
-                    
-                    Spacer()
-                    
-                    VStack(alignment: .trailing, spacing: 4) {
-                        if meet.is_owner {
-                            Image(systemName: "crown.fill")
-                                .font(.system(size: 12))
-                                .foregroundStyle(Color.orange)
-                        }
-                        
-                        Image(systemName: categoryIcon(for: meet.category_name))
-                            .font(.system(size: 16))
-                            .foregroundStyle(AppPalette.Brand.neonPink.opacity(0.7))
-                        
-                        // Chevron for expansion
-                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(AppPalette.Brand.neonPink)
-                    }
-                }
-                
-                // Quick Info Row - Always Visible
-                HStack {
-                    Label(dateFormatter.string(from: meet.dttm_start_utc), systemImage: "calendar")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(AppPalette.Text.secondary)
-                    
-                    Spacer()
-                }
-                
-                // Expanded Content
-                if isExpanded {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Divider()
-                            .background(AppPalette.Text.quaternary)
-                        
-                        if !meet.description.isEmpty {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Description")
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .foregroundStyle(AppPalette.Text.secondary)
-                                
-                                Text(meet.description)
-                                    .font(.system(size: 14))
-                                    .foregroundStyle(AppPalette.Text.primary)
-                            }
-                        }
-                        
-                        // Additional details
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Details")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(AppPalette.Text.secondary)
-                            
-                            HStack {
-                                Label("Start", systemImage: "clock")
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(AppPalette.Text.secondary)
-                                
-                                Text(dateFormatter.string(from: meet.dttm_start_utc))
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(AppPalette.Text.primary)
-                                
-                                Spacer()
-                            }
-                            
-                            HStack {
-                                Label("End", systemImage: "clock.badge.checkmark")
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(AppPalette.Text.secondary)
-                                
-                                Text(dateFormatter.string(from: meet.dttm_end_utc))
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(AppPalette.Text.primary)
-                                
-                                Spacer()
-                            }
-                        }
-                        
-                        // Action Buttons Row
-                        HStack(spacing: 12) {
-                            // View Details Button
-                            Button("View Details", action: onTap)
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(AppPalette.Brand.neonPink)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 8)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        .fill(AppPalette.Brand.neonPink.opacity(0.1))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                                .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1)
-                                        )
-                                )
-                            
-                            // Delete Button (only for owners)
-                            if canDelete, let onDelete = onDelete {
-                                Button {
-                                    showDeleteConfirm = true
-                                } label: {
-                                    Image(systemName: "trash.fill")
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundStyle(.white)
-                                        .frame(width: 44, height: 36)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                                .fill(Color.red)
-                                        )
-                                }
-                            }
-                            
-                            // Leave Button (only for accepted non-owners)
-                            if canLeave, let onLeave = onLeave {
-                                Button {
-                                    showLeaveConfirm = true
-                                } label: {
-                                    Image(systemName: "rectangle.portrait.and.arrow.right")
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundStyle(.white)
-                                        .frame(width: 44, height: 36)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                                .fill(Color.orange)
-                                        )
-                                }
-                            }
-                        }
-                    }
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-                }
-            }
+    var body: some View {
+        cardContent  // <- Split this out
             .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(AppPalette.Surface.joinedMeetsCard))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(AppPalette.Brand.neonPink.opacity(0.2), lineWidth: 1)
-                    )
-            )
+            .background(cardBackground)
             .contentShape(Rectangle())
-            .onTapGesture {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                    isExpanded.toggle()
-                }
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            }
+            .onTapGesture(perform: toggleExpanded)
             .animation(.default, value: isExpanded)
-            .alert("Delete this meet?", isPresented: $showDeleteConfirm) {
-                Button("Delete", role: .destructive) {
-                    if let onDelete = onDelete {
-                        onDelete(meet)
-                    }
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("This action cannot be undone.")
-            }
-            .alert("Leave this meet?", isPresented: $showLeaveConfirm) {
-                Button("Leave", role: .destructive) {
-                    if let onLeave = onLeave {
-                        onLeave(meet)
-                    }
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("Are you sure you want to leave this meet?")
+            .alert("Delete this meet?", isPresented: $showDeleteConfirm, actions: deleteAlert)
+            .alert("Leave this meet?", isPresented: $showLeaveConfirm, actions: leaveAlert)
+    }
+    
+    // MARK: - Subviews
+    
+    private var cardContent: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            headerRow
+            quickInfoRow
+            if isExpanded {
+                expandedContent
             }
         }
+    }
     
-    private func categoryIcon(for category: String) -> String
-    {
+    private var headerRow: some View {
+        HStack(alignment: .center, spacing: 12) {
+            meetInfoColumn
+            Spacer()
+            iconColumn
+        }
+    }
+    
+    private var meetInfoColumn: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(meet.name)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(AppPalette.Text.primary)
+                .lineLimit(isExpanded ? nil : 2)
+            
+            Text(meet.category_name)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(AppPalette.Brand.neonPink)
+            
+            if !meet.is_owner {
+                Text("Hosted by \(meet.display_name)")
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+    }
+    
+    private var iconColumn: some View {
+        VStack(alignment: .trailing, spacing: 4) {
+            if meet.is_owner {
+                Image(systemName: "crown.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.orange)
+            }
+            
+            Image(systemName: categoryIcon(for: meet.category_name))
+                .font(.system(size: 16))
+                .foregroundStyle(AppPalette.Brand.neonPink.opacity(0.7))
+            
+            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(AppPalette.Brand.neonPink)
+        }
+    }
+    
+    private var quickInfoRow: some View {
+        HStack {
+            Label(dateFormatter.string(from: meet.dttm_start_utc), systemImage: "calendar")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(AppPalette.Text.secondary)
+            Spacer()
+        }
+    }
+    
+    private var expandedContent: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Divider().background(AppPalette.Text.quaternary)
+            
+            if !meet.description.isEmpty {
+                descriptionSection
+            }
+            
+            detailsSection
+            actionButtonsRow
+        }
+        .transition(.opacity.combined(with: .move(edge: .top)))
+    }
+    
+    private var descriptionSection: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Description")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(AppPalette.Text.secondary)
+            
+            Text(meet.description)
+                .font(.system(size: 14))
+                .foregroundStyle(AppPalette.Text.primary)
+        }
+    }
+    
+    private var detailsSection: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Details")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(AppPalette.Text.secondary)
+            
+            detailRow(label: "Start", icon: "clock", time: meet.dttm_start_utc)
+            detailRow(label: "End", icon: "clock.badge.checkmark", time: meet.dttm_end_utc)
+        }
+    }
+    
+    private func detailRow(label: String, icon: String, time: Date) -> some View {
+        HStack {
+            Label(label, systemImage: icon)
+                .font(.system(size: 12))
+                .foregroundStyle(AppPalette.Text.secondary)
+            
+            Text(dateFormatter.string(from: time))
+                .font(.system(size: 12))
+                .foregroundStyle(AppPalette.Text.primary)
+            
+            Spacer()
+        }
+    }
+    
+    private var actionButtonsRow: some View {
+        HStack(spacing: 12) {
+            viewDetailsButton
+            if canDelete, onDelete != nil { deleteButton }
+            if canLeave, onLeave != nil { leaveButton }
+        }
+    }
+    
+    private var viewDetailsButton: some View {
+        Button("View Details", action: onTap)
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(AppPalette.Brand.neonPink)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(AppPalette.Brand.neonPink.opacity(0.1))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1)
+                    )
+            )
+    }
+    
+    private var deleteButton: some View {
+        Button {
+            showDeleteConfirm = true
+        } label: {
+            Image(systemName: "trash.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 44, height: 36)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color.red)
+                )
+        }
+    }
+    
+    private var leaveButton: some View {
+        Button {
+            showLeaveConfirm = true
+        } label: {
+            Image(systemName: "rectangle.portrait.and.arrow.right")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 44, height: 36)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color.orange)
+                )
+        }
+    }
+    
+    private var cardBackground: some View {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(Color(AppPalette.Surface.joinedMeetsCard))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(AppPalette.Brand.neonPink.opacity(0.2), lineWidth: 1)
+            )
+    }
+    
+    // MARK: - Actions
+    
+    private func toggleExpanded() {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            isExpanded.toggle()
+        }
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+    
+    @ViewBuilder
+    private func deleteAlert() -> some View {
+        Button("Delete", role: .destructive) {
+            onDelete?(meet)
+        }
+        Button("Cancel", role: .cancel) {}
+    }
+    
+    @ViewBuilder
+    private func leaveAlert() -> some View {
+        Button("Leave", role: .destructive) {
+            onLeave?(meet)
+        }
+        Button("Cancel", role: .cancel) {}
+    }
+    
+    private func categoryIcon(for category: String) -> String {
         switch category.lowercased() {
         case "activity": return "figure.run"
         case "sports": return "sportscourt"

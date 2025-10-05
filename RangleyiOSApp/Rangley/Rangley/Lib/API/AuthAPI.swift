@@ -1474,7 +1474,10 @@ struct AuthAPI
         }
 
         do {
-           return try JSONDecoder().decode([GroupMember].self, from: data)
+            let decoder = JSONDecoder()
+           decoder.dateDecodingStrategy = .iso8601
+           return try decoder.decode([GroupMember].self, from: data)
+
         } catch {
            #if DEBUG
            print("=== Decode Error in getFriendGroupMembers ===")

@@ -9,8 +9,8 @@ CREATE OR REPLACE FUNCTION rangley.rgl_fn_v_friend_group_members
 RETURNS TABLE
 (
     user_uuid UUID,
-    username TEXT,
-    display_name TEXT,
+    username VARCHAR(50),
+    display_name VARCHAR(50),
     dttm_added_utc TIMESTAMPTZ
 )
 LANGUAGE plpgsql
