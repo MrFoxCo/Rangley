@@ -76,6 +76,7 @@ enum RangleyFunc: String
     case modify_meet_group_image        = "rangley.rgl_fn_m_meet_group_image"
     case invite_to_meet_group           = "rangley.rgl_fn_invite_users_to_meet_group"
     case respond_meet_group_invitation  = "rangley.rgl_fn_respond_to_meet_group_invitation"
+    case leave_meet_group               = "rangley.rgl_fn_leave_meet_group"
 }
 
 // MARK: - Generic call shapes
@@ -1759,6 +1760,37 @@ enum Func
             )
         }
     }
+    
+    
+    enum SystemLeaveMeetGroup: PgFunctionRow
+    {
+        static let funcName: RangleyFunc = .leave_meet_group
+
+        struct In: Sendable
+        {
+            let cognito_sub: String
+            let meet_group_id: Int64
+        }
+
+        struct Results: Content, Sendable
+        {
+            let success: Bool
+            let message: String
+        }
+
+        static func query(_ input: In) -> SQLQueryString
+        {
+            "SELECT * FROM \(unsafeRaw: funcName.rawValue)(\(bind: input.cognito_sub)::text, \(bind: input.meet_group_id)::int8);"
+        }
+
+        static func decode(_ r: any SQLRow) throws -> Results
+        {
+            try .init(
+                success: r.decode(column: "success", as: Bool.self),
+                message: r.decode(column: "message", as: String.self)
+            )
+        }
+    }
 
     enum SystemDeleteMeetGroup: PgFunctionRow
     {
@@ -1848,6 +1880,7 @@ enum Func
             let username: String
             let display_name: String
             let dttm_added_utc: Date
+            let is_owner: Bool
         }
 
         static func query(_ input: In) -> SQLQueryString
@@ -1861,10 +1894,14 @@ enum Func
                 user_uuid: r.decode(column: "user_uuid", as: UUID.self),
                 username: r.decode(column: "username", as: String.self),
                 display_name: r.decode(column: "display_name", as: String.self),
-                dttm_added_utc: r.decode(column: "dttm_added_utc", as: Date.self)
+                dttm_added_utc: r.decode(column: "dttm_added_utc", as: Date.self),
+                is_owner: r.decode(column: "is_owner", as: Bool.self)
             )
         }
     }
+    
+    
+    
     
     enum SystemModifyMeetGroupImage: PgFunctionRow
     {
@@ -1896,6 +1933,7 @@ enum Func
             )
         }
     }
+    
     
     // =========================================================
     // MARK: - END Friend Group Stuff

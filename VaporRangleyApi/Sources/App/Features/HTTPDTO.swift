@@ -508,6 +508,7 @@ enum HTTPDTO
             let username: String
             let display_name: String
             let dttm_added_utc: Date
+            let is_owner: Bool  
         }
         
         struct ViewMembersBody: Content, Sendable
@@ -522,6 +523,17 @@ enum HTTPDTO
         }
         
         struct ModifyImageResponse: Content, Sendable
+        {
+            let success: Bool
+            let message: String
+        }
+        
+        struct LeaveMeetGroupBody: Content, Sendable
+        {
+            let meet_group_id: Int64
+        }
+
+        struct LeaveMeetGroupResponse: Content, Sendable
         {
             let success: Bool
             let message: String

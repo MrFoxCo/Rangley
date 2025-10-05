@@ -205,11 +205,9 @@ final class InboxStore: ObservableObject {
     {
         guard !token.isEmpty else { throw AuthAPIError.http(-1, "No auth token") }
         
-        // Extract invitation_id from payload_json
-        guard let data = notification.payload_json.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let invitationId = json["invitation_id"] as? Int64 else {
-            throw AuthAPIError.http(-1, "Invalid payload")
+        // Use the convenience accessor instead of manual parsing
+        guard let invitationId = notification.meetGroupInvitationId else {
+            throw AuthAPIError.http(-1, "Invalid payload - missing invitation_id")
         }
         
         // Optimistic UI

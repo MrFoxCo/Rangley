@@ -8,119 +8,6 @@
 
 import SwiftUI
 
-// MARK: - Container for Sheet Presentation
-struct MeetGroupBarContainer: View
-{
-    let baseURL: URL
-    let token: String
-    
-    @State private var meetGroups: [MeetGroup] = []
-    @State private var selectedGroup: MeetGroup?
-    @State private var isLoading = false
-    @State private var showGroupDetail = false
-    
-    var body: some View
-    {
-        NavigationView {
-            HStack(spacing: 0) {
-                MeetGroupBar(
-                    groups: meetGroups,
-                    selectedGroup: $selectedGroup,
-                    baseURL: baseURL,
-                    token: token,
-                    onGroupsChanged: { await loadMeetGroups() },
-                    onGroupTapped: {
-                        showGroupDetail = true
-                    }
-                )
-                
-                VStack {
-                    // Header
-                    HStack {
-                        Text("Meet Groups")
-                            .font(.system(size: 20, weight: .bold))
-                            .foregroundStyle(AppPalette.Text.primary)
-                        
-                        Spacer()
-                        
-                        HStack(spacing: 6) {
-                            Image(systemName: "chevron.left")
-                            Text("Back")
-                        }
-                        .font(.system(size: 16, weight: .medium))
-                        .opacity(0)
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 20)
-                    .padding(.bottom, 16)
-                    .background(AppPalette.Brand.formBlack)
-                    
-                    // Content
-                    if isLoading {
-                        Spacer()
-                        ProgressView()
-                            .tint(AppPalette.Brand.neonPink)
-                        Spacer()
-                    } else if let group = selectedGroup {
-                        Text("Selected: \(group.name)")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(AppPalette.Text.primary)
-                            .padding()
-                        Spacer()
-                    } else {
-                        VStack(spacing: 20) {
-                            Image(systemName: "arrow.left")
-                                .font(.system(size: 48, weight: .light))
-                                .foregroundStyle(AppPalette.Brand.neonPink.opacity(0.4))
-                            
-                            Text("Select a group")
-                                .font(.system(size: 16))
-                                .foregroundStyle(AppPalette.Text.secondary)
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(AppPalette.Brand.formBlack)
-            }
-            .navigationBarHidden(true)
-        }
-        .task {
-            await loadMeetGroups()
-        }
-        .sheet(isPresented: $showGroupDetail) {
-            if let group = selectedGroup {
-                MeetGroupDetailView(
-                    group: group,
-                    baseURL: baseURL,
-                    token: token,
-                    onDismiss: {
-                        showGroupDetail = false
-                    }
-                )
-            }
-        }
-    }
-    
-    private func loadMeetGroups() async
-    {
-        isLoading = true
-        
-        do {
-            let groups = try await AuthAPI.viewMeetGroups(baseURL: baseURL, token: token)
-            await MainActor.run {
-                meetGroups = groups
-                isLoading = false
-            }
-        } catch {
-            await MainActor.run {
-                isLoading = false
-            }
-            print("Failed to load meet groups: \(error)")
-        }
-    }
-}
-
 // MARK: - Meet Group Bar (Floating Vertical Dock Style)
 struct MeetGroupBar: View
 {
@@ -294,18 +181,29 @@ private struct GroupDockButton: View
 // MARK: - Updated MeetGroupDetailView (Invitation Only)
 struct MeetGroupDetailView: View
 {
-    let group: MeetGroup
-    let baseURL: URL
-    let token: String
-    let onDismiss: () -> Void
+    @EnvironmentObject var authState: AuthStateStore
+    
+    let group           : MeetGroup
+    let baseURL         : URL
+    let token           : String
+    let onDismiss       : () -> Void
+    let onGroupChanged  : () async -> Void
     
     @State private var members: [GroupMember] = []
+    @State private var currentUserUUID: UUID?
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var showDeleteConfirm = false
     @State private var isDeleting = false
     @State private var showImagePicker = false
     @State private var showInviteMembers = false // REMOVED: showAddMembers
+    
+    
+    private var isCurrentUserOwner: Bool
+    {
+        guard let userUUID = authState.currentUser?.user_uuid else { return false }
+        return members.first(where: { $0.user_uuid == userUUID })?.is_owner ?? false
+    }
     
     var body: some View
     {
@@ -314,9 +212,9 @@ struct MeetGroupDetailView: View
                 AppPalette.Brand.formBlack.ignoresSafeArea()
                 
                 VStack(spacing: 0) {
-                    // Group info header
+                    // MARK: - Group info header
                     VStack(spacing: 12) {
-                        // Group icon
+                        // MARK: -  Group icon
                         Button {
                             showImagePicker = true
                         } label: {
@@ -347,31 +245,33 @@ struct MeetGroupDetailView: View
                     .padding(.top, 20)
                     .padding(.bottom, 24)
                     
-                    // Action button (ONLY INVITE)
-                    VStack(spacing: 12) {
-                        Button {
-                            showInviteMembers = true
-                        } label: {
-                            HStack(spacing: 8) {
-                                Image(systemName: "envelope.badge.person.crop")
-                                    .font(.system(size: 14, weight: .semibold))
-                                Text("Invite Members")
-                                    .font(.system(size: 14, weight: .semibold))
-                            }
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 44)
-                            .background(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .fill(AppPalette.Brand.neonPink)
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .padding(.horizontal, 20)
-                        .padding(.bottom, 16)
-                    }
+                    // MARK: -  Action button (ONLY INVITE)
+                    if isCurrentUserOwner {
+                       VStack(spacing: 12) {
+                           Button {
+                               showInviteMembers = true
+                           } label: {
+                               HStack(spacing: 8) {
+                                   Image(systemName: "envelope.badge.person.crop")
+                                       .font(.system(size: 14, weight: .semibold))
+                                   Text("Invite Members")
+                                       .font(.system(size: 14, weight: .semibold))
+                               }
+                               .foregroundStyle(.white)
+                               .frame(maxWidth: .infinity)
+                               .frame(height: 44)
+                               .background(
+                                   RoundedRectangle(cornerRadius: 10)
+                                       .fill(AppPalette.Brand.neonPink)
+                               )
+                           }
+                           .buttonStyle(.plain)
+                           .padding(.horizontal, 20)
+                           .padding(.bottom, 16)
+                       }
+                   }
                     
-                    // Content area
+                    // MARK: -  Content area
                     if isLoading {
                         Spacer()
                         ProgressView()
@@ -399,19 +299,31 @@ struct MeetGroupDetailView: View
                             Spacer()
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else {
+                    }
+                    if !members.isEmpty
+                    {
                         ScrollView {
                             VStack(spacing: 12) {
                                 ForEach(members, id: \.user_uuid) { member in
                                     HStack(spacing: 12) {
-                                        Circle()
-                                            .fill(AppPalette.Brand.japPurple)
-                                            .frame(width: 44, height: 44)
-                                            .overlay(
-                                                Text(String(member.display_name.prefix(1)))
-                                                    .font(.system(size: 18, weight: .semibold))
-                                                    .foregroundStyle(AppPalette.Text.primary)
-                                            )
+                                        ZStack(alignment: .topTrailing) {
+                                            Circle()
+                                                .fill(AppPalette.Brand.japPurple)
+                                                .frame(width: 44, height: 44)
+                                                .overlay(
+                                                    Text(String(member.display_name.prefix(1)))
+                                                        .font(.system(size: 18, weight: .semibold))
+                                                        .foregroundStyle(AppPalette.Text.primary)
+                                                )
+                                            
+                                            // Crown for owner
+                                            if member.is_owner {
+                                                Image(systemName: "crown.fill")
+                                                    .font(.system(size: 12))
+                                                    .foregroundStyle(AppPalette.Brand.neonPink)
+                                                    .offset(x: 4, y: -4)
+                                            }
+                                        }
                                         
                                         VStack(alignment: .leading, spacing: 4) {
                                             Text(member.display_name)
@@ -425,15 +337,17 @@ struct MeetGroupDetailView: View
                                         
                                         Spacer()
                                         
-                                        // Remove member button
-                                        Button {
-                                            removeMember(member)
-                                        } label: {
-                                            Image(systemName: "minus.circle.fill")
-                                                .font(.system(size: 20))
-                                                .foregroundStyle(.red.opacity(0.8))
+                                        // Only show remove button if current user is owner AND member is not owner
+                                        if isCurrentUserOwner && !member.is_owner {
+                                            Button {
+                                                removeMember(member)
+                                            } label: {
+                                                Image(systemName: "minus.circle.fill")
+                                                    .font(.system(size: 20))
+                                                    .foregroundStyle(.red.opacity(0.8))
+                                            }
+                                            .buttonStyle(.plain)
                                         }
-                                        .buttonStyle(.plain)
                                     }
                                     .padding(.horizontal, 16)
                                     .padding(.vertical, 12)
@@ -452,8 +366,9 @@ struct MeetGroupDetailView: View
                         }
                     }
                     
-                    // Bottom buttons
-                    VStack(spacing: 12) {
+                    // MARK: - Bottom buttons
+                    VStack(spacing: 12)
+                    {
                         Divider()
                             .background(AppPalette.Surface.fieldStroke)
                         
@@ -479,26 +394,45 @@ struct MeetGroupDetailView: View
                             .buttonStyle(.plain)
                         }
                         
-                        // Delete button
-                        Button {
-                            showDeleteConfirm = true
-                        } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: "trash")
-                                    .font(.system(size: 16, weight: .semibold))
-                                
-                                Text("Delete Group")
-                                    .font(.system(size: 16, weight: .semibold))
-                            }
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 50)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color.red)
-                            )
-                        }
-                        .buttonStyle(.plain)
+                        if isCurrentUserOwner {
+                           Button {
+                               showDeleteConfirm = true
+                           } label: {
+                               HStack(spacing: 12) {
+                                   Image(systemName: "trash")
+                                       .font(.system(size: 16, weight: .semibold))
+                                   Text("Delete Group")
+                                       .font(.system(size: 16, weight: .semibold))
+                               }
+                               .foregroundStyle(.white)
+                               .frame(maxWidth: .infinity)
+                               .frame(height: 50)
+                               .background(
+                                   RoundedRectangle(cornerRadius: 12)
+                                       .fill(Color.red)
+                               )
+                           }
+                           .buttonStyle(.plain)
+                       } else {
+                           Button {
+                               leaveGroup()
+                           } label: {
+                               HStack(spacing: 12) {
+                                   Image(systemName: "arrow.right.square")
+                                       .font(.system(size: 16, weight: .semibold))
+                                   Text("Leave Group")
+                                       .font(.system(size: 16, weight: .semibold))
+                               }
+                               .foregroundStyle(.white)
+                               .frame(maxWidth: .infinity)
+                               .frame(height: 50)
+                               .background(
+                                   RoundedRectangle(cornerRadius: 12)
+                                       .fill(Color.orange)
+                               )
+                           }
+                           .buttonStyle(.plain)
+                       }
                     }
                     .padding(.horizontal, 20)
                     .padding(.vertical, 16)
@@ -568,6 +502,7 @@ struct MeetGroupDetailView: View
                 
                 if response.success {
                     await loadMembers()
+                    await onGroupChanged()
                 }
             } catch {
                 errorMessage = "Failed to remove member"
@@ -585,6 +520,7 @@ struct MeetGroupDetailView: View
                 let response = try await AuthAPI.deleteMeetGroup(baseURL: baseURL, token: token, body: body)
                 
                 if response.success {
+                    await onGroupChanged()
                     onDismiss()
                 } else {
                     errorMessage = response.message
@@ -615,6 +551,25 @@ struct MeetGroupDetailView: View
                 isLoading = false
             }
             print("Failed to load group members: \(error)")
+        }
+    }
+    
+    private func leaveGroup()
+    {
+        Task {
+            do {
+                let body = LeaveMeetGroupBody(meet_group_id: group.meet_group_id)
+                let response = try await AuthAPI.leaveMeetGroup(baseURL: baseURL, token: token, body: body)
+                
+                if response.success {
+                    await onGroupChanged()
+                    onDismiss()
+                } else {
+                    errorMessage = response.message
+                }
+            } catch {
+                errorMessage = "Failed to leave group"
+            }
         }
     }
 }
@@ -880,7 +835,7 @@ struct CreateMeetGroupView: View
                 }
             }
             .navigationDestination(for: Int64.self) { groupId in
-                AddMembersToMeetGroupInlineView(
+                InviteMembersToMeetGroupInlineView(
                     groupId: groupId,
                     groupName: groupName,
                     baseURL: baseURL,
@@ -1067,8 +1022,8 @@ struct InviteMembersToMeetGroupView: View
     }
 }
 
-// Inline add members for creation flow
-struct AddMembersToMeetGroupInlineView: View
+// Inline invite members for creation flow
+struct InviteMembersToMeetGroupInlineView: View
 {
     let groupId: Int64
     let groupName: String
@@ -1078,20 +1033,24 @@ struct AddMembersToMeetGroupInlineView: View
     let onComplete: () -> Void
     
     @Environment(\.dismiss) private var dismiss
-    @State private var isAdding = false
+    @State private var isInviting = false
     @State private var errorMessage: String?
     
     var body: some View
     {
         VStack(spacing: 24) {
             VStack(spacing: 12) {
-                Text("Add members to")
+                Text("Invite members to")
                     .font(.system(size: 14))
                     .foregroundStyle(AppPalette.Text.secondary)
                 
                 Text(groupName)
                     .font(.system(size: 20, weight: .bold))
                     .foregroundStyle(AppPalette.Text.primary)
+                
+                Text("They'll receive an invitation to join")
+                    .font(.system(size: 14))
+                    .foregroundStyle(AppPalette.Text.tertiary)
             }
             .padding(.top, 20)
             
@@ -1101,10 +1060,10 @@ struct AddMembersToMeetGroupInlineView: View
             
             NavigationLink(value: "userSearch") {
                 HStack(spacing: 12) {
-                    Image(systemName: "person.badge.plus")
+                    Image(systemName: "envelope.badge.person.crop")
                         .font(.system(size: 16, weight: .semibold))
                     
-                    Text(selectedUsers.isEmpty ? "Search Friends to Add" : "Add More Friends")
+                    Text(selectedUsers.isEmpty ? "Search Users to Invite" : "Add More Users")
                         .font(.system(size: 16, weight: .semibold))
                 }
                 .foregroundStyle(.white)
@@ -1127,27 +1086,27 @@ struct AddMembersToMeetGroupInlineView: View
         }
         .padding(.horizontal, 20)
         .background(AppPalette.Brand.formBlack)
-        .navigationTitle("Add Members")
+        .navigationTitle("Send Invitations")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(false)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button(action: finishCreation) {
-                    if isAdding {
+                Button(action: sendInvitations) {
+                    if isInviting {
                         ProgressView()
                             .scaleEffect(0.8)
                             .tint(AppPalette.Brand.neonPink)
                     } else {
-                        Text(selectedUsers.isEmpty ? "Skip" : "Done")
+                        Text(selectedUsers.isEmpty ? "Skip" : "Invite")
                             .foregroundStyle(AppPalette.Brand.neonPink)
                     }
                 }
-                .disabled(isAdding)
+                .disabled(isInviting)
             }
         }
     }
     
-    private func finishCreation()
+    private func sendInvitations()
     {
         guard !selectedUsers.isEmpty else {
             onComplete()
@@ -1155,18 +1114,24 @@ struct AddMembersToMeetGroupInlineView: View
         }
         
         Task {
-            isAdding = true
+            isInviting = true
             
             do {
-                let body = InsertMembersBody(
+                let body = InviteMembersBody(
                     meet_group_id: groupId,
                     user_uuids: selectedUsers.map { $0.user_uuid }
                 )
-                _ = try await AuthAPI.insertMembersToMeetGroup(baseURL: baseURL, token: token, body: body)
-                onComplete()
+                let response = try await AuthAPI.inviteMembersToMeetGroup(baseURL: baseURL, token: token, body: body)
+                
+                if response.success {
+                    onComplete()
+                } else {
+                    errorMessage = response.message
+                    isInviting = false
+                }
             } catch {
-                errorMessage = "Failed to add members"
-                isAdding = false
+                errorMessage = "Failed to send invitations"
+                isInviting = false
             }
         }
     }

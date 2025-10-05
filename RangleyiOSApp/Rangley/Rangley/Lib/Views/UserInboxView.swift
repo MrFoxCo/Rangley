@@ -12,14 +12,14 @@ struct UserInboxView: View
     @EnvironmentObject var inbox: InboxStore
 
     let onDismiss: () -> Void
-
+    let onMeetGroupsChanged: (() async -> Void)?
+    
     @State private var selectedTab: InboxTab = .all
     @State private var showClearConfirmation        = false
     @State private var friendRequestsExpanded       = true
     @State private var meetInvitationsExpanded      = true
     @State private var meetGroupInvitationsExpanded = true
-    
-    
+
     var body: some View
     {
         VStack(spacing: 0) {
@@ -363,6 +363,7 @@ struct UserInboxView: View
     {
         do {
             try await inbox.respondToMeetGroupInvitation(notification, accept: true)
+            await onMeetGroupsChanged?()  
         } catch {
             print("Failed to accept meet group invitation: \(error)")
         }

@@ -539,16 +539,19 @@ class UIStateStore: ObservableObject
         shouldShowTutorialWhenReady = false // Clear the flag
     }
     
-    func loadMeetGroups(baseURL: URL, token: String) async {
-        isLoadingMeetGroups = true
-        defer { isLoadingMeetGroups = false }
-        
+    func loadMeetGroups(baseURL: URL, token: String) async
+    {
         do {
-            meetGroups = try await AuthAPI.viewMeetGroups(baseURL: baseURL, token: token)
+            let groups = try await AuthAPI.viewMeetGroups(baseURL: baseURL, token: token)
+            await MainActor.run {
+                self.meetGroups = groups
+            }
         } catch {
             print("Failed to load meet groups: \(error)")
         }
     }
+    
+    
 }
 
 
@@ -633,6 +636,8 @@ public struct PublicMapView: View
                 Task {
                     await mapData.loadMeets()
                     await inbox.refresh()
+                    await uiState.loadMeetGroups(baseURL: Env.apiBaseURL, token: authState.currentToken)
+
                 }
             }
         
@@ -809,6 +814,7 @@ struct MapView: View
 // MARK: - Updated OverlaysView
 struct OverlaysView: View
 {
+    @EnvironmentObject var inbox: InboxStore
     
     @ObservedObject var mapData: MapDataStore
     @ObservedObject var locationData: LocationDataStore
@@ -907,7 +913,13 @@ struct OverlaysView: View
             }
         }
         .sheet(isPresented: $uiState.showInbox) {
-            UserInboxView(onDismiss: { uiState.showInbox = false })
+            UserInboxView(
+                onDismiss: { uiState.showInbox = false },
+                onMeetGroupsChanged: {
+                    await uiState.loadMeetGroups(baseURL: Env.apiBaseURL, token: authState.currentToken)
+                }
+            )
+            .environmentObject(inbox)  // Keep this
         }
         .sheet(isPresented: $uiState.showMessenger) {
             MessengerView(
@@ -922,8 +934,9 @@ struct OverlaysView: View
                     group: group,
                     baseURL: Env.apiBaseURL,
                     token: authState.currentToken,
-                    onDismiss: {
-                        uiState.showMeetGroupDetail = false
+                    onDismiss: { uiState.showMeetGroupDetail = false },
+                    onGroupChanged: {
+                        await uiState.loadMeetGroups(baseURL: Env.apiBaseURL, token: authState.currentToken)
                     }
                 )
             }

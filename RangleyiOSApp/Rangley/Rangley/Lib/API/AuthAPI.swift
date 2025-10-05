@@ -1277,7 +1277,7 @@ struct AuthAPI
     }
     
     // =========================================================
-    // MARK: - Friend Group Stuff
+    // MARK: - Meet Group Stuff
     // =========================================================
 
     
@@ -1484,6 +1484,25 @@ struct AuthAPI
         }
     }
 
+    static func leaveMeetGroup(baseURL: URL, token: String, body: LeaveMeetGroupBody)
+        async throws -> LeaveMeetGroupResponse
+    {
+        var req = URLRequest(url: makeURL(baseURL, ["s", "meet-groups", "leave"]))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.httpBody = try isoEncoder.encode(body)
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
+        guard (200..<300).contains(http.statusCode) else {
+           throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        }
+
+        return try JSONDecoder().decode(LeaveMeetGroupResponse.self, from: data)
+    }
+    
     // List friend groups
     static func viewMeetGroups(baseURL: URL, token: String)
         async throws -> [MeetGroup]
@@ -1588,7 +1607,7 @@ struct AuthAPI
     }
     
     // =========================================================
-    // MARK: - Friend Group Stuff
+    // MARK: - Meet Group Stuff
     // =========================================================
 
     // MARK: - helpers

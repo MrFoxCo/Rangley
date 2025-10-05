@@ -139,7 +139,8 @@ class AuthStateStore: ObservableObject
     }
 }
 
-extension Notification.Name {
+extension Notification.Name
+{
     static let userAccountDeleted = Notification.Name("userAccountDeleted")
     static let passwordChangeSuccess = Notification.Name("passwordChangeSuccess")
 }

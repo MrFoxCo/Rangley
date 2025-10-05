@@ -15,9 +15,12 @@ select * from rangley.vw_meet_status;
 select * from rangley.vw_stock_assets;
 
 
-select * from rangley.vw_user_inboxes where user_id = 2;
+select * from rangley.vw_user_inboxes where user_id  in (2,4);
 
-select * from rangley.vw_notifications;`
+select * from rangley.vw_user_inboxes where user_id  in (4);
+
+select * from rangley.vw_notifications where created_by_user_id in (2,4) order by dttm_created_utc desc;
+
 
 select * from rangley.vw_friend_requests;
 
@@ -30,6 +33,13 @@ select * FROM rangley.vw_meet_groups;
 
 
 delete FROM rangley.vw_meet_group_members;
+delete FROM rangley.vw_meet_groups;
+
+
+delete FROM rangley.vw_user_inboxes where notification_id between 333 and 345;
+delete FROM rangley.vw_notifications where notification_id between 333 and 345;
+
+
 
 
 UPDATE rangley.tb_users

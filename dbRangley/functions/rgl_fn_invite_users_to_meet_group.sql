@@ -25,6 +25,7 @@ DECLARE
     v_invited_count INT4 := 0;
     v_skipped_count INT4 := 0;
     v_notification_id INT8;
+    v_invitation_id INT8;  -- ADDED
 BEGIN
     -- Get user ID
     SELECT user_id INTO v_user_id
@@ -86,7 +87,7 @@ BEGIN
             CONTINUE;
         END IF;
 
-        -- Create invitation record
+        -- Create invitation record and capture the ID
         INSERT INTO rangley.tb_meet_group_invitations 
             (meet_group_id, invited_user_id, invited_by_user_id, status)
         VALUES 
@@ -96,14 +97,16 @@ BEGIN
             status = 4,
             invited_by_user_id = v_user_id,
             dttm_invited_utc = now(),
-            dttm_responded_utc = NULL;
+            dttm_responded_utc = NULL
+        RETURNING invitation_id INTO v_invitation_id;  -- CAPTURE THE ID
 
-        -- Create notification
+        -- Create notification with invitation_id in payload
         INSERT INTO rangley.tb_notifications (notification_type_id, created_by_user_id, payload_json)
         VALUES (
             19,  -- Meet Group Invitation Received
             v_user_id,
             jsonb_build_object(
+                'invitation_id', v_invitation_id,  -- ADDED
                 'meet_group_id', p_meet_group_id,
                 'meet_group_name', v_group_name,
                 'invited_by_user_id', v_user_id,

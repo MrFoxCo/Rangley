@@ -20,65 +20,78 @@ BEGIN
     SELECT user_id INTO v_user_id
     FROM rangley.vw_users
     WHERE cognito_sub = p_cognito_sub;
-    
+
     IF v_user_id IS NULL THEN
         RETURN QUERY SELECT FALSE, 'User not found'::TEXT, 0::INT4;
         RETURN;
     END IF;
-    
+
     -- Delete notifications that:
-    -- 1. Are NOT meet invitations (type 8) or friend requests (type 15)
+    -- 1. Are NOT meet invitations (type 8), friend requests (type 15), or meet group invitations (type 19)
     -- 2. OR are meet invitations that have been responded to (status != 4 invited)
     -- 3. OR are meet invitations for ended meets
     -- 4. OR are friend requests that have been responded to (status != 1 pending)
+    -- 5. OR are meet group invitations that have been responded to (status != 4 invited)
     DELETE FROM rangley.tb_user_inboxes ui
     WHERE ui.user_id = v_user_id
-      AND (
-          -- Delete all non-actionable notifications
-          ui.notification_id IN (
-              SELECT n.notification_id
-              FROM rangley.tb_notifications n
-              WHERE n.notification_type_id NOT IN (8, 15)
-          )
-          OR
-          -- Delete responded-to meet invitations
-          ui.notification_id IN (
-              SELECT n.notification_id
-              FROM rangley.tb_notifications n
-              JOIN rangley.tb_meet_participants mp 
-                  ON mp.meet_id = n.meet_id 
-                  AND mp.user_id = v_user_id
-              WHERE n.notification_type_id = 8
-                AND mp.participant_status_id NOT IN (4)  -- Not pending
-          )
-          OR
-          -- Delete invitations for ended meets
-          ui.notification_id IN (
-              SELECT n.notification_id
-              FROM rangley.tb_notifications n
-              JOIN rangley.vw_meet_change_stamps_desc mcsd ON mcsd.meet_id = n.meet_id
-              JOIN rangley.vw_meets m ON m.meet_id = mcsd.meet_id AND m.change_stamp = mcsd.change_stamp
-              WHERE n.notification_type_id = 8
-                AND m.dttm_end_utc < NOW()
-          )
-          OR
-          -- Delete responded-to friend requests
-          ui.notification_id IN (
-              SELECT n.notification_id
-              FROM rangley.tb_notifications n
-              WHERE n.notification_type_id = 15
-                AND (n.payload_json->>'friend_request_id')::INT8 IN (
-                    SELECT friend_request_id 
-                    FROM rangley.tb_friend_requests
-                    WHERE friend_request_status_id != 1  -- Not pending
-                )
-          )
-      );
-    
+    AND (
+        -- Delete all non-actionable notifications
+        ui.notification_id IN (
+            SELECT n.notification_id
+            FROM rangley.tb_notifications n
+            WHERE n.notification_type_id NOT IN (8, 15, 19)
+        )
+        OR
+        -- Delete responded-to meet invitations
+        ui.notification_id IN (
+            SELECT n.notification_id
+            FROM rangley.tb_notifications n
+            JOIN rangley.tb_meet_participants mp
+                ON mp.meet_id = n.meet_id
+                AND mp.user_id = v_user_id
+            WHERE n.notification_type_id = 8
+            AND mp.participant_status_id NOT IN (4) -- Not pending
+        )
+        OR
+        -- Delete invitations for ended meets
+        ui.notification_id IN (
+            SELECT n.notification_id
+            FROM rangley.tb_notifications n
+            JOIN rangley.vw_meet_change_stamps_desc mcsd ON mcsd.meet_id = n.meet_id
+            JOIN rangley.vw_meets m ON m.meet_id = mcsd.meet_id AND m.change_stamp = mcsd.change_stamp
+            WHERE n.notification_type_id = 8
+            AND m.dttm_end_utc < NOW()
+        )
+        OR
+        -- Delete responded-to friend requests
+        ui.notification_id IN (
+            SELECT n.notification_id
+            FROM rangley.tb_notifications n
+            WHERE n.notification_type_id = 15
+            AND (n.payload_json->>'friend_request_id')::INT8 IN (
+                SELECT friend_request_id
+                FROM rangley.tb_friend_requests
+                WHERE friend_request_status_id != 1 -- Not pending
+            )
+        )
+        OR
+        -- Delete responded-to meet group invitations
+        ui.notification_id IN (
+            SELECT n.notification_id
+            FROM rangley.tb_notifications n
+            WHERE n.notification_type_id = 19
+            AND (n.payload_json->>'invitation_id')::INT8 IN (
+                SELECT invitation_id
+                FROM rangley.tb_meet_group_invitations
+                WHERE status NOT IN (4) -- Not invited (accepted=6, declined=5)
+            )
+        )
+    );
+
     GET DIAGNOSTICS v_deleted_count = ROW_COUNT;
-    
+
     RETURN QUERY SELECT TRUE, 'Inbox cleared successfully'::TEXT, v_deleted_count;
-    
+
 EXCEPTION
     WHEN OTHERS THEN
         RETURN QUERY SELECT FALSE, ('Error: ' || SQLERRM)::TEXT, 0::INT4;
@@ -98,24 +111,28 @@ meet status table
 7    Deleted
 
 notification type
-0     NULL_VALUE
-1     Meet Created
-2     Meet Updated
-3     Meet Cancelled
-4     New Attendee
-5     Attendee Left
-6     Meet Reminder
-7     System Alert
-8     Meet Invitation Received
-9     Meet Invitation Accepted
-10    Meet Invitation Declined
-11    Meet Invitation Expired
-12    Meet Full
-13    Meet Role Changed
-14    Meet Location Changed
-15    Friend Request Received
-16    Friend Request Accepted
-17    Friend Request Declined
+0	NULL_VALUE
+1	Meet Created
+2	Meet Updated
+3	Meet Cancelled
+4	New Attendee
+5	Attendee Left
+6	Meet Reminder
+7	System Alert
+8	Meet Invitation Received
+9	Meet Invitation Accepted
+10	Meet Invitation Declined
+11	Meet Invitation Expired
+12	Meet Full
+13	Meet Role Changed
+14	Meet Location Changed
+15	Friend Request Received
+16	Friend Request Accepted
+17	Friend Request Declined
+18	Meet Deleted
+19	Meet Group Invitation Received
+20	Meet Group Invitation Accepted
+21	Meet Group Invitation Declined
 
 participant status
 3 	 maybe

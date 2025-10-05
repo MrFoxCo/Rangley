@@ -103,6 +103,7 @@ struct GroupMember: Codable, Sendable
     let username: String
     let display_name: String
     let dttm_added_utc: Date
+    let is_owner: Bool
 }
 
 struct ViewMembersBody: Codable, Sendable
@@ -117,6 +118,17 @@ struct ModifyImageBody: Codable, Sendable
 }
 
 struct ModifyImageResponse: Codable, Sendable
+{
+    let success: Bool
+    let message: String
+}
+
+struct LeaveMeetGroupBody: Codable, Sendable
+{
+    let meet_group_id: Int64
+}
+
+struct LeaveMeetGroupResponse: Codable, Sendable
 {
     let success: Bool
     let message: String

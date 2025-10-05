@@ -382,7 +382,8 @@ public func routes(_ app: Application) throws
                     user_uuid: result.user_uuid,
                     username: result.username,
                     display_name: result.display_name,
-                    dttm_added_utc: result.dttm_added_utc
+                    dttm_added_utc: result.dttm_added_utc,
+                    is_owner: result.is_owner
                 )
             }
             
@@ -1383,6 +1384,36 @@ public func routes(_ app: Application) throws
         }
     }
 
+    // Leave meet group
+    s.post("meet-groups", "leave")
+    {
+        req async throws -> HTTPDTO.MeetGroups.LeaveMeetGroupResponse in
+        
+        let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
+        
+        let body = try req.content.decode(HTTPDTO.MeetGroups.LeaveMeetGroupBody.self)
+        
+        guard let sql = req.db as? any SQLDatabase
+        else { throw Abort(.failedDependency, reason: "Database is not SQLDatabase") }
+        
+        do {
+            let result = try await Func.SystemLeaveMeetGroup.call(on: sql, .init(
+                cognito_sub: sub,
+                meet_group_id: body.meet_group_id
+            ))
+            
+            return .init(
+                success: result.success,
+                message: result.message
+            )
+            
+        } catch let error as PSQLError {
+            req.logger.error("Database error leaving meet group: \(error)")
+            throw Abort(.internalServerError, reason: "Failed to leave meet group")
+        }
+    }
+    
     // Update group image
     s.post("meet-groups", "modify-image")
     {

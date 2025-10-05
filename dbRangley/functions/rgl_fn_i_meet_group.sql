@@ -55,6 +55,12 @@ BEGIN
     VALUES (v_user_id, trim(p_group_name), 'stock', p_image_reference)
     RETURNING rangley.tb_meet_groups.meet_group_id INTO v_meet_group_id;
 
+
+	-- Add owner as a member
+	INSERT INTO rangley.tb_meet_group_members (meet_group_id, user_id)
+	VALUES (v_meet_group_id, v_user_id);
+
+
     RETURN QUERY SELECT TRUE, 'Meet group created successfully'::TEXT, v_meet_group_id;
 
 EXCEPTION
