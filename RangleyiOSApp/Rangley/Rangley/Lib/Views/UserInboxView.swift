@@ -14,9 +14,11 @@ struct UserInboxView: View
     let onDismiss: () -> Void
 
     @State private var selectedTab: InboxTab = .all
-    @State private var showClearConfirmation = false
-    @State private var friendRequestsExpanded = true
-    @State private var meetInvitationsExpanded = true
+    @State private var showClearConfirmation        = false
+    @State private var friendRequestsExpanded       = true
+    @State private var meetInvitationsExpanded      = true
+    @State private var meetGroupInvitationsExpanded = true
+    
     
     var body: some View
     {
@@ -138,7 +140,9 @@ struct UserInboxView: View
                                 onAcceptFriendRequest: { await acceptFriendRequest(notification) },
                                 onDeclineFriendRequest: { await declineFriendRequest(notification) },
                                 onAcceptMeetInvitation: { await acceptMeetInvitation(notification) },
-                                onDeclineMeetInvitation: { await declineMeetInvitation(notification) }
+                                onDeclineMeetInvitation: { await declineMeetInvitation(notification) },
+                                onAcceptMeetGroupInvitation: { await acceptMeetGroupInvitation(notification) },
+                                onDeclineMeetGroupInvitation: { await declineMeetGroupInvitation(notification) }
                             )
                             .padding(.horizontal, 20)
                         }
@@ -161,7 +165,34 @@ struct UserInboxView: View
                                 onAcceptFriendRequest: { await acceptFriendRequest(notification) },
                                 onDeclineFriendRequest: { await declineFriendRequest(notification) },
                                 onAcceptMeetInvitation: { await acceptMeetInvitation(notification) },
-                                onDeclineMeetInvitation: { await declineMeetInvitation(notification) }
+                                onDeclineMeetInvitation: { await declineMeetInvitation(notification) },
+                                onAcceptMeetGroupInvitation: { await acceptMeetGroupInvitation(notification) },
+                                onDeclineMeetGroupInvitation: { await declineMeetGroupInvitation(notification) }
+                            )
+                            .padding(.horizontal, 20)
+                        }
+                    }
+                }
+                
+                // Add this section after Meet Invitations and before Other Notifications
+                if !meetGroupInvitations.isEmpty {
+                    CollapsibleSection(
+                        title: "Group Invitations",
+                        icon: "person.3.fill",
+                        count: meetGroupInvitations.count,
+                        isExpanded: $meetGroupInvitationsExpanded
+                    ) {
+                        ForEach(meetGroupInvitations) { notification in
+                            NotificationCard(
+                                notification: notification,
+                                onTap: { await handleNotificationTap(notification) },
+                                onDelete: { await deleteNotification(notification) },
+                                onAcceptFriendRequest: { await acceptFriendRequest(notification) },
+                                onDeclineFriendRequest: { await declineFriendRequest(notification) },
+                                onAcceptMeetInvitation: { await acceptMeetInvitation(notification) },
+                                onDeclineMeetInvitation: { await declineMeetInvitation(notification) },
+                                onAcceptMeetGroupInvitation: { await acceptMeetGroupInvitation(notification) },
+                                onDeclineMeetGroupInvitation: { await declineMeetGroupInvitation(notification) }
                             )
                             .padding(.horizontal, 20)
                         }
@@ -178,7 +209,9 @@ struct UserInboxView: View
                             onAcceptFriendRequest: { await acceptFriendRequest(notification) },
                             onDeclineFriendRequest: { await declineFriendRequest(notification) },
                             onAcceptMeetInvitation: { await acceptMeetInvitation(notification) },
-                            onDeclineMeetInvitation: { await declineMeetInvitation(notification) }
+                            onDeclineMeetInvitation: { await declineMeetInvitation(notification) },
+                            onAcceptMeetGroupInvitation: { await acceptMeetGroupInvitation(notification) },
+                            onDeclineMeetGroupInvitation: { await declineMeetGroupInvitation(notification) }
                         )
                         .padding(.horizontal, 20)
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
@@ -266,16 +299,26 @@ struct UserInboxView: View
     }
     
     // Separate notifications by priority
-    private var friendRequests: [InboxNotificationModelBody] {
+    private var friendRequests: [InboxNotificationModelBody]
+    {
         filteredNotifications.filter { $0.notification_type_id == 15 }
     }
     
-    private var meetInvitations: [InboxNotificationModelBody] {
+    private var meetInvitations: [InboxNotificationModelBody]
+    {
         filteredNotifications.filter { $0.notification_type_id == 8 }
     }
     
-    private var otherNotifications: [InboxNotificationModelBody] {
-        filteredNotifications.filter { $0.notification_type_id != 15 && $0.notification_type_id != 8 }
+    // Add this new computed property
+    private var meetGroupInvitations: [InboxNotificationModelBody]
+    {
+        filteredNotifications.filter { $0.notification_type_id == 19 }
+    }
+    
+    // Update otherNotifications to exclude type 19
+    private var otherNotifications: [InboxNotificationModelBody]
+    {
+        filteredNotifications.filter { ![15, 8, 19].contains($0.notification_type_id) }
     }
     
     // MARK: - Actions
@@ -314,10 +357,30 @@ struct UserInboxView: View
             print("Failed to decline meet invitation: \(error)")
         }
     }
+    
+    // Add these action methods
+    private func acceptMeetGroupInvitation(_ notification: InboxNotificationModelBody) async
+    {
+        do {
+            try await inbox.respondToMeetGroupInvitation(notification, accept: true)
+        } catch {
+            print("Failed to accept meet group invitation: \(error)")
+        }
+    }
+
+    private func declineMeetGroupInvitation(_ notification: InboxNotificationModelBody) async
+    {
+        do {
+            try await inbox.respondToMeetGroupInvitation(notification, accept: false)
+        } catch {
+            print("Failed to decline meet group invitation: \(error)")
+        }
+    }
 }
 
 // MARK: - Collapsible Section
-struct CollapsibleSection<Content: View>: View {
+struct CollapsibleSection<Content: View>: View
+{
     let title: String
     let icon: String
     let count: Int
@@ -422,12 +485,14 @@ enum InboxTab: String, CaseIterable
 struct NotificationCard: View
 {
     let notification: InboxNotificationModelBody
-    let onTap: () async -> Void
-    let onDelete: () async -> Void
-    let onAcceptFriendRequest: () async -> Void
-    let onDeclineFriendRequest: () async -> Void
-    let onAcceptMeetInvitation: () async -> Void
-    let onDeclineMeetInvitation: () async -> Void
+    let onTap                       : () async -> Void
+    let onDelete                    : () async -> Void
+    let onAcceptFriendRequest       : () async -> Void
+    let onDeclineFriendRequest      : () async -> Void
+    let onAcceptMeetInvitation      : () async -> Void
+    let onDeclineMeetInvitation     : () async -> Void
+    let onAcceptMeetGroupInvitation : () async -> Void
+    let onDeclineMeetGroupInvitation: () async -> Void
     
     @State private var isProcessing = false
     
@@ -483,7 +548,8 @@ struct NotificationCard: View
             }
             
             // Friend request actions
-            if notification.notification_type_id == 15 {
+            if notification.notification_type_id == 15
+            {
                 HStack(spacing: 12) {
                     Button {
                         Task {
@@ -544,7 +610,8 @@ struct NotificationCard: View
             }
             
             // Meet invitation actions
-            if notification.notification_type_id == 8 {
+            if notification.notification_type_id == 8
+            {
                 HStack(spacing: 12) {
                     Button {
                         Task {
@@ -603,6 +670,68 @@ struct NotificationCard: View
                 }
                 .allowsHitTesting(!isProcessing)
             }
+            
+            if notification.notification_type_id == 19
+            {
+                HStack(spacing: 12) {
+                    Button {
+                        Task {
+                            isProcessing = true
+                            await onAcceptMeetGroupInvitation()
+                            isProcessing = false
+                        }
+                    } label: {
+                        HStack {
+                            if isProcessing {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                                    .tint(.black)
+                            } else {
+                                Text("Join Group")
+                            }
+                        }
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.black)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(AppPalette.Brand.spearmintGreen)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                    .disabled(isProcessing)
+                    .buttonStyle(.plain)
+                    
+                    Button {
+                        Task {
+                            isProcessing = true
+                            await onDeclineMeetGroupInvitation()
+                            isProcessing = false
+                        }
+                    } label: {
+                        HStack {
+                            if isProcessing {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                                    .tint(AppPalette.Brand.neonPink)
+                            } else {
+                                Text("Decline")
+                            }
+                        }
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(AppPalette.Brand.neonPink)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(Color.clear)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(AppPalette.Brand.neonPink.opacity(0.5), lineWidth: 1)
+                        )
+                    }
+                    .disabled(isProcessing)
+                    .buttonStyle(.plain)
+                }
+                .allowsHitTesting(!isProcessing)
+            }
+            
         }
         .padding(16)
         .background(
@@ -622,11 +751,12 @@ extension InboxNotificationModelBody
 {
     var icon: String {
         switch notification_type_id {
-        case 15: return "person.badge.plus" // Friend Request Received
-        case 16: return "person.fill.checkmark" // Friend Request Accepted
-        case 17: return "person.fill.xmark" // Friend Request Declined
-        case 8: return "envelope.fill" // Meet Invitation Received
-        case 9: return "checkmark.circle.fill" // Meet Invitation Accepted
+        case 15: return "person.badge.plus"
+        case 16: return "person.fill.checkmark"
+        case 17: return "person.fill.xmark"
+        case 8: return "envelope.fill"
+        case 9: return "checkmark.circle.fill"
+        case 19: return "person.3.fill" // Meet Group Invitation
         default: return "bell.fill"
         }
     }
@@ -636,6 +766,7 @@ extension InboxNotificationModelBody
         case 15, 16: return AppPalette.Brand.neonPink
         case 17: return .red
         case 8, 9: return .blue
+        case 19: return AppPalette.Brand.spearmintGreen
         default: return .gray
         }
     }
@@ -656,6 +787,7 @@ extension InboxNotificationModelBody
         case 16: return "Friend Request Accepted"
         case 17: return "Friend Request Declined"
         case 8: return "Meet Invitation"
+        case 19: return "Meet Group Invitation"
         default: return notification_type
         }
     }

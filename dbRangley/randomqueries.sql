@@ -12,6 +12,8 @@ select * from rangley.vw_notification_type;
 
 select * from rangley.vw_meet_status;
 
+select * from rangley.vw_stock_assets;
+
 
 select * from rangley.vw_user_inboxes where user_id = 2;
 
@@ -24,6 +26,10 @@ select * FROM rangley.vw_friend_request_status;
 select * FROM rangley.vw_meet_group_members;
 
 select * FROM rangley.vw_meet_groups;
+
+
+
+delete FROM rangley.vw_meet_group_members;
 
 
 UPDATE rangley.tb_users
@@ -52,6 +58,7 @@ WHERE user_id = 36;
 
 
 select user_id, display_name, dob from rangley.vw_users order by dttm_created_utc desc;
+
 
 
 DELETE FROM rangley.tb_user_inboxes ui

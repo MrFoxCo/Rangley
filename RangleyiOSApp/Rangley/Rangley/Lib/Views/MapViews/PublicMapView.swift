@@ -193,11 +193,12 @@ class MapDataStore: ObservableObject
     }
 }
 
+// MARK: - Updated MeetGroupsStore (replaces FriendGroupsStore)
 @MainActor
-class FriendGroupsStore: ObservableObject
+class MeetGroupsStore: ObservableObject
 {
-    @Published var groups: [FriendGroup] = []
-    @Published var selectedGroup: FriendGroup?
+    @Published var groups: [MeetGroup] = []
+    @Published var selectedGroup: MeetGroup?
     @Published var isLoading = false
     
     private let baseURL: URL
@@ -211,13 +212,13 @@ class FriendGroupsStore: ObservableObject
         defer { isLoading = false }
         
         do {
-            let fetchedGroups = try await AuthAPI.viewFriendGroups(
+            let fetchedGroups = try await AuthAPI.viewMeetGroups(
                 baseURL: baseURL,
                 token: token
             )
             groups = fetchedGroups
         } catch {
-            print("Failed to load friend groups: \(error)")
+            print("Failed to load meet groups: \(error)")
         }
     }
 }
@@ -421,7 +422,7 @@ class LocationDataStore: ObservableObject
 }
 
 
-// MARK: - UI State Manager
+// MARK: - Updated UIStateStore
 @MainActor
 class UIStateStore: ObservableObject
 {
@@ -443,10 +444,10 @@ class UIStateStore: ObservableObject
     @Published var showInbox           = false
     @Published var showMessenger       = false
     
-    @Published var friendGroups: [FriendGroup] = []
-    @Published var selectedFriendGroup: FriendGroup?
-    @Published var isLoadingFriendGroups = false
-    @Published var showFriendGroupDetail = false
+    @Published var meetGroups: [MeetGroup] = []
+    @Published var selectedMeetGroup: MeetGroup?
+    @Published var isLoadingMeetGroups = false
+    @Published var showMeetGroupDetail = false
     
     private let dayNightTimer = Timer.publish(every: 300, on: .main, in: .common).autoconnect()
     
@@ -538,17 +539,18 @@ class UIStateStore: ObservableObject
         shouldShowTutorialWhenReady = false // Clear the flag
     }
     
-    func loadFriendGroups(baseURL: URL, token: String) async {
-        isLoadingFriendGroups = true
-        defer { isLoadingFriendGroups = false }
+    func loadMeetGroups(baseURL: URL, token: String) async {
+        isLoadingMeetGroups = true
+        defer { isLoadingMeetGroups = false }
         
         do {
-            friendGroups = try await AuthAPI.viewFriendGroups(baseURL: baseURL, token: token)
+            meetGroups = try await AuthAPI.viewMeetGroups(baseURL: baseURL, token: token)
         } catch {
-            print("Failed to load friend groups: \(error)")
+            print("Failed to load meet groups: \(error)")
         }
     }
 }
+
 
 
 // MARK: - Meet Creation Service
@@ -601,7 +603,7 @@ class MeetCreationService
 }
 
 
-// MARK: - Updated PublicMapView with Smart Refresh Integration
+// MARK: - Updated PublicMapView
 @MainActor
 public struct PublicMapView: View
 {
@@ -612,7 +614,7 @@ public struct PublicMapView: View
     @StateObject private var mapData        = MapDataStore()
     @StateObject private var uiState        = UIStateStore()
     @StateObject private var inbox          = InboxStore(baseURL: Env.apiBaseURL)
-    @StateObject private var friendGroupsStore = FriendGroupsStore(baseURL: Env.apiBaseURL)
+    @StateObject private var meetGroupsStore = MeetGroupsStore(baseURL: Env.apiBaseURL)
     
     @Namespace private var meetNS
     @State private var tapTask: Task<Void, Never>?
@@ -639,15 +641,6 @@ public struct PublicMapView: View
                     Task { await inbox.setToken(nil) }
                 }
             }
-        // TODO: - bad was screwing up account creation
-        //            .onReceive(NotificationCenter.default.publisher(for: .init("amplify.auth.signedIn"))) { _ in
-        //                authState.checkAuthenticationStatus()
-        //            }
-        //            .onReceive(NotificationCenter.default.publisher(for: .init("amplify.auth.signedOut"))) { _ in
-        //                authState.checkAuthenticationStatus()
-        //            }
-        
-        
     }
     
     
@@ -696,7 +689,7 @@ public struct PublicMapView: View
                 await mapData.loadMeets()
             }
             await mapData.loadMeets()
-            await uiState.loadFriendGroups(baseURL: Env.apiBaseURL, token: authState.currentToken)
+            await uiState.loadMeetGroups(baseURL: Env.apiBaseURL, token: authState.currentToken)
             uiState.startDayNightTimer()
         }
         .task(id: authState.currentToken) {
@@ -813,7 +806,7 @@ struct MapView: View
 }
 
 
-// MARK: - Overlays View Component
+// MARK: - Updated OverlaysView
 struct OverlaysView: View
 {
     
@@ -923,14 +916,14 @@ struct OverlaysView: View
                 onDismiss: { uiState.showMessenger = false }
             )
         }
-        .sheet(isPresented: $uiState.showFriendGroupDetail) {
-            if let group = uiState.selectedFriendGroup {
-                FriendGroupDetailView(
+        .sheet(isPresented: $uiState.showMeetGroupDetail) {
+            if let group = uiState.selectedMeetGroup {
+                MeetGroupDetailView(
                     group: group,
                     baseURL: Env.apiBaseURL,
                     token: authState.currentToken,
                     onDismiss: {
-                        uiState.showFriendGroupDetail = false
+                        uiState.showMeetGroupDetail = false
                     }
                 )
             }
@@ -998,9 +991,7 @@ struct OverlaysView: View
     }
 }
 
-// TODO: --- THE FRIENDS GROUP BAR IS GONNA BE A FACTOR HERE SOMEHOW... ON THE LEFT VERTICAL
-// PART OF THE FUCKING SCREEN ^^^
-// MARK: - Controls View Component (Instagram-style layout)
+// MARK: - Updated ControlsView
 struct ControlsView: View
 {
     @ObservedObject var mapData     : MapDataStore
@@ -1155,19 +1146,19 @@ struct ControlsView: View
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
-            // Friend Groups Bar - Left side (will hide with shouldHideDock)
+            // Meet Groups Bar - Left side (will hide with shouldHideDock)
             if !shouldHideDock {
                 VStack {
-                    FriendGroupBar(
-                        groups: uiState.friendGroups,
-                        selectedGroup: $uiState.selectedFriendGroup,
+                    MeetGroupBar(
+                        groups: uiState.meetGroups,
+                        selectedGroup: $uiState.selectedMeetGroup,
                         baseURL: Env.apiBaseURL,
                         token: authState.currentToken,
                         onGroupsChanged: {
-                            await uiState.loadFriendGroups(baseURL: Env.apiBaseURL, token: authState.currentToken)
+                            await uiState.loadMeetGroups(baseURL: Env.apiBaseURL, token: authState.currentToken)
                         },
                         onGroupTapped: {
-                            uiState.showFriendGroupDetail = true
+                            uiState.showMeetGroupDetail = true
                         }
                     )
                     .padding(.leading, 8)

@@ -7,6 +7,9 @@
 
 import SwiftUI
 
+
+
+
 struct InboxNotificationModelResponse: Codable, Sendable
 {
     let notifications: [InboxNotificationModelBody]
@@ -26,6 +29,32 @@ struct InboxNotificationModelBody: Codable, Sendable
     let dttm_received_utc       : Date
     let dttm_opened_utc         : Date?
     let is_read                 : Bool
+    
+    // MARK: - Payload Accessors
+    
+    /// Decode into a typed payload
+    func payload<T: Decodable>(_ type: T.Type = T.self) -> T? {
+        guard let data = Self.normalizeToUTF8JSONData(payload_json) else { return nil }
+        return try? Self.jsonDecoder.decode(T.self, from: data)
+    }
+
+    /// Decode into `Any` for generic access
+    func payloadAny() -> Any? {
+        guard let data = Self.normalizeToUTF8JSONData(payload_json) else { return nil }
+        return try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
+    }
+    
+    /// Convenience accessor for friend_request_id
+    var friendRequestId: Int64? {
+        guard let dict = payloadAny() as? [String: Any] else { return nil }
+        return dict["friend_request_id"] as? Int64
+    }
+    
+    /// Convenience accessor for meet group invitation_id
+    var meetGroupInvitationId: Int64? {
+        guard let dict = payloadAny() as? [String: Any] else { return nil }
+        return dict["invitation_id"] as? Int64
+    }
 }
 
 struct ClearInboxResponse: Codable, Sendable
@@ -52,29 +81,9 @@ struct FriendRequestPayload: Codable {
     // Add any other fields your backend includes
 }
 
-// Add the same payload parsing extensions
-extension InboxNotificationModelBody {
-    /// Decode into a typed payload
-    func payload<T: Decodable>(_ type: T.Type = T.self) -> T? {
-        guard let data = Self.normalizeToUTF8JSONData(payload_json) else { return nil }
-        return try? Self.jsonDecoder.decode(T.self, from: data)
-    }
-
-    /// Decode into `Any` for generic access
-    func payloadAny() -> Any? {
-        guard let data = Self.normalizeToUTF8JSONData(payload_json) else { return nil }
-        return try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
-    }
-    
-    /// Convenience accessor for friend_request_id
-    var friendRequestId: Int64? {
-        guard let dict = payloadAny() as? [String: Any] else { return nil }
-        return dict["friend_request_id"] as? Int64
-    }
-}
-
 // MARK: - Private helpers (keep the leniency, but simplified now that server sends JSON text)
-private extension InboxNotificationModelBody {
+private extension InboxNotificationModelBody
+{
     static var jsonDecoder: JSONDecoder = {
         let d = JSONDecoder()
         d.dateDecodingStrategy = .custom { dec in
@@ -126,7 +135,8 @@ private extension InboxNotificationModelBody {
     }
 }
 
-private extension JSONSerialization {
+private extension JSONSerialization
+{
     /// “Safe” check that doesn’t require the *top-level* to be object/array first;
     /// we attempt decode and accept fragments via `.fragmentsAllowed`.
     static func isValidJSONObjectSafe(_ data: Data) -> Bool {

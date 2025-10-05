@@ -1,20 +1,21 @@
 //
-//  FriendGroupsBar.swift
+//  MeetGroupBar.swift
 //  Rangley
 //
 //  Created by Anthony Guzzardo on 10/4/25.
 //
 
+
 import SwiftUI
 
 // MARK: - Container for Sheet Presentation
-struct FriendGroupBarContainer: View
+struct MeetGroupBarContainer: View
 {
     let baseURL: URL
     let token: String
     
-    @State private var friendGroups: [FriendGroup] = []
-    @State private var selectedGroup: FriendGroup?
+    @State private var meetGroups: [MeetGroup] = []
+    @State private var selectedGroup: MeetGroup?
     @State private var isLoading = false
     @State private var showGroupDetail = false
     
@@ -22,12 +23,12 @@ struct FriendGroupBarContainer: View
     {
         NavigationView {
             HStack(spacing: 0) {
-                FriendGroupBar(
-                    groups: friendGroups,
+                MeetGroupBar(
+                    groups: meetGroups,
                     selectedGroup: $selectedGroup,
                     baseURL: baseURL,
                     token: token,
-                    onGroupsChanged: { await loadFriendGroups() },
+                    onGroupsChanged: { await loadMeetGroups() },
                     onGroupTapped: {
                         showGroupDetail = true
                     }
@@ -36,7 +37,7 @@ struct FriendGroupBarContainer: View
                 VStack {
                     // Header
                     HStack {
-                        Text("Groups")
+                        Text("Meet Groups")
                             .font(.system(size: 20, weight: .bold))
                             .foregroundStyle(AppPalette.Text.primary)
                         
@@ -85,11 +86,11 @@ struct FriendGroupBarContainer: View
             .navigationBarHidden(true)
         }
         .task {
-            await loadFriendGroups()
+            await loadMeetGroups()
         }
         .sheet(isPresented: $showGroupDetail) {
             if let group = selectedGroup {
-                FriendGroupDetailView(
+                MeetGroupDetailView(
                     group: group,
                     baseURL: baseURL,
                     token: token,
@@ -101,30 +102,30 @@ struct FriendGroupBarContainer: View
         }
     }
     
-    private func loadFriendGroups() async
+    private func loadMeetGroups() async
     {
         isLoading = true
         
         do {
-            let groups = try await AuthAPI.viewFriendGroups(baseURL: baseURL, token: token)
+            let groups = try await AuthAPI.viewMeetGroups(baseURL: baseURL, token: token)
             await MainActor.run {
-                friendGroups = groups
+                meetGroups = groups
                 isLoading = false
             }
         } catch {
             await MainActor.run {
                 isLoading = false
             }
-            print("Failed to load friend groups: \(error)")
+            print("Failed to load meet groups: \(error)")
         }
     }
 }
 
-// MARK: - Friend Group Bar (Floating Vertical Dock Style)
-struct FriendGroupBar: View
+// MARK: - Meet Group Bar (Floating Vertical Dock Style)
+struct MeetGroupBar: View
 {
-    let groups: [FriendGroup]
-    @Binding var selectedGroup: FriendGroup?
+    let groups: [MeetGroup]
+    @Binding var selectedGroup: MeetGroup?
     let baseURL: URL
     let token: String
     let onGroupsChanged: () async -> Void
@@ -161,10 +162,10 @@ struct FriendGroupBar: View
             
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 10) {
-                    ForEach(groups, id: \.friend_group_id) { group in
+                    ForEach(groups, id: \.meet_group_id) { group in
                         GroupDockButton(
                             group: group,
-                            isSelected: selectedGroup?.friend_group_id == group.friend_group_id,
+                            isSelected: selectedGroup?.meet_group_id == group.meet_group_id,
                             onTap: {
                                 selectedGroup = group
                                 onGroupTapped()
@@ -193,7 +194,7 @@ struct FriendGroupBar: View
         .shadow(color: AppPalette.Brand.neonPink.opacity(0.15), radius: 8, x: 0, y: 4)
         .frame(width: 64)
         .sheet(isPresented: $showCreateGroup) {
-            CreateFriendGroupView(
+            CreateMeetGroupView(
                 baseURL: baseURL,
                 token: token,
                 onDismiss: {
@@ -204,14 +205,14 @@ struct FriendGroupBar: View
         }
     }
     
-    private func deleteGroup(_ group: FriendGroup) {
+    private func deleteGroup(_ group: MeetGroup) {
         Task {
             do {
-                let body = DeleteGroupBody(friend_group_id: group.friend_group_id)
-                let response = try await AuthAPI.deleteFriendGroup(baseURL: baseURL, token: token, body: body)
+                let body = DeleteGroupBody(meet_group_id: group.meet_group_id)
+                let response = try await AuthAPI.deleteMeetGroup(baseURL: baseURL, token: token, body: body)
                 
                 if response.success {
-                    if selectedGroup?.friend_group_id == group.friend_group_id {
+                    if selectedGroup?.meet_group_id == group.meet_group_id {
                         selectedGroup = nil
                     }
                     await onGroupsChanged()
@@ -226,30 +227,23 @@ struct FriendGroupBar: View
 // MARK: - Group Dock Button
 private struct GroupDockButton: View
 {
-    let group: FriendGroup
+    let group: MeetGroup
     let isSelected: Bool
     let onTap: () -> Void
     let onDelete: () -> Void
     
     @State private var showDeleteConfirm = false
     
-    private var initials: String {
-        let words = group.name.split(separator: " ")
-        if words.count >= 2 {
-            let first = String(words[0].prefix(1))
-            let second = String(words[1].prefix(1))
-            return (first + second).uppercased()
-        } else if let first = words.first {
-            return String(first.prefix(2)).uppercased()
-        }
-        return "G"
+    private var groupIcon: String {
+        // Use the image_reference for SF Symbol
+        return group.image_reference
     }
     
     var body: some View
     {
         Button(action: onTap) {
-            Text(initials)
-                .font(.system(size: 16, weight: .bold))
+            Image(systemName: groupIcon)
+                .font(.system(size: 20, weight: .semibold))
                 .foregroundStyle(
                     isSelected ? AppPalette.Brand.neonPink : AppPalette.Text.primary
                 )
@@ -297,10 +291,10 @@ private struct GroupDockButton: View
     }
 }
 
-// MARK: - Friend Group Detail View
-struct FriendGroupDetailView: View
+// MARK: - Updated MeetGroupDetailView (Invitation Only)
+struct MeetGroupDetailView: View
 {
-    let group: FriendGroup
+    let group: MeetGroup
     let baseURL: URL
     let token: String
     let onDismiss: () -> Void
@@ -310,6 +304,8 @@ struct FriendGroupDetailView: View
     @State private var errorMessage: String?
     @State private var showDeleteConfirm = false
     @State private var isDeleting = false
+    @State private var showImagePicker = false
+    @State private var showInviteMembers = false // REMOVED: showAddMembers
     
     var body: some View
     {
@@ -320,6 +316,25 @@ struct FriendGroupDetailView: View
                 VStack(spacing: 0) {
                     // Group info header
                     VStack(spacing: 12) {
+                        // Group icon
+                        Button {
+                            showImagePicker = true
+                        } label: {
+                            Image(systemName: group.image_reference)
+                                .font(.system(size: 32, weight: .semibold))
+                                .foregroundStyle(AppPalette.Brand.neonPink)
+                                .frame(width: 80, height: 80)
+                                .background(
+                                    Circle()
+                                        .fill(AppPalette.Brand.neonPink.opacity(0.2))
+                                )
+                                .overlay(
+                                    Circle()
+                                        .stroke(AppPalette.Brand.neonPink.opacity(0.8), lineWidth: 2)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        
                         Text(group.name)
                             .font(.system(size: 24, weight: .bold))
                             .foregroundStyle(AppPalette.Text.primary)
@@ -331,6 +346,30 @@ struct FriendGroupDetailView: View
                     .frame(maxWidth: .infinity)
                     .padding(.top, 20)
                     .padding(.bottom, 24)
+                    
+                    // Action button (ONLY INVITE)
+                    VStack(spacing: 12) {
+                        Button {
+                            showInviteMembers = true
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "envelope.badge.person.crop")
+                                    .font(.system(size: 14, weight: .semibold))
+                                Text("Invite Members")
+                                    .font(.system(size: 14, weight: .semibold))
+                            }
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 44)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(AppPalette.Brand.neonPink)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 16)
+                    }
                     
                     // Content area
                     if isLoading {
@@ -385,6 +424,16 @@ struct FriendGroupDetailView: View
                                         }
                                         
                                         Spacer()
+                                        
+                                        // Remove member button
+                                        Button {
+                                            removeMember(member)
+                                        } label: {
+                                            Image(systemName: "minus.circle.fill")
+                                                .font(.system(size: 20))
+                                                .foregroundStyle(.red.opacity(0.8))
+                                        }
+                                        .buttonStyle(.plain)
                                     }
                                     .padding(.horizontal, 16)
                                     .padding(.vertical, 12)
@@ -486,15 +535,54 @@ struct FriendGroupDetailView: View
         .task {
             await loadMembers()
         }
+        .sheet(isPresented: $showImagePicker) {
+            MeetGroupIconPicker(
+                currentIcon: group.image_reference,
+                baseURL: baseURL,
+                token: token,
+                groupId: group.meet_group_id,
+                onDismiss: { showImagePicker = false }
+            )
+        }
+        .sheet(isPresented: $showInviteMembers) {
+            InviteMembersToMeetGroupView(
+                group: group,
+                baseURL: baseURL,
+                token: token,
+                onDismiss: {
+                    showInviteMembers = false
+                }
+            )
+        }
     }
     
-    private func deleteGroup() {
+    private func removeMember(_ member: GroupMember)
+    {
+        Task {
+            do {
+                let body = RemoveMembersBody(
+                    meet_group_id: group.meet_group_id,
+                    user_uuids: [member.user_uuid]
+                )
+                let response = try await AuthAPI.deleteMembersFromMeetGroup(baseURL: baseURL, token: token, body: body)
+                
+                if response.success {
+                    await loadMembers()
+                }
+            } catch {
+                errorMessage = "Failed to remove member"
+            }
+        }
+    }
+    
+    private func deleteGroup()
+    {
         Task {
             isDeleting = true
             
             do {
-                let body = DeleteGroupBody(friend_group_id: group.friend_group_id)
-                let response = try await AuthAPI.deleteFriendGroup(baseURL: baseURL, token: token, body: body)
+                let body = DeleteGroupBody(meet_group_id: group.meet_group_id)
+                let response = try await AuthAPI.deleteMeetGroup(baseURL: baseURL, token: token, body: body)
                 
                 if response.success {
                     onDismiss()
@@ -515,8 +603,7 @@ struct FriendGroupDetailView: View
         errorMessage = nil
         
         do {
-            let body = ViewMembersBody(friend_group_id: group.friend_group_id)
-            let fetchedMembers = try await AuthAPI.viewFriendGroupMembers(baseURL: baseURL, token: token, body: body)
+            let fetchedMembers = try await AuthAPI.viewMeetGroupMembers(baseURL: baseURL, token: token, meetGroupId: group.meet_group_id)
             
             await MainActor.run {
                 members = fetchedMembers
@@ -532,18 +619,172 @@ struct FriendGroupDetailView: View
     }
 }
 
-struct CreateFriendGroupView: View
+// MARK: - Meet Group Icon Picker
+struct MeetGroupIconPicker: View
+{
+    let currentIcon: String
+    let baseURL: URL
+    let token: String
+    let groupId: Int64
+    let onDismiss: () -> Void
+    
+    @State private var isUpdating = false
+    @State private var errorMessage: String?
+    
+    private let availableIcons = [
+        "person.3.fill",
+        "basketball.fill",
+        "football.fill",
+        "fork.knife",
+        "book.fill",
+        "figure.run",
+        "gamecontroller.fill",
+        "music.note",
+        "airplane",
+        "cup.and.saucer.fill",
+        "film.fill",
+        "paintbrush.fill",
+        "leaf.fill",
+        "brain.head.profile",
+        "heart.fill",
+        "wineglass.fill",
+        "tennis.racket"
+    ]
+    
+    var body: some View
+    {
+        NavigationView {
+            VStack(spacing: 20) {
+                Text("Choose Group Icon")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(AppPalette.Text.primary)
+                    .padding(.top, 20)
+                
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 4), spacing: 16) {
+                    ForEach(availableIcons, id: \.self) { icon in
+                        Button {
+                            updateIcon(icon)
+                        } label: {
+                            Image(systemName: icon)
+                                .font(.system(size: 24, weight: .semibold))
+                                .foregroundStyle(
+                                    currentIcon == icon ? AppPalette.Brand.neonPink : AppPalette.Text.primary
+                                )
+                                .frame(width: 60, height: 60)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .fill(
+                                            currentIcon == icon
+                                                ? AppPalette.Brand.neonPink.opacity(0.2)
+                                                : AppPalette.Brand.japPurple
+                                        )
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(
+                                            currentIcon == icon
+                                                ? AppPalette.Brand.neonPink
+                                                : AppPalette.Brand.neonPink.opacity(0.3),
+                                            lineWidth: currentIcon == icon ? 2 : 1
+                                        )
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isUpdating)
+                    }
+                }
+                .padding(.horizontal, 20)
+                
+                if let error = errorMessage {
+                    Text(error)
+                        .font(.system(size: 14))
+                        .foregroundStyle(.red)
+                }
+                
+                Spacer()
+            }
+            .background(AppPalette.Brand.formBlack)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") { onDismiss() }
+                        .foregroundStyle(AppPalette.Brand.neonPink)
+                        .disabled(isUpdating)
+                }
+            }
+            .overlay {
+                if isUpdating {
+                    ZStack {
+                        Color.black.opacity(0.3).ignoresSafeArea()
+                        ProgressView()
+                            .scaleEffect(1.5)
+                            .tint(AppPalette.Brand.neonPink)
+                    }
+                }
+            }
+        }
+    }
+    
+    private func updateIcon(_ icon: String) {
+        Task {
+            isUpdating = true
+            errorMessage = nil
+            
+            do {
+                let body = ModifyImageBody(
+                    meet_group_id: groupId,
+                    image_reference: icon
+                )
+                let response = try await AuthAPI.modifyMeetGroupImage(baseURL: baseURL, token: token, body: body)
+                
+                if response.success {
+                    onDismiss()
+                } else {
+                    errorMessage = response.message
+                    isUpdating = false
+                }
+            } catch {
+                errorMessage = "Failed to update icon"
+                isUpdating = false
+            }
+        }
+    }
+}
+
+// MARK: - Create Meet Group View
+struct CreateMeetGroupView: View
 {
     let baseURL: URL
     let token: String
     let onDismiss: () -> Void
     
     @State private var groupName = ""
+    @State private var selectedIcon = "person.3.fill"
     @State private var isCreating = false
-    @State private var errorMessage     : String?
+    @State private var errorMessage: String?
     @State private var navigationPath = NavigationPath()
-    @State private var createdGroupId   : Int64?
-    @State private var selectedUsers    : [ViewUsersModel] = []
+    @State private var createdGroupId: Int64?
+    @State private var selectedUsers: [ViewUsersModel] = []
+    
+    private let availableIcons = [
+        "person.3.fill",
+        "basketball.fill",
+        "football.fill",
+        "fork.knife",
+        "book.fill",
+        "figure.run",
+        "gamecontroller.fill",
+        "music.note",
+        "airplane",
+        "cup.and.saucer.fill",
+        "film.fill",
+        "paintbrush.fill",
+        "leaf.fill",
+        "brain.head.profile",
+        "heart.fill",
+        "wineglass.fill",
+        "tennis.racket"
+    ]
     
     var body: some View
     {
@@ -567,6 +808,45 @@ struct CreateFriendGroupView: View
                         )
                 }
                 
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Group Icon")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(AppPalette.Text.secondary)
+                    
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 12) {
+                        ForEach(availableIcons, id: \.self) { icon in
+                            Button {
+                                selectedIcon = icon
+                            } label: {
+                                Image(systemName: icon)
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundStyle(
+                                        selectedIcon == icon ? AppPalette.Brand.neonPink : AppPalette.Text.primary
+                                    )
+                                    .frame(width: 44, height: 44)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .fill(
+                                                selectedIcon == icon
+                                                    ? AppPalette.Brand.neonPink.opacity(0.2)
+                                                    : AppPalette.Brand.japPurple
+                                            )
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(
+                                                selectedIcon == icon
+                                                    ? AppPalette.Brand.neonPink
+                                                    : AppPalette.Brand.neonPink.opacity(0.3),
+                                                lineWidth: selectedIcon == icon ? 2 : 1
+                                            )
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                
                 if let error = errorMessage {
                     Text(error)
                         .font(.system(size: 14))
@@ -577,7 +857,7 @@ struct CreateFriendGroupView: View
             }
             .padding(20)
             .background(AppPalette.Brand.formBlack)
-            .navigationTitle("Create Group")
+            .navigationTitle("Create Meet Group")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -600,7 +880,7 @@ struct CreateFriendGroupView: View
                 }
             }
             .navigationDestination(for: Int64.self) { groupId in
-                AddMembersInlineView(
+                AddMembersToMeetGroupInlineView(
                     groupId: groupId,
                     groupName: groupName,
                     baseURL: baseURL,
@@ -628,10 +908,17 @@ struct CreateFriendGroupView: View
             errorMessage = nil
             
             do {
-                let body = CreateGroupBody(group_name: groupName.trimmingCharacters(in: .whitespacesAndNewlines))
-                let response = try await AuthAPI.createFriendGroup(baseURL: baseURL, token: token, body: body)
+                let body = InsertGroupBody(
+                    group_name: groupName.trimmingCharacters(in: .whitespacesAndNewlines),
+                    image_reference: selectedIcon
+                )
                 
-                guard let groupId = response.friend_group_id else {
+                print("=== Creating group with body: \(body)")
+                let response = try await AuthAPI.insertMeetGroup(baseURL: baseURL, token: token, body: body)
+                print("=== Response received: \(response)")
+                
+                guard let groupId = response.meet_group_id else {
+                    print("=== ERROR: meet_group_id is nil in response")
                     errorMessage = "Failed to create group: No group ID returned"
                     isCreating = false
                     return
@@ -640,83 +927,148 @@ struct CreateFriendGroupView: View
                 navigationPath.append(groupId)
                 isCreating = false
             } catch {
-                errorMessage = "Failed to create group"
+                print("=== Error creating group: \(error)")
+                errorMessage = "Failed to create group: \(error.localizedDescription)"
                 isCreating = false
             }
         }
     }
 }
 
-struct SelectedUsersChips: View
+
+// MARK: - Invite Members to Meet Group (Send Invitations)
+struct InviteMembersToMeetGroupView: View
 {
-    @Binding var selectedUsers: [ViewUsersModel]
+    let group: MeetGroup
+    let baseURL: URL
+    let token: String
+    let onDismiss: () -> Void
+    
+    @State private var selectedUsers: [ViewUsersModel] = []
+    @State private var isInviting = false
+    @State private var errorMessage: String?
+    @State private var showUserSearch = false
     
     var body: some View
     {
-        VStack(spacing: 12) {
-            HStack {
-                Text("Selected (\(selectedUsers.count))")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(AppPalette.Text.primary)
+        NavigationView {
+            VStack(spacing: 24) {
+                VStack(spacing: 12) {
+                    Text("Invite members to")
+                        .font(.system(size: 14))
+                        .foregroundStyle(AppPalette.Text.secondary)
+                    
+                    Text(group.name)
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(AppPalette.Text.primary)
+                    
+                    Text("They'll receive an invitation to join")
+                        .font(.system(size: 14))
+                        .foregroundStyle(AppPalette.Text.tertiary)
+                }
+                .padding(.top, 20)
+                
+                if !selectedUsers.isEmpty {
+                    SelectedUsersChips(selectedUsers: $selectedUsers)
+                }
+                
+                Button {
+                    showUserSearch = true
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "envelope.badge.person.crop")
+                            .font(.system(size: 16, weight: .semibold))
+                        
+                        Text(selectedUsers.isEmpty ? "Search People to Invite" : "Add More People")
+                            .font(.system(size: 16, weight: .semibold))
+                    }
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(AppPalette.Brand.neonPink)
+                    )
+                }
+                .buttonStyle(.plain)
+                
+                if let error = errorMessage {
+                    Text(error)
+                        .font(.system(size: 14))
+                        .foregroundStyle(.red)
+                }
+                
                 Spacer()
             }
-            
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    ForEach(selectedUsers, id: \.user_uuid) { user in
-                        HStack(spacing: 8) {
-                            Text(user.display_name)
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundStyle(AppPalette.Text.primary)
-                            
-                            Button {
-                                selectedUsers.removeAll { $0.user_uuid == user.user_uuid }
-                            } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundStyle(AppPalette.Text.tertiary)
-                            }
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(
-                            Capsule()
-                                .fill(AppPalette.Brand.neonPink.opacity(0.2))
-                                .overlay(
-                                    Capsule().stroke(AppPalette.Brand.neonPink.opacity(0.4), lineWidth: 1)
-                                )
-                        )
-                    }
+            .padding(.horizontal, 20)
+            .background(AppPalette.Brand.formBlack)
+            .navigationTitle("Send Invitations")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") { onDismiss() }
+                        .foregroundStyle(AppPalette.Text.secondary)
                 }
+                
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: inviteMembers) {
+                        if isInviting {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                                .tint(AppPalette.Brand.neonPink)
+                        } else {
+                            Text(selectedUsers.isEmpty ? "Skip" : "Invite")
+                                .foregroundStyle(AppPalette.Brand.neonPink)
+                        }
+                    }
+                    .disabled(isInviting)
+                }
+            }
+        }
+        .sheet(isPresented: $showUserSearch) {
+            UserSearchView(
+                baseURL: baseURL,
+                token: token,
+                selectedUsers: $selectedUsers,
+                excludedUserUUIDs: [],
+                onDismiss: { showUserSearch = false }
+            )
+        }
+    }
+    
+    private func inviteMembers()
+    {
+        guard !selectedUsers.isEmpty else {
+            onDismiss()
+            return
+        }
+        
+        Task {
+            isInviting = true
+            
+            do {
+                let body = InviteMembersBody(
+                    meet_group_id: group.meet_group_id,
+                    user_uuids: selectedUsers.map { $0.user_uuid }
+                )
+                let response = try await AuthAPI.inviteMembersToMeetGroup(baseURL: baseURL, token: token, body: body)
+                
+                if response.success {
+                    onDismiss()
+                } else {
+                    errorMessage = response.message
+                    isInviting = false
+                }
+            } catch {
+                errorMessage = "Failed to send invitations"
+                isInviting = false
             }
         }
     }
 }
 
-// Inline user search (no sheet)
-struct UserSearchInlineView: View
-{
-    let baseURL: URL
-    let token: String
-    @Binding var selectedUsers: [ViewUsersModel]
-    
-    @Environment(\.dismiss) private var dismiss
-    
-    var body: some View
-    {
-        UserSearchView(
-            baseURL: baseURL,
-            token: token,
-            selectedUsers: $selectedUsers,
-            excludedUserUUIDs: [],
-            onDismiss: { dismiss() }
-        )
-        .navigationTitle("Search Friends")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-}
-
-
-struct AddMembersInlineView: View
+// Inline add members for creation flow
+struct AddMembersToMeetGroupInlineView: View
 {
     let groupId: Int64
     let groupName: String
@@ -806,16 +1158,85 @@ struct AddMembersInlineView: View
             isAdding = true
             
             do {
-                let body = AddFriendsBody(
-                    friend_group_id: groupId,
-                    friend_uuids: selectedUsers.map { $0.user_uuid }
+                let body = InsertMembersBody(
+                    meet_group_id: groupId,
+                    user_uuids: selectedUsers.map { $0.user_uuid }
                 )
-                _ = try await AuthAPI.addFriendsToGroup(baseURL: baseURL, token: token, body: body)
+                _ = try await AuthAPI.insertMembersToMeetGroup(baseURL: baseURL, token: token, body: body)
                 onComplete()
             } catch {
                 errorMessage = "Failed to add members"
                 isAdding = false
             }
         }
+    }
+}
+
+
+struct SelectedUsersChips: View
+{
+    @Binding var selectedUsers: [ViewUsersModel]
+    
+    var body: some View
+    {
+        VStack(spacing: 12) {
+            HStack {
+                Text("Selected (\(selectedUsers.count))")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(AppPalette.Text.primary)
+                Spacer()
+            }
+            
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    ForEach(selectedUsers, id: \.user_uuid) { user in
+                        HStack(spacing: 8) {
+                            Text(user.display_name)
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundStyle(AppPalette.Text.primary)
+                            
+                            Button {
+                                selectedUsers.removeAll { $0.user_uuid == user.user_uuid }
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundStyle(AppPalette.Text.tertiary)
+                            }
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            Capsule()
+                                .fill(AppPalette.Brand.neonPink.opacity(0.2))
+                                .overlay(
+                                    Capsule().stroke(AppPalette.Brand.neonPink.opacity(0.4), lineWidth: 1)
+                                )
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Inline user search (no sheet)
+struct UserSearchInlineView: View
+{
+    let baseURL: URL
+    let token: String
+    @Binding var selectedUsers: [ViewUsersModel]
+    
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View
+    {
+        UserSearchView(
+            baseURL: baseURL,
+            token: token,
+            selectedUsers: $selectedUsers,
+            excludedUserUUIDs: [],
+            onDismiss: { dismiss() }
+        )
+        .navigationTitle("Search Friends")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

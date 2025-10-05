@@ -262,13 +262,18 @@ SELECT
 FROM rangley.tb_friendships;
 
 CREATE OR REPLACE VIEW rangley.vw_meet_groups AS
-SELECT
-     meet_group_id
-    ,created_by_user_id
-    ,name
-    ,dttm_created_utc
-    ,dttm_modified_utc
+SELECT 
+    meet_group_id,
+    name,
+    created_by_user_id,
+    image_type,
+    image_reference, 
+    image_url,
+    dttm_created_utc,
+    dttm_modified_utc
 FROM rangley.tb_meet_groups;
+
+
 
 CREATE OR REPLACE VIEW rangley.vw_meet_group_members AS
 SELECT

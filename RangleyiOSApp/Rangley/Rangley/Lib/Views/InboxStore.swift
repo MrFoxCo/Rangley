@@ -200,6 +200,38 @@ final class InboxStore: ObservableObject {
         _ = try await AuthAPI.deleteInboxNotification(baseURL: baseURL, token: token, notificationId: notificationId)
     }
     
+    // Add this method to InboxStore
+    func respondToMeetGroupInvitation(_ notification: InboxNotificationModelBody, accept: Bool) async throws
+    {
+        guard !token.isEmpty else { throw AuthAPIError.http(-1, "No auth token") }
+        
+        // Extract invitation_id from payload_json
+        guard let data = notification.payload_json.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let invitationId = json["invitation_id"] as? Int64 else {
+            throw AuthAPIError.http(-1, "Invalid payload")
+        }
+        
+        // Optimistic UI
+        await MainActor.run {
+            self.inboxNotifications.removeAll { $0.notification_id == notification.notification_id }
+            self.unreadCount = self.inboxNotifications.filter { !$0.is_read }.count
+        }
+        
+        let body = RespondInvitationBody(
+            invitation_id: invitationId,
+            accept: accept
+        )
+        
+        _ = try await AuthAPI.respondToMeetGroupInvitation(
+            baseURL: baseURL,
+            token: token,
+            body: body
+        )
+        
+        await refresh(force: true)
+    }
+    
     // MARK: - Helpers
     func clear() {
         notifications = []

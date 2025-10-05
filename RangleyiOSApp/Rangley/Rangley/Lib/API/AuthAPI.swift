@@ -1282,10 +1282,10 @@ struct AuthAPI
 
     
     // Create friend group
-    static func createFriendGroup(baseURL: URL, token: String, body: CreateGroupBody)
-        async throws -> CreateGroupResponse
+    static func insertMeetGroup(baseURL: URL, token: String, body: InsertGroupBody)
+        async throws -> InsertGroupResponse
     {
-        var req = URLRequest(url: makeURL(baseURL, ["s", "friend-groups", "create"]))
+        var req = URLRequest(url: makeURL(baseURL, ["s", "meet-groups", "insert"]))
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -1296,7 +1296,7 @@ struct AuthAPI
         guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
         guard (200..<300).contains(http.statusCode) else {
            #if DEBUG
-           print("=== Create Friend Group Failed ===")
+           print("=== Insert Meet Group Failed ===")
            print("Status Code: \(http.statusCode)")
            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
            #endif
@@ -1304,10 +1304,10 @@ struct AuthAPI
         }
 
         do {
-           return try JSONDecoder().decode(CreateGroupResponse.self, from: data)
+           return try JSONDecoder().decode(InsertGroupResponse.self, from: data)
         } catch {
            #if DEBUG
-           print("=== Decode Error in createFriendGroup ===")
+           print("=== Decode Error in insertMeetGroup ===")
            print("Error: \(error)")
            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
            #endif
@@ -1316,10 +1316,10 @@ struct AuthAPI
     }
 
     // Add friends to group
-    static func addFriendsToGroup(baseURL: URL, token: String, body: AddFriendsBody)
-        async throws -> AddFriendsResponse
+    static func insertMembersToMeetGroup(baseURL: URL, token: String, body: InsertMembersBody)
+        async throws -> InsertMembersResponse
     {
-        var req = URLRequest(url: makeURL(baseURL, ["s", "friend-groups", "add-members"]))
+        var req = URLRequest(url: makeURL(baseURL, ["s", "meet-groups", "insert-members"]))
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -1330,7 +1330,7 @@ struct AuthAPI
         guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
         guard (200..<300).contains(http.statusCode) else {
            #if DEBUG
-           print("=== Add Friends to Group Failed ===")
+           print("=== Insert Members to Meet Group Failed ===")
            print("Status Code: \(http.statusCode)")
            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
            #endif
@@ -1338,10 +1338,10 @@ struct AuthAPI
         }
 
         do {
-           return try JSONDecoder().decode(AddFriendsResponse.self, from: data)
+           return try JSONDecoder().decode(InsertMembersResponse.self, from: data)
         } catch {
            #if DEBUG
-           print("=== Decode Error in addFriendsToGroup ===")
+           print("=== Decode Error in insertMembersToMeetGroup ===")
            print("Error: \(error)")
            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
            #endif
@@ -1349,11 +1349,11 @@ struct AuthAPI
         }
     }
 
-    // Remove friends from group
-    static func removeFriendsFromGroup(baseURL: URL, token: String, body: DeleteFriendsBody)
-        async throws -> DeleteFriendsResponse
+
+    static func inviteMembersToMeetGroup(baseURL: URL, token: String, body: InviteMembersBody)
+        async throws -> InviteMembersResponse
     {
-        var req = URLRequest(url: makeURL(baseURL, ["s", "friend-groups", "remove-members"]))
+        var req = URLRequest(url: makeURL(baseURL, ["s", "meet-groups", "invite"]))
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -1364,7 +1364,7 @@ struct AuthAPI
         guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
         guard (200..<300).contains(http.statusCode) else {
            #if DEBUG
-           print("=== Remove Friends from Group Failed ===")
+           print("=== Invite Members to Meet Group Failed ===")
            print("Status Code: \(http.statusCode)")
            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
            #endif
@@ -1372,10 +1372,77 @@ struct AuthAPI
         }
 
         do {
-           return try JSONDecoder().decode(DeleteFriendsResponse.self, from: data)
+           return try JSONDecoder().decode(InviteMembersResponse.self, from: data)
         } catch {
            #if DEBUG
-           print("=== Decode Error in removeFriendsFromGroup ===")
+           print("=== Decode Error in inviteMembersToMeetGroup ===")
+           print("Error: \(error)")
+           print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+           #endif
+           throw AuthAPIError.decode(error.localizedDescription)
+        }
+    }
+    
+    static func respondToMeetGroupInvitation(baseURL: URL, token: String, body: RespondInvitationBody)
+        async throws -> RespondInvitationResponse
+    {
+        var req = URLRequest(url: makeURL(baseURL, ["s", "meet-groups", "respond"]))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.httpBody = try isoEncoder.encode(body)
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
+        guard (200..<300).contains(http.statusCode) else {
+           #if DEBUG
+           print("=== Respond to Meet Group Invitation Failed ===")
+           print("Status Code: \(http.statusCode)")
+           print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+           #endif
+           throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        }
+
+        do {
+           return try JSONDecoder().decode(RespondInvitationResponse.self, from: data)
+        } catch {
+           #if DEBUG
+           print("=== Decode Error in respondToMeetGroupInvitation ===")
+           print("Error: \(error)")
+           print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+           #endif
+           throw AuthAPIError.decode(error.localizedDescription)
+        }
+    }
+    
+    // Remove friends from group
+    static func deleteMembersFromMeetGroup(baseURL: URL, token: String, body: RemoveMembersBody)
+        async throws -> RemoveMembersResponse
+    {
+        var req = URLRequest(url: makeURL(baseURL, ["s", "meet-groups", "delete-members"]))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.httpBody = try isoEncoder.encode(body)
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
+        guard (200..<300).contains(http.statusCode) else {
+           #if DEBUG
+           print("=== Delete Members from Meet Group Failed ===")
+           print("Status Code: \(http.statusCode)")
+           print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+           #endif
+           throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        }
+
+        do {
+           return try JSONDecoder().decode(RemoveMembersResponse.self, from: data)
+        } catch {
+           #if DEBUG
+           print("=== Decode Error in deleteMembersFromMeetGroup ===")
            print("Error: \(error)")
            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
            #endif
@@ -1384,10 +1451,10 @@ struct AuthAPI
     }
 
     // Delete friend group
-    static func deleteFriendGroup(baseURL: URL, token: String, body: DeleteGroupBody)
+    static func deleteMeetGroup(baseURL: URL, token: String, body: DeleteGroupBody)
         async throws -> DeleteGroupResponse
     {
-        var req = URLRequest(url: makeURL(baseURL, ["s", "friend-groups", "delete"]))
+        var req = URLRequest(url: makeURL(baseURL, ["s", "meet-groups", "delete"]))
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -1398,7 +1465,7 @@ struct AuthAPI
         guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
         guard (200..<300).contains(http.statusCode) else {
            #if DEBUG
-           print("=== Delete Friend Group Failed ===")
+           print("=== Delete Meet Group Failed ===")
            print("Status Code: \(http.statusCode)")
            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
            #endif
@@ -1409,7 +1476,7 @@ struct AuthAPI
            return try JSONDecoder().decode(DeleteGroupResponse.self, from: data)
         } catch {
            #if DEBUG
-           print("=== Decode Error in deleteFriendGroup ===")
+           print("=== Decode Error in deleteMeetGroup ===")
            print("Error: \(error)")
            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
            #endif
@@ -1418,10 +1485,10 @@ struct AuthAPI
     }
 
     // List friend groups
-    static func viewFriendGroups(baseURL: URL, token: String)
-        async throws -> [FriendGroup]
+    static func viewMeetGroups(baseURL: URL, token: String)
+        async throws -> [MeetGroup]
     {
-        var req = URLRequest(url: makeURL(baseURL, ["v", "friend-groups", "list"]))
+        var req = URLRequest(url: makeURL(baseURL, ["v", "meet-groups", "list"]))
         req.httpMethod = "GET"
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -1430,7 +1497,7 @@ struct AuthAPI
         guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
         guard (200..<300).contains(http.statusCode) else {
            #if DEBUG
-           print("=== List Friend Groups Failed ===")
+           print("=== View Meet Groups Failed ===")
            print("Status Code: \(http.statusCode)")
            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
            #endif
@@ -1439,34 +1506,33 @@ struct AuthAPI
 
         do {
             let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601  // Add this line
-            return try decoder.decode([FriendGroup].self, from: data)
+            decoder.dateDecodingStrategy = .iso8601
+            return try decoder.decode([MeetGroup].self, from: data)
         } catch {
            #if DEBUG
-           print("=== Decode Error in listFriendGroups ===")
+           print("=== Decode Error in viewMeetGroups ===")
            print("Error: \(error)")
            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
            #endif
            throw AuthAPIError.decode(error.localizedDescription)
         }
     }
+    
 
-    // Get friend group members
-    static func viewFriendGroupMembers(baseURL: URL, token: String, body: ViewMembersBody)
+    // View meet group members
+    static func viewMeetGroupMembers(baseURL: URL, token: String, meetGroupId: Int64)
         async throws -> [GroupMember]
     {
-        var req = URLRequest(url: makeURL(baseURL, ["s", "friend-groups", "members"]))
-        req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        var req = URLRequest(url: makeURL(baseURL, ["v", "meet-groups", "\(meetGroupId)", "members"]))
+        req.httpMethod = "GET"
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        req.httpBody = try isoEncoder.encode(body)
 
         let (data, resp) = try await URLSession.shared.data(for: req)
         guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
         guard (200..<300).contains(http.statusCode) else {
            #if DEBUG
-           print("=== Get Friend Group Members Failed ===")
+           print("=== View Meet Group Members Failed ===")
            print("Status Code: \(http.statusCode)")
            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
            #endif
@@ -1477,10 +1543,9 @@ struct AuthAPI
             let decoder = JSONDecoder()
            decoder.dateDecodingStrategy = .iso8601
            return try decoder.decode([GroupMember].self, from: data)
-
         } catch {
            #if DEBUG
-           print("=== Decode Error in getFriendGroupMembers ===")
+           print("=== Decode Error in viewMeetGroupMembers ===")
            print("Error: \(error)")
            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
            #endif
@@ -1488,31 +1553,37 @@ struct AuthAPI
         }
     }
     
-    static func addMembersToFriendGroup(baseURL: URL, token: String, body: AddFriendsBody) async throws
+    // Modify meet group image
+    static func modifyMeetGroupImage(baseURL: URL, token: String, body: ModifyImageBody)
+        async throws -> ModifyImageResponse
     {
-        var req = URLRequest(url: makeURL(baseURL, ["v", "friend-groups", "add-members"]))  // Update path to match your route
+        var req = URLRequest(url: makeURL(baseURL, ["s", "meet-groups", "modify-image"]))
         req.httpMethod = "POST"
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        do {
-            req.httpBody = try JSONEncoder().encode(body)
-        } catch {
-            throw AuthAPIError.encode
-        }
-        
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.httpBody = try isoEncoder.encode(body)
+
         let (data, resp) = try await URLSession.shared.data(for: req)
-        guard let http = resp as? HTTPURLResponse else {
-            throw AuthAPIError.http(-1, "No HTTPURLResponse")
-        }
-        
+        guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
         guard (200..<300).contains(http.statusCode) else {
-            #if DEBUG
-            print("=== Add Friend Group Members Failed ===")
-            print("Status Code: \(http.statusCode)")
-            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
-            #endif
-            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+           #if DEBUG
+           print("=== Modify Meet Group Image Failed ===")
+           print("Status Code: \(http.statusCode)")
+           print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+           #endif
+           throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        }
+
+        do {
+           return try JSONDecoder().decode(ModifyImageResponse.self, from: data)
+        } catch {
+           #if DEBUG
+           print("=== Decode Error in modifyMeetGroupImage ===")
+           print("Error: \(error)")
+           print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+           #endif
+           throw AuthAPIError.decode(error.localizedDescription)
         }
     }
     
