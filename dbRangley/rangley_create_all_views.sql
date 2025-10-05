@@ -8,7 +8,7 @@ DROP VIEW IF EXISTS rangley.vw_features CASCADE;
 DROP VIEW IF EXISTS rangley.vw_meet_category CASCADE;
 DROP VIEW IF EXISTS rangley.vw_sub_category CASCADE;
 
-DROP VIEW IF EXISTS rangley.vw_meet_icon CASCADE;
+DROP VIEW IF EXISTS rangley.td_stock_assets CASCADE;
 DROP VIEW IF EXISTS rangley.vw_notification_type CASCADE;
 
 DROP VIEW IF EXISTS rangley.vw_notifications CASCADE;
@@ -34,8 +34,11 @@ DROP VIEW IF EXISTS rangley.vw_user_meets_attended_stats CASCADE;
 DROP VIEW IF EXISTS rangley.vw_user_friend_count CASCADE;
 DROP VIEW IF EXISTS rangley.vw_user_profile CASCADE;
 DROP VIEW IF EXISTS rangley.vw_user_friendships CASCADE;
-DROP VIEW IF EXISTS rangley.vw_friend_groups CASCADE;
-DROP VIEW IF EXISTS rangley.vw_friend_group_members CASCADE;
+DROP VIEW IF EXISTS rangley.vw_meet_groups CASCADE;
+DROP VIEW IF EXISTS rangley.vw_meet_group_members CASCADE;
+DROP VIEW IF EXISTS rangley.vw_meet_group_invitations CASCADE;
+
+
 
 
 CREATE OR REPLACE VIEW rangley.vw_meets AS 
@@ -149,16 +152,21 @@ SELECT
 FROM rangley.tb_meet_participants;
 
 
-CREATE OR REPLACE VIEW rangley.vw_meet_icon AS
-SELECT 
-     meet_icon_id
-    ,name
-    ,file_type
+CREATE OR REPLACE VIEW rangley.vw_stock_assets AS
+SELECT
+     asset_id
+    ,asset_name
+    ,asset_category
+    ,display_name
+    ,description
+    ,file_extension
+    ,sort_order
+    ,is_active
     ,dttm_created_utc
     ,created_by
     ,dttm_modified_utc
     ,modified_by
-FROM rangley.td_meet_icon;
+FROM rangley.td_stock_assets;
 
 
 CREATE OR REPLACE VIEW rangley.vw_notification_type AS
@@ -253,24 +261,34 @@ SELECT
     ,dttm_created_utc
 FROM rangley.tb_friendships;
 
-CREATE OR REPLACE VIEW rangley.vw_friend_groups AS
+CREATE OR REPLACE VIEW rangley.vw_meet_groups AS
 SELECT
-     friend_group_id
+     meet_group_id
     ,created_by_user_id
     ,name
     ,dttm_created_utc
     ,dttm_modified_utc
-FROM rangley.tb_friend_groups;
+FROM rangley.tb_meet_groups;
 
-CREATE OR REPLACE VIEW rangley.vw_friend_group_members AS
+CREATE OR REPLACE VIEW rangley.vw_meet_group_members AS
 SELECT
-     friend_group_id
+     meet_group_id
     ,user_id
     ,dttm_added_utc
-FROM rangley.tb_friend_group_members;
+FROM rangley.tb_meet_group_members;
 
 
-
+-- View for invitations
+CREATE OR REPLACE VIEW rangley.vw_meet_group_invitations AS
+SELECT
+     invitation_id
+    ,meet_group_id
+    ,invited_user_id
+    ,invited_by_user_id
+    ,status
+    ,dttm_invited_utc
+    ,dttm_responded_utc
+FROM rangley.tb_meet_group_invitations;
 
 
 CREATE OR REPLACE VIEW rangley.vw_version_features AS

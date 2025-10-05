@@ -21,6 +21,12 @@ select * from rangley.vw_friend_requests;
 
 select * FROM rangley.vw_friend_requests
 
+select * FROM rangley.vw_friend_request_status;
+
+select * FROM rangley.vw_meet_group_members;
+
+select * FROM rangley.vw_meet_groups;
+
 
 UPDATE rangley.tb_users
 SET dob = DATE '1968-02-19',

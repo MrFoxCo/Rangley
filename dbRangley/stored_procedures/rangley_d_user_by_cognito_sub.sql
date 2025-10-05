@@ -21,6 +21,10 @@ DECLARE
 
 	v_friendships_deleted 		INT := 0;
 	v_friend_requests_deleted 	INT := 0;
+
+    v_meet_groups_deleted 		INT := 0;
+    v_group_memberships_deleted INT := 0;
+    v_group_invitations_deleted INT := 0;
 BEGIN
     -- Initialize output
     is_success := false;
@@ -166,7 +170,47 @@ BEGIN
 	    RAISE NOTICE 'Deleted % friendships and % friend requests', v_friendships_deleted, v_friend_requests_deleted;
 	END;
 
+	-- ========================================
+	-- STEP 3.6: Clean up meet groups
+	-- ========================================
 
+	-- Delete all meet groups owned by this user
+    DELETE FROM rangley.tb_meet_group_members 
+    WHERE meet_group_id IN (
+        SELECT meet_group_id FROM rangley.tb_meet_groups WHERE created_by_user_id = v_user_id
+    );
+    
+    DELETE FROM rangley.tb_meet_group_invitations
+    WHERE meet_group_id IN (
+        SELECT meet_group_id FROM rangley.tb_meet_groups WHERE created_by_user_id = v_user_id
+    );
+    
+    DELETE FROM rangley.tb_meet_groups WHERE created_by_user_id = v_user_id;
+    GET DIAGNOSTICS v_meet_groups_deleted = ROW_COUNT;
+    
+    -- Remove user from any groups they're a member of
+    DELETE FROM rangley.tb_meet_group_members WHERE user_id = v_user_id;
+    GET DIAGNOSTICS v_group_memberships_deleted = ROW_COUNT;
+    
+    -- Delete any pending invitations sent to or from this user
+    DELETE FROM rangley.tb_meet_group_invitations 
+    WHERE invited_user_id = v_user_id OR invited_by_user_id = v_user_id;
+    GET DIAGNOSTICS v_group_invitations_deleted = ROW_COUNT;
+    
+    -- Clean up meet group notifications from inbox
+    DELETE FROM rangley.tb_user_inboxes
+    WHERE notification_id IN (
+        SELECT n.notification_id 
+        FROM rangley.tb_notifications n
+        WHERE n.notification_type_id IN (19, 20, 21)  -- Meet group invitation types
+        AND (
+            n.created_by_user_id = v_user_id
+            OR n.payload_json->>'invited_user_id' = v_user_id::text
+        )
+    );
+    
+    RAISE NOTICE 'Deleted % meet groups, removed from % group memberships, deleted % group invitations', 
+                 v_meet_groups_deleted, v_group_memberships_deleted, v_group_invitations_deleted;
     
     -- ========================================
     -- STEP 4: Delete the user record (triggers will handle privacy settings)
@@ -177,13 +221,16 @@ BEGIN
     -- Success!
     is_success := true;
     
-    RAISE NOTICE 'User deletion completed successfully:';
-    RAISE NOTICE '  - User: % (ID: %)', v_username, v_user_id;
-    RAISE NOTICE '  - Meets marked as deleted: %', v_deleted_meets_count;
-    RAISE NOTICE '  - Participations removed: %', v_participations_deleted;
-    RAISE NOTICE '  - Notifications deleted: %', v_notifications_deleted;
+	RAISE NOTICE 'User deletion completed successfully:';
+	RAISE NOTICE '  - User: % (ID: %)', v_username, v_user_id;
+	RAISE NOTICE '  - Meets marked as deleted: %', v_deleted_meets_count;
+	RAISE NOTICE '  - Participations removed: %', v_participations_deleted;
+	RAISE NOTICE '  - Notifications deleted: %', v_notifications_deleted;
 	RAISE NOTICE '  - Friendships deleted: %', v_friendships_deleted;
 	RAISE NOTICE '  - Friend requests deleted: %', v_friend_requests_deleted;
+	RAISE NOTICE '  - Meet groups deleted: %', v_meet_groups_deleted;
+	RAISE NOTICE '  - Group memberships removed: %', v_group_memberships_deleted;
+	RAISE NOTICE '  - Group invitations deleted: %', v_group_invitations_deleted;
     
 EXCEPTION
     WHEN OTHERS THEN

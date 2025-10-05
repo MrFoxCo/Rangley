@@ -135,7 +135,6 @@ struct FriendGroupBar: View
     var body: some View
     {
         VStack(spacing: 0) {
-            // Create group button at the top
             Button(action: { showCreateGroup = true }) {
                 Image(systemName: "plus")
                     .font(.system(size: 16, weight: .bold))
@@ -154,14 +153,12 @@ struct FriendGroupBar: View
             .buttonStyle(.plain)
             .padding(.bottom, 12)
             
-            // Divider
             Rectangle()
                 .fill(AppPalette.Brand.neonPink.opacity(0.3))
                 .frame(height: 1)
                 .padding(.horizontal, 8)
                 .padding(.bottom, 16)
             
-            // Scrollable group list
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 10) {
                     ForEach(groups, id: \.friend_group_id) { group in
@@ -171,6 +168,9 @@ struct FriendGroupBar: View
                             onTap: {
                                 selectedGroup = group
                                 onGroupTapped()
+                            },
+                            onDelete: {
+                                deleteGroup(group)
                             }
                         )
                     }
@@ -203,6 +203,24 @@ struct FriendGroupBar: View
             )
         }
     }
+    
+    private func deleteGroup(_ group: FriendGroup) {
+        Task {
+            do {
+                let body = DeleteGroupBody(friend_group_id: group.friend_group_id)
+                let response = try await AuthAPI.deleteFriendGroup(baseURL: baseURL, token: token, body: body)
+                
+                if response.success {
+                    if selectedGroup?.friend_group_id == group.friend_group_id {
+                        selectedGroup = nil
+                    }
+                    await onGroupsChanged()
+                }
+            } catch {
+                print("Failed to delete group: \(error)")
+            }
+        }
+    }
 }
 
 // MARK: - Group Dock Button
@@ -211,6 +229,9 @@ private struct GroupDockButton: View
     let group: FriendGroup
     let isSelected: Bool
     let onTap: () -> Void
+    let onDelete: () -> Void
+    
+    @State private var showDeleteConfirm = false
     
     private var initials: String {
         let words = group.name.split(separator: " ")
@@ -258,6 +279,21 @@ private struct GroupDockButton: View
                 )
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            Button(role: .destructive) {
+                showDeleteConfirm = true
+            } label: {
+                Label("Delete Group", systemImage: "trash")
+            }
+        }
+        .alert("Delete \(group.name)?", isPresented: $showDeleteConfirm) {
+            Button("Delete", role: .destructive) {
+                onDelete()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will remove the group for all members. This action cannot be undone.")
+        }
     }
 }
 
@@ -272,6 +308,8 @@ struct FriendGroupDetailView: View
     @State private var members: [GroupMember] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var showDeleteConfirm = false
+    @State private var isDeleting = false
     
     var body: some View
     {
@@ -323,12 +361,10 @@ struct FriendGroupDetailView: View
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
-                        // Members list - FIXED
                         ScrollView {
                             VStack(spacing: 12) {
                                 ForEach(members, id: \.user_uuid) { member in
                                     HStack(spacing: 12) {
-                                        // Avatar
                                         Circle()
                                             .fill(AppPalette.Brand.japPurple)
                                             .frame(width: 44, height: 44)
@@ -363,16 +399,16 @@ struct FriendGroupDetailView: View
                                 }
                             }
                             .padding(.horizontal, 20)
-                            .padding(.bottom, 100)
+                            .padding(.bottom, 180)
                         }
                     }
                     
-                    // Create Meet button at bottom
-                    if !members.isEmpty {
-                        VStack(spacing: 0) {
-                            Divider()
-                                .background(AppPalette.Surface.fieldStroke)
-                            
+                    // Bottom buttons
+                    VStack(spacing: 12) {
+                        Divider()
+                            .background(AppPalette.Surface.fieldStroke)
+                        
+                        if !members.isEmpty {
                             Button {
                                 // TODO: Navigate to create meet with this group
                             } label: {
@@ -392,11 +428,32 @@ struct FriendGroupDetailView: View
                                 )
                             }
                             .buttonStyle(.plain)
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 16)
                         }
-                        .background(AppPalette.Brand.formBlack)
+                        
+                        // Delete button
+                        Button {
+                            showDeleteConfirm = true
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "trash")
+                                    .font(.system(size: 16, weight: .semibold))
+                                
+                                Text("Delete Group")
+                                    .font(.system(size: 16, weight: .semibold))
+                            }
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(Color.red)
+                            )
+                        }
+                        .buttonStyle(.plain)
                     }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 16)
+                    .background(AppPalette.Brand.formBlack)
                 }
             }
             .navigationTitle("Group Details")
@@ -407,9 +464,48 @@ struct FriendGroupDetailView: View
                         .foregroundStyle(AppPalette.Brand.neonPink)
                 }
             }
+            .alert("Delete \(group.name)?", isPresented: $showDeleteConfirm) {
+                Button("Delete", role: .destructive) {
+                    deleteGroup()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This will remove the group for all members. This action cannot be undone.")
+            }
+            .overlay {
+                if isDeleting {
+                    ZStack {
+                        Color.black.opacity(0.3).ignoresSafeArea()
+                        ProgressView()
+                            .scaleEffect(1.5)
+                            .tint(AppPalette.Brand.neonPink)
+                    }
+                }
+            }
         }
         .task {
             await loadMembers()
+        }
+    }
+    
+    private func deleteGroup() {
+        Task {
+            isDeleting = true
+            
+            do {
+                let body = DeleteGroupBody(friend_group_id: group.friend_group_id)
+                let response = try await AuthAPI.deleteFriendGroup(baseURL: baseURL, token: token, body: body)
+                
+                if response.success {
+                    onDismiss()
+                } else {
+                    errorMessage = response.message
+                    isDeleting = false
+                }
+            } catch {
+                errorMessage = "Failed to delete group"
+                isDeleting = false
+            }
         }
     }
     
@@ -546,167 +642,6 @@ struct CreateFriendGroupView: View
             } catch {
                 errorMessage = "Failed to create group"
                 isCreating = false
-            }
-        }
-    }
-}
-
-// MARK: - Add Group Members View
-struct AddGroupMembersView: View
-{
-    let group: FriendGroup
-    let baseURL: URL
-    let token: String
-    let onDismiss: () -> Void
-    
-    @State private var selectedUsers: [ViewUsersModel] = []
-    @State private var showUserSearch = false
-    @State private var isAdding = false
-    @State private var errorMessage: String?
-    
-    var body: some View
-    {
-        NavigationView {
-            VStack(spacing: 24) {
-                VStack(spacing: 12) {
-                    Text("Add members to")
-                        .font(.system(size: 14))
-                        .foregroundStyle(AppPalette.Text.secondary)
-                    
-                    Text(group.name)
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundStyle(AppPalette.Text.primary)
-                }
-                .padding(.top, 20)
-                
-                if !selectedUsers.isEmpty {
-                    VStack(spacing: 12) {
-                        HStack {
-                            Text("Selected (\(selectedUsers.count))")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundStyle(AppPalette.Text.primary)
-                            Spacer()
-                        }
-                        
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 12) {
-                                ForEach(selectedUsers, id: \.user_uuid) { user in
-                                    HStack(spacing: 8) {
-                                        Text(user.display_name)
-                                            .font(.system(size: 14, weight: .medium))
-                                            .foregroundStyle(AppPalette.Text.primary)
-                                        
-                                        Button {
-                                            selectedUsers.removeAll { $0.user_uuid == user.user_uuid }
-                                        } label: {
-                                            Image(systemName: "xmark.circle.fill")
-                                                .foregroundStyle(AppPalette.Text.tertiary)
-                                        }
-                                    }
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 8)
-                                    .background(
-                                        Capsule()
-                                            .fill(AppPalette.Brand.neonPink.opacity(0.2))
-                                            .overlay(
-                                                Capsule().stroke(AppPalette.Brand.neonPink.opacity(0.4), lineWidth: 1)
-                                            )
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                Button {
-                    showUserSearch = true
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: "person.badge.plus")
-                            .font(.system(size: 16, weight: .semibold))
-                        
-                        Text(selectedUsers.isEmpty ? "Search Friends to Add" : "Add More Friends")
-                            .font(.system(size: 16, weight: .semibold))
-                    }
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 50)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(AppPalette.Brand.neonPink)
-                    )
-                }
-                .buttonStyle(.plain)
-                
-                if let error = errorMessage {
-                    Text(error)
-                        .font(.system(size: 14))
-                        .foregroundStyle(.red)
-                }
-                
-                Spacer()
-            }
-            .padding(.horizontal, 20)
-            .background(AppPalette.Brand.formBlack)
-            .navigationTitle("Add Members")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Skip") { onDismiss() }
-                        .foregroundStyle(AppPalette.Text.secondary)
-                }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    if !selectedUsers.isEmpty {
-                        Button(action: addMembers) {
-                            if isAdding {
-                                ProgressView()
-                                    .scaleEffect(0.8)
-                                    .tint(AppPalette.Brand.neonPink)
-                            } else {
-                                Text("Done")
-                                    .foregroundStyle(AppPalette.Brand.neonPink)
-                            }
-                        }
-                        .disabled(isAdding)
-                    }
-                }
-            }
-        }
-        .sheet(isPresented: $showUserSearch) {
-            UserSearchView(
-                baseURL: baseURL,
-                token: token,
-                selectedUsers: $selectedUsers,
-                excludedUserUUIDs: [],
-                onDismiss: {
-                    showUserSearch = false
-                }
-            )
-        }
-    }
-    
-    private func addMembers()
-    {
-        Task {
-            isAdding = true
-            errorMessage = nil
-            
-            do {
-                let friendUUIDs = selectedUsers.map { $0.user_uuid }
-                let body = AddFriendsBody(
-                    friend_group_id: group.friend_group_id,
-                    friend_uuids: friendUUIDs
-                )
-                let response = try await AuthAPI.addFriendsToGroup(baseURL: baseURL, token: token, body: body)
-                
-                print("Add members result: added=\(response.added_count), skipped=\(response.skipped_count)")
-                print("   Message: \(response.message)")
-                
-                onDismiss()
-            } catch {
-                errorMessage = "Failed to add members"
-                isAdding = false
             }
         }
     }
