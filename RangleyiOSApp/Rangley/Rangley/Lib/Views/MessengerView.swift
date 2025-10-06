@@ -14,62 +14,72 @@ struct MessengerView: View
     let token: String
     let onDismiss: () -> Void
     
-    @State private var conversations: [Conversation] = []
-    @State private var selectedConversation: Conversation?
-    @State private var isLoading = false
-    
     var body: some View
     {
         NavigationView {
-            HStack(spacing: 0) {
-                // Conversations sidebar
-                ConversationsSidebar(
-                    conversations: conversations,
-                    selectedConversation: $selectedConversation,
-                    onNewMessage: { /* TODO */ }
-                )
-                
-                // Chat area
-                VStack(spacing: 0) {
-                    // Header
-                    MessengerHeader(
-                        selectedConversation: selectedConversation,
-                        onDismiss: onDismiss
-                    )
-                    
-                    // Main content
-                    if isLoading {
-                        LoadingPlaceholder()
-                    } else if let conversation = selectedConversation {
-                        ChatView(
-                            conversation: conversation,
-                            baseURL: baseURL,
-                            token: token
-                        )
-                    } else {
-                        EmptyChatPlaceholder()
+            VStack(spacing: 0) {
+                // Header
+                HStack {
+                    Button(action: onDismiss) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "chevron.left")
+                            Text("Back")
+                        }
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(AppPalette.Brand.neonPink)
                     }
+                    
+                    Spacer()
+                    
+                    Text("Messages")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(AppPalette.Text.primary)
+                    
+                    Spacer()
+                    
+                    // Invisible spacer for centering
+                    HStack(spacing: 6) {
+                        Image(systemName: "chevron.left")
+                        Text("Back")
+                    }
+                    .font(.system(size: 16, weight: .medium))
+                    .opacity(0)
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
+                .padding(.bottom, 16)
+                .background(AppPalette.Brand.formBlack)
+                
+                // Coming soon content
+                VStack(spacing: 24) {
+                    Spacer()
+                    
+                    Image(systemName: "message.fill")
+                        .font(.system(size: 64, weight: .light))
+                        .foregroundStyle(AppPalette.Brand.neonPink.opacity(0.4))
+                    
+                    VStack(spacing: 12) {
+                        Text("Messages")
+                            .font(.system(size: 24, weight: .bold))
+                            .foregroundStyle(AppPalette.Text.primary)
+                        
+                        Text("Available in future updates")
+                            .font(.system(size: 16))
+                            .foregroundStyle(AppPalette.Text.secondary)
+                        
+                        Text("Chat with friends and coordinate meets in real-time")
+                            .font(.system(size: 14))
+                            .foregroundStyle(AppPalette.Text.tertiary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 40)
+                    }
+                    
+                    Spacer()
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(AppPalette.Brand.formBlack)
             }
             .navigationBarHidden(true)
-        }
-        .task {
-            await loadConversations()
-        }
-    }
-    
-    private func loadConversations() async
-    {
-        isLoading = true
-        
-        // TODO: Load actual conversations from API
-        try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s placeholder
-        
-        await MainActor.run {
-            conversations = [] // Placeholder
-            isLoading = false
         }
     }
 }
@@ -115,86 +125,7 @@ private struct MessengerHeader: View
     }
 }
 
-// MARK: - Conversations Sidebar
-private struct ConversationsSidebar: View
-{
-    let conversations: [Conversation]
-    @Binding var selectedConversation: Conversation?
-    let onNewMessage: () -> Void
-    
-    var body: some View
-    {
-        VStack(spacing: 0) {
-            // New message button
-            Button(action: onNewMessage) {
-                Image(systemName: "square.and.pencil")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(AppPalette.Brand.neonPink)
-                    .frame(width: 44, height: 44)
-                    .background(
-                        Circle()
-                            .fill(AppPalette.Brand.neonPink.opacity(0.14))
-                    )
-                    .overlay(
-                        Circle()
-                            .stroke(AppPalette.Brand.neonPink.opacity(0.55), lineWidth: 1)
-                    )
-            }
-            .buttonStyle(.plain)
-            .padding(.bottom, 12)
-            
-            // Divider
-            Rectangle()
-                .fill(AppPalette.Brand.neonPink.opacity(0.3))
-                .frame(height: 1)
-                .padding(.horizontal, 8)
-                .padding(.bottom, 16)
-            
-            // Conversations list
-            if conversations.isEmpty {
-                VStack(spacing: 12) {
-                    Image(systemName: "message")
-                        .font(.system(size: 24, weight: .light))
-                        .foregroundStyle(AppPalette.Text.tertiary)
-                    
-                    Text("No chats")
-                        .font(.system(size: 12))
-                        .foregroundStyle(AppPalette.Text.tertiary)
-                }
-                .frame(maxHeight: .infinity)
-            } else {
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: 10) {
-                        ForEach(conversations) { conversation in
-                            ConversationButton(
-                                conversation: conversation,
-                                isSelected: selectedConversation?.id == conversation.id,
-                                onTap: {
-                                    selectedConversation = conversation
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-            
-            Spacer()
-        }
-        .padding(.top, 20)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 14)
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(AppPalette.Brand.neonPink.opacity(0.12))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .stroke(AppPalette.Brand.neonPink.opacity(0.25), lineWidth: 1)
-                )
-        )
-        .shadow(color: AppPalette.Brand.neonPink.opacity(0.15), radius: 8, x: 0, y: 4)
-        .frame(width: 64)
-    }
-}
+
 
 // MARK: - Conversation Button
 private struct ConversationButton: View
