@@ -86,7 +86,7 @@ struct MyMeetsView: View
                 onInvitationResponse: { n, status in
                     Task {
                         try? await inbox.respondToInvitation(n, statusId: status)
-                        await mapDataStore.loadMeets()
+                        await mapDataStore.forceRefresh()
                     }
                 }
             )
@@ -186,7 +186,7 @@ struct MyMeetsOverlay: View
                                         let body = DeletedMeetInsertBody(meet_id_uuid: meet.meet_id_uuid)
                                         _ = try await AuthAPI.deleteMeet(baseURL: baseURL, token: token, body: body)
                                         
-                                        await mapDataStore.loadMeets()
+                                        await mapDataStore.forceRefresh()
                                         await inbox.refresh(force: true)
                                     } catch {
                                         print("Failed to delete meet: \(error)")
@@ -199,7 +199,7 @@ struct MyMeetsOverlay: View
                                         let body = LeaveMeetBody(meet_id_uuid: meet.meet_id_uuid)
                                         _ = try await AuthAPI.leaveMeet(baseURL: baseURL, token: token, body: body)
                                         
-                                        await mapDataStore.loadMeets()
+                                        await mapDataStore.forceRefresh()
                                         await inbox.refresh(force: true)
                                     } catch {
                                         print("Failed to leave meet: \(error)")
@@ -1105,8 +1105,8 @@ struct CollapsibleMeetsSectionView: View
     let emptyIcon: String
     @Binding var isExpanded: Bool
     let onMeetSelected: ((ViewMeetsModel) -> Void)?
-    let onDelete: ((ViewMeetsModel) -> Void)?   // ADD THIS
-    let onLeave: ((ViewMeetsModel) -> Void)?    // ADD THIS
+    let onDelete: ((ViewMeetsModel) -> Void)?
+    let onLeave: ((ViewMeetsModel) -> Void)?
     let isPlaceholder: Bool
     
     init(

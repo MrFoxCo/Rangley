@@ -42,7 +42,8 @@ struct MeetCreationUnifiedFormView: View
     @State private var showCreateGroupForm = false
     @State private var createdGroupId: Int64?
     @State private var existingMeetGroups: [MeetGroup] = []
-    
+    @State private var selectedGroupId: Int64?
+
     init(
         entryMode: MeetCreationEntryMode,
         baseURL: URL,
@@ -174,7 +175,7 @@ struct MeetCreationUnifiedFormView: View
             // Action button
             actionButton
         }
-        .frame(maxWidth: 400, maxHeight: 650)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
             RoundedRectangle(cornerRadius: 24)
                 .fill(AppPalette.Brand.japDarkerPurple)
@@ -527,7 +528,7 @@ struct MeetCreationUnifiedFormView: View
         .foregroundColor(AppPalette.Text.primary)
         .padding(.horizontal, 24)
     }
-
+    
     private var inviteFriendsStepContent: some View
     {
         VStack(spacing: 16) {
@@ -544,8 +545,18 @@ struct MeetCreationUnifiedFormView: View
                             ForEach(existingMeetGroups, id: \.meet_group_id) { group in
                                 GroupQuickSelectButton(
                                     group: group,
+                                    isSelected: selectedGroupId == group.meet_group_id,
                                     onTap: {
-                                        Task { await loadGroupMembers(group) }
+                                        if selectedGroupId == group.meet_group_id {
+                                            // Unselect - clear the group selection and remove those users
+                                            selectedGroupId = nil
+                                            invitedUsers.removeAll()
+                                        } else {
+                                            // Select new group - replace all invited users with this group's members
+                                            selectedGroupId = group.meet_group_id
+                                            invitedUsers.removeAll() // Clear first
+                                            Task { await loadGroupMembers(group) }
+                                        }
                                     }
                                 )
                             }
@@ -559,15 +570,17 @@ struct MeetCreationUnifiedFormView: View
                     .padding(.horizontal, 24)
             }
             
-            // Existing invite UI
+            // Existing invite UI - disable when group is selected
             InviteFriendsEmbedded(
                 baseURL: baseURL,
                 token: token,
                 selectedUsers: $invitedUsers
             )
+            .disabled(selectedGroupId != nil)
+            .opacity(selectedGroupId != nil ? 0.5 : 1.0)
             
-            // "Save as Group" button when users are selected
-            if !invitedUsers.isEmpty {
+            // "Save as Group" button when users are selected AND no group is selected
+            if !invitedUsers.isEmpty && selectedGroupId == nil {
                 Divider()
                     .background(AppPalette.Surface.fieldStroke)
                     .padding(.horizontal, 24)
@@ -940,28 +953,45 @@ struct MeetCreationUnifiedFormView: View
 private struct GroupQuickSelectButton: View
 {
     let group: MeetGroup
+    let isSelected: Bool
     let onTap: () -> Void
     
     var body: some View {
         Button(action: onTap) {
-            HStack(spacing: 8) {
+            VStack(spacing: 6) {
                 Image(systemName: group.image_reference)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(iconColor(for: group.image_reference))
+                    .frame(width: 56, height: 56)
+                    .background(
+                        Circle()
+                            .fill(
+                                isSelected
+                                    ? AppPalette.Brand.spearmintGreen.opacity(0.2)
+                                    : AppPalette.Brand.neonPink.opacity(0.2)
+                            )
+                    )
+                    .overlay(
+                        Circle()
+                            .stroke(
+                                isSelected
+                                    ? AppPalette.Brand.spearmintGreen
+                                    : AppPalette.Brand.neonPink.opacity(0.4),
+                                lineWidth: isSelected ? 2 : 1
+                            )
+                    )
+                    .clipShape(Circle()) // ADD THIS LINE
                 
                 Text(group.name)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(AppPalette.Text.primary)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(
-                Capsule()
-                    .fill(AppPalette.Brand.neonPink.opacity(0.2))
-                    .overlay(
-                        Capsule().stroke(AppPalette.Brand.neonPink.opacity(0.4), lineWidth: 1)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(
+                        isSelected
+                            ? AppPalette.Brand.spearmintGreen
+                            : AppPalette.Text.primary
                     )
-            )
+                    .lineLimit(1)
+                    .frame(width: 70, height: 14)
+            }
         }
         .buttonStyle(.plain)
     }

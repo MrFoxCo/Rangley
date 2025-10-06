@@ -450,18 +450,61 @@ struct InviteFriendsEmbedded: View
     
     var body: some View {
         VStack(spacing: 16) {
-            // Subtitle
-            Text("Search by username to invite friends (optional)")
-                .font(.system(size: 14))
-                .foregroundStyle(AppPalette.Text.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 24)
             
             // Selected users chips (if any)
+            // Replace the selected users section with this:
+            // Selected users collapsible section
+            // Replace the CollapsibleSelectedUsers section in InviteFriendsEmbedded with:
             if !selectedUsers.isEmpty {
-                selectedUsersSection
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("\(selectedUsers.count) selected")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(AppPalette.Brand.neonPink)
+                        
+                        Spacer()
+                        
+                        Button("Clear All") {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                selectedUsers.removeAll()
+                            }
+                        }
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(AppPalette.Text.secondary)
+                    }
+                    
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(selectedUsers, id: \.user_uuid) { user in
+                                HStack(spacing: 6) {
+                                    Text("@\(user.username)")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundStyle(AppPalette.Text.primary)
+                                    
+                                    Button {
+                                        selectedUsers.removeAll { $0.user_uuid == user.user_uuid }
+                                    } label: {
+                                        Image(systemName: "xmark")
+                                            .font(.system(size: 8, weight: .bold))
+                                            .foregroundStyle(AppPalette.Text.secondary)
+                                    }
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 6)
+                                .background(
+                                    Capsule()
+                                        .fill(AppPalette.Brand.neonPink.opacity(0.2))
+                                        .overlay(
+                                            Capsule().stroke(AppPalette.Brand.neonPink.opacity(0.4), lineWidth: 1)
+                                        )
+                                )
+                            }
+                        }
+                    }
+                    .frame(height: 32)
+                }
+                .padding(.horizontal, 24)
             }
-            
             // Search button - opens SearchView
             Button(action: {
                 showUserSearch = true
@@ -649,6 +692,79 @@ private struct FullScreenUserCard: View
     }
 }
 
+struct CollapsibleSelectedUsers: View
+{
+    @Binding var selectedUsers: [ViewUsersModel]
+    @State private var isExpanded = false
+    
+    var body: some View {
+        VStack(spacing: 8) {
+            // Summary bar (always visible)
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Text("\(selectedUsers.count) selected")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(AppPalette.Brand.neonPink)
+                    
+                    Spacer()
+                    
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(AppPalette.Brand.neonPink)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(AppPalette.Brand.neonPink.opacity(0.1))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(AppPalette.Brand.neonPink.opacity(0.4), lineWidth: 1)
+                        )
+                )
+            }
+            .buttonStyle(.plain)
+            
+            // Expanded list (scrollable)
+            if isExpanded {
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(spacing: 6) {
+                        ForEach(selectedUsers, id: \.user_uuid) { user in
+                            HStack(spacing: 8) {
+                                Text("@\(user.username)")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(AppPalette.Text.primary)
+                                    .lineLimit(1)
+                                
+                                Spacer()
+                                
+                                Button {
+                                    selectedUsers.removeAll { $0.user_uuid == user.user_uuid }
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.system(size: 14))
+                                        .foregroundStyle(AppPalette.Text.tertiary)
+                                }
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(AppPalette.Surface.fieldFill)
+                            )
+                        }
+                    }
+                }
+                .frame(maxHeight: 120)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+    }
+}
 
 struct MeetCreationOverlayByTap: View
 {
