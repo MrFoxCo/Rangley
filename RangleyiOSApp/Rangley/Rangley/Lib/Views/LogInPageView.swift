@@ -318,7 +318,6 @@ private final class SignInVM: ObservableObject
         }
     }
     
-    // Add these properties to store the callback and token
     private var pendingSuccessCallback: ((String) -> Void)?
     private var pendingToken: String?
     

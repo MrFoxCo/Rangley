@@ -169,10 +169,6 @@ struct AuthAPI
             throw AuthAPIError.decode(error.localizedDescription)
         }
     }
-
-    // Add these methods to your AuthAPI struct
-
-
         
     // MARK: - Phone Verification API
         
@@ -256,7 +252,7 @@ struct AuthAPI
     static func viewAppVersion(baseURL: URL, appVersion: Int32)
         async throws -> AppVersionModelResponse
     {
-        // Add query parameter for version
+        // TODO: ??? Add query parameter for version
         var urlComponents = URLComponents(url: makeURL(baseURL, ["auth", "app-version"]), resolvingAgainstBaseURL: false)!
         urlComponents.queryItems = [URLQueryItem(name: "version", value: String(appVersion))]
         
@@ -1315,7 +1311,7 @@ struct AuthAPI
         }
     }
 
-    // Add friends to group
+    // MARK: Add friends to group
     static func insertMembersToMeetGroup(baseURL: URL, token: String, body: InsertMembersBody)
         async throws -> InsertMembersResponse
     {

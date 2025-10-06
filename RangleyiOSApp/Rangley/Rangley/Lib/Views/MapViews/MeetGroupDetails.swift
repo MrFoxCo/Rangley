@@ -1,5 +1,5 @@
 //
-//  MeetGroupBar.swift
+//  MeetGroupDetails.swift
 //  Rangley
 //
 //  Created by Anthony Guzzardo on 10/4/25.
@@ -446,6 +446,7 @@ struct MeetGroupDetailView: View
                                 )
                         }
                         .buttonStyle(.plain)
+                        .disabled(!isCurrentUserOwner) 
                         
                         Text(group.name)
                             .font(.system(size: 24, weight: .bold))
@@ -689,7 +690,11 @@ struct MeetGroupDetailView: View
                 baseURL: baseURL,
                 token: token,
                 groupId: group.meet_group_id,
-                onDismiss: { showImagePicker = false }
+                onDismiss: {
+                    showImagePicker = false
+                    // Trigger parent to reload the group
+                    Task { await onGroupChanged() }
+                }
             )
         }
         .sheet(isPresented: $showInviteMembers) {

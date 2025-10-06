@@ -24,7 +24,7 @@
 //    var dob         : String = ""
 //}
 //
-//// Add these to your existing Step enum
+
 //private enum Step: Hashable {
 //    case cellphone
 //    case verifyPhone(phone: String)

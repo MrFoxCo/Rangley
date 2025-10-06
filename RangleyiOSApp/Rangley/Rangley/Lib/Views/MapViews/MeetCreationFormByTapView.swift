@@ -813,7 +813,6 @@ struct MeetCreationOverlayByTap: View
         UINotificationFeedbackGenerator().notificationOccurred(.success)
     }
     
-    // Add this helper function to MeetCreationOverlayByTap
     private func parseErrorMessage(_ error: Error) -> String
     {
         let errorString = error.localizedDescription.lowercased()
@@ -1199,7 +1198,7 @@ struct UserSearchView: View
             }
             .padding(16)
             .background(Color(AppPalette.Brand.japPurple).opacity(0.95))
-            // Add this to the bottom of selectedUsersBottomSection:
+
             Button(action: onDismiss) {
                 Text("Continue")
                     .font(.system(size: 16, weight: .bold))
@@ -1347,7 +1346,6 @@ struct TapToAddUserCard: View
                     }
                 }
                 
-                // Add indicator
                 Image(systemName: "plus.circle")
                     .font(.system(size: 20, weight: .medium))
                     .foregroundStyle(AppPalette.Brand.neonPink.opacity(0.7))

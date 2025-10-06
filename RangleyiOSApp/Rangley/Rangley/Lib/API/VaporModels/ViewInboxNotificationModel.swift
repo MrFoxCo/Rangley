@@ -78,7 +78,7 @@ struct DeleteNotificationResponse: Codable, Sendable
 
 struct FriendRequestPayload: Codable {
     let friend_request_id: Int64
-    // Add any other fields your backend includes
+    // TODO: ?? Add any other fields backend includes
 }
 
 // MARK: - Private helpers (keep the leniency, but simplified now that server sends JSON text)

@@ -246,7 +246,6 @@ struct MeetCreationUnifiedFormView: View
                 }
             )
         }
-        // Add this sheet modifier in body
         .sheet(isPresented: $showCreateGroupForm) {
             MeetGroupFormView(
                 baseURL: baseURL,
@@ -288,7 +287,6 @@ struct MeetCreationUnifiedFormView: View
                 
                 Spacer()
                 
-                // Add X button on the right
                 Button(action: onClose) {
                     Image(systemName: "xmark")
                         .font(.system(size: 16, weight: .semibold))
@@ -761,7 +759,6 @@ struct MeetCreationUnifiedFormView: View
         }
     }
     
-    // Add this helper function to MeetCreationUnifiedFormView
     private func parseErrorMessage(_ error: Error) -> String
     {
         let errorString = error.localizedDescription.lowercased()
@@ -937,7 +934,7 @@ struct MeetCreationUnifiedFormView: View
             }
             
             await MainActor.run {
-                // Add members that aren't already selected
+                // TODO: Add members that aren't already selected
                 for user in memberUsers {
                     if !invitedUsers.contains(where: { $0.user_uuid == user.user_uuid }) {
                         invitedUsers.append(user)
@@ -980,7 +977,7 @@ private struct GroupQuickSelectButton: View
                                 lineWidth: isSelected ? 2 : 1
                             )
                     )
-                    .clipShape(Circle()) // ADD THIS LINE
+                    .clipShape(Circle())
                 
                 Text(group.name)
                     .font(.system(size: 11, weight: .medium))

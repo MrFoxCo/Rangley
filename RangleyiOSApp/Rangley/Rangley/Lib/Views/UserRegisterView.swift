@@ -24,14 +24,13 @@ private struct FormState: Equatable
     var dob             : String = ""
 }
 
-// Add these to your existing Step enum
 private enum Step: Hashable {
     case cellphone
     case verifyPhone(phone: String)
     case display
     case username
     case dob
-    case password  // Moved to second-to-last
+    case password
     case agree
     case saveCredentials
     case done

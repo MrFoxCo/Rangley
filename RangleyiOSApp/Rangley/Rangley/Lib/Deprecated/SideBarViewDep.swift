@@ -52,7 +52,6 @@ struct SideBarView: View
                     .padding(.horizontal, 8)
                     .padding(.vertical, 8)
                 
-                // Add Meet Group button
                 Button(action: { showCreateGroup = true }) {
                     Image(systemName: "plus")
                         .font(.system(size: 16, weight: .bold))

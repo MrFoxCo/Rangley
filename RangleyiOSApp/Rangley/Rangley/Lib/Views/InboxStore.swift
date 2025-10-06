@@ -200,7 +200,6 @@ final class InboxStore: ObservableObject {
         _ = try await AuthAPI.deleteInboxNotification(baseURL: baseURL, token: token, notificationId: notificationId)
     }
     
-    // Add this method to InboxStore
     func respondToMeetGroupInvitation(_ notification: InboxNotificationModelBody, accept: Bool) async throws
     {
         guard !token.isEmpty else { throw AuthAPIError.http(-1, "No auth token") }

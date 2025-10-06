@@ -174,7 +174,6 @@ struct UserInboxView: View
                     }
                 }
                 
-                // Add this section after Meet Invitations and before Other Notifications
                 if !meetGroupInvitations.isEmpty {
                     CollapsibleSection(
                         title: "Group Invitations",
@@ -309,7 +308,6 @@ struct UserInboxView: View
         filteredNotifications.filter { $0.notification_type_id == 8 }
     }
     
-    // Add this new computed property
     private var meetGroupInvitations: [InboxNotificationModelBody]
     {
         filteredNotifications.filter { $0.notification_type_id == 19 }
@@ -357,8 +355,7 @@ struct UserInboxView: View
             print("Failed to decline meet invitation: \(error)")
         }
     }
-    
-    // Add these action methods
+
     private func acceptMeetGroupInvitation(_ notification: InboxNotificationModelBody) async
     {
         do {

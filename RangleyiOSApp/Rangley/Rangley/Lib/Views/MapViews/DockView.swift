@@ -35,7 +35,7 @@ public struct DockView: View
     
     @State private var isAnimating = false
     @State private var showSearch = false
-    @State private var showMyProfile = false  // Add this
+    @State private var showMyProfile = false
     
     init(
         baseURL: URL,
@@ -220,7 +220,7 @@ public struct DockView: View
                 }
             )
         }
-        .fullScreenCover(isPresented: $showMyProfile)  // Add this
+        .fullScreenCover(isPresented: $showMyProfile) 
         {
             MyProfileView(
                 baseURL: baseURL,

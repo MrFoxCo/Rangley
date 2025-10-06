@@ -125,7 +125,7 @@ struct NearbyMeetsBadgeView: View
                             compactContent // COMPACT BADGE CONTENT - Initial "X nearby" view
                         }
                         
-                        // Add close/chevron indicator when expanded
+                        // TODO: Add close/chevron indicator when expanded
                         if isExpanded || showRadiusSelector {
                             Image(systemName: showRadiusSelector ? "xmark.circle.fill" : "chevron.down.circle.fill")
                                 .font(.system(size: 16))
@@ -159,7 +159,7 @@ struct NearbyMeetsBadgeView: View
         .onChange(of: showRadiusSelector) {_, newValue in
             onRadiusSelectorChange?(newValue)
         }
-        // Add tap gesture to dismiss when tapping outside
+        // TODO: Add tap gesture to dismiss when tapping outside
         .onTapGesture {
             // This won't interfere with button tap since button consumes the gesture first
         }
@@ -340,8 +340,7 @@ struct NearbyMeetsBadgeView: View
                     .buttonStyle(.plain)
                 }
             }
-            
-            // Add a subtle hint at the bottom
+
             Text("Tap to select")
                 .font(.system(size: 9, weight: .medium))
                 .foregroundStyle(AppPalette.Brand.neonPink.opacity(0.6))

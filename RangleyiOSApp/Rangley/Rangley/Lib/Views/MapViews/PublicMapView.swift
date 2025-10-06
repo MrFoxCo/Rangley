@@ -882,7 +882,7 @@ struct OverlaysView: View
                     }
                 }
             )
-            // Add this to the ZStack in OverlaysView body
+
             MeetUpdateUnifiedOverlay(
                 showOverlay: $uiState.showUpdateOverlay,
                 meetToEdit: $uiState.meetToEdit,
@@ -973,7 +973,7 @@ struct OverlaysView: View
     
     private func handleMeetCreation(
         _ location: LocationInfo,_ name: String,
-        _ start: Date,_ end: Date,_ invitedUsers: [ViewUsersModel]) async throws  // ADD throws
+        _ start: Date,_ end: Date,_ invitedUsers: [ViewUsersModel]) async throws  
     {
         let invitedUUIDs = invitedUsers.map(\.user_uuid)
         
@@ -1029,7 +1029,7 @@ struct ControlsView: View
     var body: some View
     {
         ZStack(alignment: .leading)
-        {  // Add ZStack wrapper
+        {  
             VStack
             {
                 if !shouldHideDock {

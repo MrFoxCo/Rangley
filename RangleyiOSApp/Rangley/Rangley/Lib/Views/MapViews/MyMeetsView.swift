@@ -20,6 +20,12 @@ import SwiftUI
 import Foundation
 import CoreLocation
 
+private enum MyMeetsTab: String, CaseIterable {
+    case meets  = "Meets"
+    case groups = "Groups"
+}
+
+
 struct MyMeetsView: View
 {
     @EnvironmentObject var inbox: InboxStore
@@ -37,7 +43,7 @@ struct MyMeetsView: View
     init(
         baseURL: URL,
         authToken: String,
-        mapDataStore: MapDataStore, // Add this parameter
+        mapDataStore: MapDataStore,
         onMeetSelected: ((ViewMeetsModel) -> Void)? = nil
     ) {
         self.baseURL = baseURL
@@ -144,7 +150,7 @@ struct MyMeetsView: View
 }
 
 
-// MARK: - MyMeetsOverlay
+// MARK: - MyMeetsOverlay (Updated with Tabs)
 struct MyMeetsOverlay: View
 {
     @EnvironmentObject var inbox: InboxStore
@@ -156,57 +162,32 @@ struct MyMeetsOverlay: View
     let onInvitationResponse: ((ViewNotificationsModel, Int16) -> Void)?
 
     @Environment(\.dismiss) private var dismiss
+    @State private var selectedTab: MyMeetsTab = .meets
+    @State private var meetGroups: [MeetGroup] = []
+    @State private var isLoadingGroups = false
+    @State private var selectedGroupForDetail: MeetGroup? = nil
+    @State private var showGroupDetail = false
+    
+    private enum MyMeetsTab: String, CaseIterable {
+        case meets = "Meets"
+        case groups = "Groups"
+    }
 
     var body: some View {
         NavigationView {
             VStack(spacing: 0)
             {
                 headerView
-
+                tabSelector
+                
                 ZStack
                 {
                     AppPalette.Brand.russianViolet.opacity(0.05).ignoresSafeArea()
 
-                    if mapDataStore.isLoading {
-                        loadingView
-                    } else if let e = mapDataStore.error {
-                        errorView(e)
-                    } else if mapDataStore.meets.isEmpty && inbox.notifications.isEmpty {
-                        emptyStateView
+                    if selectedTab == .meets {
+                        meetsTabContent
                     } else {
-                        MyMeetsContentView(
-                            meets: mapDataStore.meets,
-                            notifications: inbox.notifications,
-                            onMeetSelected: onMeetSelected,
-                            onInvitationResponse: onInvitationResponse,
-                            onDelete: { meet in
-                                Task {
-                                    do {
-                                        // You need to get baseURL and token - add them as parameters to MyMeetsOverlay
-                                        let body = DeletedMeetInsertBody(meet_id_uuid: meet.meet_id_uuid)
-                                        _ = try await AuthAPI.deleteMeet(baseURL: baseURL, token: token, body: body)
-                                        
-                                        await mapDataStore.forceRefresh()
-                                        await inbox.refresh(force: true)
-                                    } catch {
-                                        print("Failed to delete meet: \(error)")
-                                    }
-                                }
-                            },
-                            onLeave: { meet in
-                                Task {
-                                    do {
-                                        let body = LeaveMeetBody(meet_id_uuid: meet.meet_id_uuid)
-                                        _ = try await AuthAPI.leaveMeet(baseURL: baseURL, token: token, body: body)
-                                        
-                                        await mapDataStore.forceRefresh()
-                                        await inbox.refresh(force: true)
-                                    } catch {
-                                        print("Failed to leave meet: \(error)")
-                                    }
-                                }
-                            }
-                        )
+                        groupsTabContent
                     }
                 }
             }
@@ -215,10 +196,327 @@ struct MyMeetsOverlay: View
         .task {
             await mapDataStore.loadMeets()
             await inbox.refresh(force: true)
+            await loadMeetGroups()
+        }
+        .sheet(isPresented: $showGroupDetail) {
+            if let group = selectedGroupForDetail {
+                MeetGroupDetailView(
+                    group: group,
+                    baseURL: baseURL,
+                    token: token,
+                    onDismiss: {
+                        showGroupDetail = false
+                        selectedGroupForDetail = nil
+                    },
+                    onGroupChanged: {
+                        await loadMeetGroups()  // This reloads and updates the group
+                        // Update the selected group reference
+                        if let updatedGroup = meetGroups.first(where: { $0.meet_group_id == group.meet_group_id }) {
+                            selectedGroupForDetail = updatedGroup
+                        }
+                    }
+                )
+            }
+        }
+    }
+    
+    // MARK: - Tab Selector
+    private var tabSelector: some View {
+        HStack(spacing: 0) {
+            ForEach(MyMeetsTab.allCases, id: \.self) { tab in
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        selectedTab = tab
+                    }
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                } label: {
+                    VStack(spacing: 0) {
+                        Text(tab.rawValue)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(
+                                selectedTab == tab
+                                    ? AppPalette.Text.primary
+                                    : AppPalette.Text.secondary
+                            )
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                        
+                        Rectangle()
+                            .fill(AppPalette.Brand.neonPink)
+                            .frame(height: 2)
+                            .opacity(selectedTab == tab ? 1 : 0)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .background(AppPalette.Brand.formBlack)
+    }
+    
+    // MARK: - Meets Tab Content
+    private var meetsTabContent: some View {
+        Group {
+            if mapDataStore.isLoading {
+                loadingView
+            } else if let e = mapDataStore.error {
+                errorView(e)
+            } else if mapDataStore.meets.isEmpty && inbox.notifications.isEmpty {
+                emptyStateView
+            } else {
+                MyMeetsContentView(
+                    meets: mapDataStore.meets,
+                    notifications: inbox.notifications,
+                    onMeetSelected: onMeetSelected,
+                    onInvitationResponse: onInvitationResponse,
+                    onDelete: { meet in
+                        Task {
+                            do {
+                                let body = DeletedMeetInsertBody(meet_id_uuid: meet.meet_id_uuid)
+                                _ = try await AuthAPI.deleteMeet(baseURL: baseURL, token: token, body: body)
+                                
+                                await mapDataStore.forceRefresh()
+                                await inbox.refresh(force: true)
+                            } catch {
+                                print("Failed to delete meet: \(error)")
+                            }
+                        }
+                    },
+                    onLeave: { meet in
+                        Task {
+                            do {
+                                let body = LeaveMeetBody(meet_id_uuid: meet.meet_id_uuid)
+                                _ = try await AuthAPI.leaveMeet(baseURL: baseURL, token: token, body: body)
+                                
+                                await mapDataStore.forceRefresh()
+                                await inbox.refresh(force: true)
+                            } catch {
+                                print("Failed to leave meet: \(error)")
+                            }
+                        }
+                    }
+                )
+            }
+        }
+    }
+    
+    // MARK: - Groups Tab Content
+    private var groupsTabContent: some View {
+        Group {
+            if isLoadingGroups {
+                loadingView
+            } else if meetGroups.isEmpty {
+                emptyGroupsView
+            } else {
+                groupsGridView
+            }
+        }
+    }
+    
+    private var groupsGridView: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            LazyVGrid(
+                columns: [
+                    GridItem(.adaptive(minimum: 100, maximum: 120), spacing: 16)
+                ],
+                spacing: 20
+            ) {
+                ForEach(meetGroups, id: \.meet_group_id) { group in
+                    GroupCard(
+                        group: group,
+                        onTap: {
+                            selectedGroupForDetail = group
+                            showGroupDetail = true
+                        },
+                        onDelete: {
+                            Task { await deleteOrLeaveGroup(group) }
+                        },
+                        baseURL: baseURL,
+                        token: token
+                    )
+                }
+            }
+            .padding(20)
+        }
+        .background(Color(AppPalette.Brand.formBlack))
+    }
+    
+    private var emptyGroupsView: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "person.3")
+                .font(.system(size: 48, weight: .light))
+                .foregroundStyle(AppPalette.Brand.neonPink.opacity(0.4))
+            
+            VStack(spacing: 8) {
+                Text("No Groups Yet")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(AppPalette.Text.primary)
+                
+                Text("Create a group when inviting friends to a meet")
+                    .font(.system(size: 16))
+                    .foregroundStyle(AppPalette.Text.secondary)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 40)
+        .background(Color(AppPalette.Brand.formBlack))
+    }
+    
+    // MARK: - Data Loading
+    private func loadMeetGroups() async {
+        isLoadingGroups = true
+        defer { isLoadingGroups = false }
+        
+        do {
+            let groups = try await AuthAPI.viewMeetGroups(baseURL: baseURL, token: token)
+            await MainActor.run {
+                meetGroups = groups
+            }
+        } catch {
+            print("Failed to load meet groups: \(error)")
+        }
+    }
+    
+    private func deleteOrLeaveGroup(_ group: MeetGroup) async {
+        do {
+            // Check member list to determine if current user is owner
+            let members = try await AuthAPI.viewMeetGroupMembers(
+                baseURL: baseURL,
+                token: token,
+                meetGroupId: group.meet_group_id
+            )
+            
+            let isOwner = members.first(where: { $0.is_owner }) != nil
+            
+            if isOwner {
+                // Delete the group
+                let body = DeleteGroupBody(meet_group_id: group.meet_group_id)
+                _ = try await AuthAPI.deleteMeetGroup(baseURL: baseURL, token: token, body: body)
+            } else {
+                // Leave the group
+                let body = LeaveMeetGroupBody(meet_group_id: group.meet_group_id)
+                _ = try await AuthAPI.leaveMeetGroup(baseURL: baseURL, token: token, body: body)
+            }
+            
+            await loadMeetGroups()
+        } catch {
+            print("Failed to delete/leave group: \(error)")
         }
     }
 }
 
+// MARK: - Group Card
+private struct GroupCard: View
+{
+    let group: MeetGroup
+    let onTap: () -> Void
+    let onDelete: () -> Void
+    let baseURL: URL
+    let token: String
+    
+    @EnvironmentObject var authState: AuthStateStore
+    @State private var members: [GroupMember] = []
+    @State private var showDeleteConfirm = false
+    
+    private var isOwner: Bool {
+        guard let userUUID = authState.currentUser?.user_uuid else { return false }
+        return members.first(where: { $0.user_uuid == userUUID })?.is_owner ?? false
+    }
+    
+    var body: some View {
+        Button(action: onTap) {
+            VStack(spacing: 12) {
+                ZStack(alignment: .topTrailing) {
+                    ZStack {
+                        Circle()
+                            .fill(AppPalette.Brand.neonPink.opacity(0.2))
+                            .frame(width: 70, height: 70)
+                        
+                        Image(systemName: group.image_reference)
+                            .font(.system(size: 28, weight: .semibold))
+                            .foregroundStyle(iconColor(for: group.image_reference))
+                    }
+                    
+                    if isOwner {
+                        Image(systemName: "crown.fill")
+                            .font(.system(size: 14))
+                            .foregroundStyle(Color.orange)
+                            .offset(x: 8, y: -8)
+                    }
+                }
+                
+                Text(group.name)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(AppPalette.Text.primary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .frame(height: 36)
+                
+                Text("\(group.member_count) member\(group.member_count == 1 ? "" : "s")")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(AppPalette.Text.tertiary)
+            }
+            .frame(width: 100, height: 150)
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color(AppPalette.Brand.japPurple))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1)
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button(role: .destructive) {
+                showDeleteConfirm = true
+            } label: {
+                Label(
+                    isOwner ? "Delete Group" : "Leave Group",
+                    systemImage: isOwner ? "trash" : "rectangle.portrait.and.arrow.right"
+                )
+            }
+        }
+        .alert(
+            isOwner ? "Delete Group?" : "Leave Group?",
+            isPresented: $showDeleteConfirm
+        ) {
+            Button(isOwner ? "Delete" : "Leave", role: .destructive) {
+                onDelete()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(
+                isOwner
+                    ? "Are you sure you want to delete \"\(group.name)\"? This cannot be undone."
+                    : "Are you sure you want to leave \"\(group.name)\"?"
+            )
+        }
+        .task {
+            await loadMembers()
+        }
+    }
+    
+    private func iconColor(for icon: String) -> Color {
+        AppPalette.Brand.neonPink
+    }
+    
+    private func loadMembers() async {
+        do {
+            let fetchedMembers = try await AuthAPI.viewMeetGroupMembers(
+                baseURL: baseURL,
+                token: token,
+                meetGroupId: group.meet_group_id
+            )
+            await MainActor.run {
+                members = fetchedMembers
+            }
+        } catch {
+            print("Failed to load members: \(error)")
+        }
+    }
+}
 
 
 // MARK: - Content Views
@@ -333,23 +631,6 @@ private extension MyMeetsOverlay
 
 // MARK: - Content View
 
-
-/// Meet Notification IDS
-///0    NULL_VALUE
-///1    Meet Created
-///2    Meet Updated
-///3    Meet Cancelled
-///4    New Attendee
-///5    Attendee Left
-///6    Meet Reminder
-///7    System Alert
-///8    Meet Invitation Received
-///9    Meet Invitation Accepted
-///10    Meet Invitation Declined
-///11    Meet Invitation Expired
-///12    Meet Full
-///13    Meet Role Changed
-///14    Meet Location Changed
 struct MyMeetsContentView: View
 {
     let meets: [ViewMeetsModel]
@@ -408,7 +689,7 @@ struct CollapsibleOwnedMeetsSection: View
 {
     let meets: [ViewMeetsModel]
     let onMeetSelected: ((ViewMeetsModel) -> Void)?
-    let onDelete: ((ViewMeetsModel) -> Void)?   // ADD THIS
+    let onDelete: ((ViewMeetsModel) -> Void)? 
     @State private var isExpanded = true
     @State private var emptyMessage = EasterEggMessages.getRandomSelfMessage()
     

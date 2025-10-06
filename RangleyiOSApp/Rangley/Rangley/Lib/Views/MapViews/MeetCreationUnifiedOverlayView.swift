@@ -130,9 +130,6 @@ struct MeetCreationUnifiedOverlay: View
         }
     }
 
-    // ADD THIS HELPER FUNCTION to MeetCreationUnifiedOverlay
-
-    
     private func handleCreateMeetWithInvites(body: MeetWithInvitesInsertBody) async throws
     {
         let location = LocationInfo(

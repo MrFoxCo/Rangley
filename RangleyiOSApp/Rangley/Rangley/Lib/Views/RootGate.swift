@@ -116,7 +116,6 @@ struct RootGate: View
         }
     }
     
-    // Add the helper functions
     private func versionToInt(_ versionString: String) -> Int32
     {
         let components = versionString.split(separator: ".").compactMap { Int($0) }
