@@ -39,6 +39,9 @@ struct MeetCreationUnifiedFormView: View
     @State private var displayLocationSubtitle = ""
     @State private var geocodingTask: Task<Void, Never>?
     @FocusState private var isNameFieldFocused: Bool
+    @State private var showCreateGroupForm = false
+    @State private var createdGroupId: Int64?
+    @State private var existingMeetGroups: [MeetGroup] = []
     
     init(
         entryMode: MeetCreationEntryMode,
@@ -242,6 +245,23 @@ struct MeetCreationUnifiedFormView: View
                 }
             )
         }
+        // Add this sheet modifier in body
+        .sheet(isPresented: $showCreateGroupForm) {
+            MeetGroupFormView(
+                baseURL: baseURL,
+                token: token,
+                preselectedUsers: invitedUsers,
+                onGroupCreated: { groupId in
+                    createdGroupId = groupId
+                    showCreateGroupForm = false
+                    // Reload groups so the new one appears in the list
+                    Task {
+                        await loadExistingGroups()
+                    }
+                },
+                onCancel: { showCreateGroupForm = false }
+            )
+        }
     }
     
     // MARK: Components
@@ -433,6 +453,24 @@ struct MeetCreationUnifiedFormView: View
                         isNameFieldFocused = true
                     }
                 }
+                .onAppear {
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                        isAnimating = true
+                    }
+                    setupInitialState()
+                    
+                    // Load existing groups
+                    Task {
+                        await loadExistingGroups()
+                    }
+                    
+                    // Auto-show location picker for createButton flow on location step
+                    if case .createButton = entryMode, currentStep == .location {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                            showLocationPicker = true
+                        }
+                    }
+                }
             
             Text("\(vm.name.count)/50")
                 .font(.footnote)
@@ -489,14 +527,89 @@ struct MeetCreationUnifiedFormView: View
         .foregroundColor(AppPalette.Text.primary)
         .padding(.horizontal, 24)
     }
-    
+
     private var inviteFriendsStepContent: some View
     {
-        InviteFriendsEmbedded(
-            baseURL: baseURL,
-            token: token,
-            selectedUsers: $invitedUsers
-        )
+        VStack(spacing: 16) {
+            // Show existing groups first
+            if !existingMeetGroups.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Your Groups")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(AppPalette.Text.secondary)
+                        .padding(.horizontal, 24)
+                    
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 12) {
+                            ForEach(existingMeetGroups, id: \.meet_group_id) { group in
+                                GroupQuickSelectButton(
+                                    group: group,
+                                    onTap: {
+                                        Task { await loadGroupMembers(group) }
+                                    }
+                                )
+                            }
+                        }
+                        .padding(.horizontal, 24)
+                    }
+                }
+                
+                Divider()
+                    .background(AppPalette.Surface.fieldStroke)
+                    .padding(.horizontal, 24)
+            }
+            
+            // Existing invite UI
+            InviteFriendsEmbedded(
+                baseURL: baseURL,
+                token: token,
+                selectedUsers: $invitedUsers
+            )
+            
+            // "Save as Group" button when users are selected
+            if !invitedUsers.isEmpty {
+                Divider()
+                    .background(AppPalette.Surface.fieldStroke)
+                    .padding(.horizontal, 24)
+                
+                Button {
+                    showCreateGroupForm = true
+                } label: {
+                    HStack(spacing: 8) {
+                        if createdGroupId != nil {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 14, weight: .semibold))
+                            Text("Group Created")
+                                .font(.system(size: 14, weight: .semibold))
+                        } else {
+                            Image(systemName: "folder.badge.plus")
+                                .font(.system(size: 14, weight: .semibold))
+                            Text("Create Group")
+                                .font(.system(size: 14, weight: .semibold))
+                        }
+                    }
+                    .foregroundStyle(
+                        createdGroupId != nil
+                            ? AppPalette.Brand.spearmintGreen
+                            : AppPalette.Brand.neonPink
+                    )
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(
+                                createdGroupId != nil
+                                    ? AppPalette.Brand.spearmintGreen.opacity(0.6)
+                                    : AppPalette.Brand.neonPink.opacity(0.6),
+                                lineWidth: 1
+                            )
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(createdGroupId != nil)
+                .padding(.horizontal, 24)
+            }
+        }
     }
     
     private var reviewStepContent: some View
@@ -775,6 +888,82 @@ struct MeetCreationUnifiedFormView: View
         if hours > 0 && minutes > 0 { return "\(hours)h \(minutes)m" }
         if hours > 0 { return "\(hours) hour\(hours == 1 ? "" : "s")" }
         return "\(minutes) minute\(minutes == 1 ? "" : "s")"
+    }
+    
+    private func loadExistingGroups() async
+    {
+        do {
+            let groups = try await AuthAPI.viewMeetGroups(baseURL: baseURL, token: token)
+            await MainActor.run {
+                existingMeetGroups = groups
+            }
+        } catch {
+            print("Failed to load groups: \(error)")
+        }
+    }
+
+    // Function to load group members and add to invites
+    private func loadGroupMembers(_ group: MeetGroup) async
+    {
+        do {
+            let members = try await AuthAPI.viewMeetGroupMembers(
+                baseURL: baseURL,
+                token: token,
+                meetGroupId: group.meet_group_id
+            )
+            
+            // Convert members to ViewUsersModel and add to invitedUsers
+            let memberUsers = members.map { member in
+                ViewUsersModel(
+                    user_uuid: member.user_uuid,
+                    username: member.username,
+                    display_name: member.display_name,
+                    matched_by: [],
+                    can_invite: true
+                )
+            }
+            
+            await MainActor.run {
+                // Add members that aren't already selected
+                for user in memberUsers {
+                    if !invitedUsers.contains(where: { $0.user_uuid == user.user_uuid }) {
+                        invitedUsers.append(user)
+                    }
+                }
+            }
+        } catch {
+            print("Failed to load group members: \(error)")
+        }
+    }
+}
+
+private struct GroupQuickSelectButton: View
+{
+    let group: MeetGroup
+    let onTap: () -> Void
+    
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 8) {
+                Image(systemName: group.image_reference)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(iconColor(for: group.image_reference))
+                
+                Text(group.name)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(AppPalette.Text.primary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(
+                Capsule()
+                    .fill(AppPalette.Brand.neonPink.opacity(0.2))
+                    .overlay(
+                        Capsule().stroke(AppPalette.Brand.neonPink.opacity(0.4), lineWidth: 1)
+                    )
+            )
+        }
+        .buttonStyle(.plain)
     }
 }
 

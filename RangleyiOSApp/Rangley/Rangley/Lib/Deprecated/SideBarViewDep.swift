@@ -81,7 +81,7 @@ struct SideBarView: View
             
             Spacer()
         }
-        .frame(width: 64)
+        .frame(width: 70)
         .background(sidebarBackground)
         .shadow(color: AppPalette.Brand.neonPink.opacity(0.2), radius: 8, x: 0, y: 4)
         .sheet(isPresented: $showMessenger) {
@@ -217,8 +217,8 @@ private struct SideBarIconButton: View
         Button(action: onTap) {
             ZStack(alignment: .topTrailing) {
                 Image(systemName: icon)
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(color)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(iconColor(for: icon))
                     .frame(width: 44, height: 44)
                     .background(
                         Circle()
@@ -274,9 +274,7 @@ private struct GroupVerticalButton: View
         Button(action: onTap) {
             Image(systemName: groupIcon)
                 .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(
-                    isSelected ? .white : AppPalette.Brand.neonPink
-                )
+                .foregroundStyle(iconColor(for: groupIcon))
                 .frame(width: 44, height: 44)
                 .background(buttonBackground)
                 .overlay(buttonBorder)

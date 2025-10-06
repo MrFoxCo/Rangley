@@ -1028,31 +1028,82 @@ struct ControlsView: View
     
     var body: some View
     {
-        ZStack
-        {
+        ZStack(alignment: .leading)
+        {  // Add ZStack wrapper
             VStack
             {
                 if !shouldHideDock {
-                    // MARK: - TOP BAR: Centered badge only
-                    HStack {
-                        Spacer()
-                        NearbyMeetsBadgeView(
-                            meets: mapData.meets,
-                            userLocation: locationData.userLocation?.coordinate ?? CLLocationCoordinate2D(latitude: 41.9211, longitude: -87.6338),
-                            selectedRadius: $selectedRadius,
-                            onExpandedChange: { isExpanded in
-                                isBadgeExpanded = isExpanded
-                            },
-                            onRadiusSelectorChange: { showSelector in
-                                showBadgeRadiusSelector = showSelector
+                    // MARK: - TOP BAR: Centered badge with inbox on right
+                    ZStack(alignment: .topTrailing)
+                    {
+                        // Centered badge - truly centered
+                        HStack {
+                            Spacer()
+                            NearbyMeetsBadgeView(
+                                meets: mapData.meets,
+                                userLocation: locationData.userLocation?.coordinate ?? CLLocationCoordinate2D(latitude: 41.9211, longitude: -87.6338),
+                                selectedRadius: $selectedRadius,
+                                onExpandedChange: { isExpanded in
+                                    isBadgeExpanded = isExpanded
+                                },
+                                onRadiusSelectorChange: { showSelector in
+                                    showBadgeRadiusSelector = showSelector
+                                }
+                            )
+                            Spacer()
+                        }
+                        
+                        HStack(spacing: 12) {
+                            Button(action: {
+                                uiState.showMessenger = true
+                            }) {
+                                Image(systemName: "message")
+                                    .font(.system(size: 18, weight: .medium))
+                                    .foregroundColor(AppPalette.Brand.neonPink)
+                                    .frame(width: 44, height: 44)
+                                    .background(
+                                        Circle()
+                                            .fill(AppPalette.Brand.japPurple)
+                                    )
+                                    .shadow(radius: 2)
                             }
-                        )
-                        Spacer()
+                            .frame(width: 44, height: 44)
+                            
+                            Button(action: {
+                                uiState.showInbox = true
+                            }) {
+                                ZStack(alignment: .topTrailing) {
+                                    Image(systemName: "tray")
+                                        .font(.system(size: 18, weight: .medium))
+                                        .foregroundColor(AppPalette.Brand.neonPink)
+                                        .frame(width: 44, height: 44)
+                                        .background(
+                                            Circle()
+                                                .fill(AppPalette.Brand.japPurple)
+                                        )
+                                        .shadow(radius: 2)
+                                    
+                                    if inbox.unreadCount > 0 {
+                                        Text("\(inbox.unreadCount)")
+                                            .font(.system(size: 10, weight: .bold))
+                                            .foregroundColor(.white)
+                                            .padding(4)
+                                            .background(Circle().fill(Color.red))
+                                            .offset(x: 6, y: -6)
+                                    }
+                                }
+                            }
+                            .frame(width: 44, height: 44)
+                        }
+                        .padding(.trailing, 20)
+                        
+                        
+                        
                     }
                     .padding(.top, 16)
                     
                     Spacer()
-
+                    
                     // RECENTER BUTTON - Left side, above dock
                     HStack
                     {
@@ -1079,8 +1130,7 @@ struct ControlsView: View
                     .animation(.spring(response: 0.4, dampingFraction: 0.8), value: locationData.shouldShowRecenterButton)
                     
                     // DOCK - Bottom center
-                    HStack
-                    {
+                    HStack {
                         Spacer()
                         DockView(
                             baseURL: Env.apiBaseURL,
@@ -1109,35 +1159,12 @@ struct ControlsView: View
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
-            
-            // SIDEBAR - Right side
-            if !shouldHideDock {
-                HStack {
-                    Spacer()
-                    
-                    SideBarView(
-                        groups: uiState.meetGroups,
-                        selectedGroup: $uiState.selectedMeetGroup,
-                        baseURL: Env.apiBaseURL,
-                        token: authState.currentToken,
-                        onGroupsChanged: {
-                            await uiState.loadMeetGroups(baseURL: Env.apiBaseURL, token: authState.currentToken)
-                        },
-                        onGroupTapped: {
-                            uiState.showMeetGroupDetail = true
-                        }
-                    )
-                    .padding(.trailing, 10)
-                    .padding(.vertical, 16)
-                    .padding(.bottom, 90)
-                }
-                .transition(.move(edge: .trailing).combined(with: .opacity))
-            }
         }
         .task {
             await authState.updateToken()
         }
         .animation(.easeInOut(duration: 0.1), value: shouldHideDock)
+        
     }
 }
 

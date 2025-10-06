@@ -212,15 +212,14 @@ private struct GroupHorizontalButton: View
         }
     }
     
+
     // MARK: - Subviews
     
     private var groupButton: some View {
         Button(action: onTap) {
             Image(systemName: groupIcon)
                 .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(
-                    isSelected ? .white : AppPalette.Brand.neonPink
-                )
+                .foregroundStyle(iconColor(for: groupIcon))
                 .frame(width: 50, height: 50)
                 .background(buttonBackground)
                 .overlay(buttonBorder)
@@ -229,6 +228,7 @@ private struct GroupHorizontalButton: View
                     radius: isSelected ? 8 : 0
                 )
         }
+        .contentShape(Circle())
         .buttonStyle(.plain)
         .simultaneousGesture(
             LongPressGesture(minimumDuration: 0.5)
@@ -835,10 +835,8 @@ struct MeetGroupIconPicker: View
                             updateIcon(icon)
                         } label: {
                             Image(systemName: icon)
-                                .font(.system(size: 24, weight: .semibold))
-                                .foregroundStyle(
-                                    currentIcon == icon ? AppPalette.Brand.neonPink : AppPalette.Text.primary
-                                )
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(iconColor(for: icon))
                                 .frame(width: 60, height: 60)
                                 .background(
                                     RoundedRectangle(cornerRadius: 12)
@@ -989,9 +987,7 @@ struct CreateMeetGroupView: View
                             } label: {
                                 Image(systemName: icon)
                                     .font(.system(size: 18, weight: .semibold))
-                                    .foregroundStyle(
-                                        selectedIcon == icon ? AppPalette.Brand.neonPink : AppPalette.Text.primary
-                                    )
+                                    .foregroundStyle(iconColor(for: icon))
                                     .frame(width: 44, height: 44)
                                     .background(
                                         RoundedRectangle(cornerRadius: 8)
@@ -1086,9 +1082,16 @@ struct CreateMeetGroupView: View
                 let response = try await AuthAPI.insertMeetGroup(baseURL: baseURL, token: token, body: body)
                 print("=== Response received: \(response)")
                 
+                // Check if the response indicates failure
+                if !response.success {
+                    errorMessage = response.message // Server already provides user-friendly message
+                    isCreating = false
+                    return
+                }
+                
                 guard let groupId = response.meet_group_id else {
                     print("=== ERROR: meet_group_id is nil in response")
-                    errorMessage = "Failed to create group: No group ID returned"
+                    errorMessage = "Unable to create group. Please try again."
                     isCreating = false
                     return
                 }
@@ -1097,7 +1100,7 @@ struct CreateMeetGroupView: View
                 isCreating = false
             } catch {
                 print("=== Error creating group: \(error)")
-                errorMessage = "Failed to create group: \(error.localizedDescription)"
+                errorMessage = "Unable to create group. Please check your connection and try again."
                 isCreating = false
             }
         }

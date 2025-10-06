@@ -36,8 +36,8 @@ delete FROM rangley.vw_meet_group_members;
 delete FROM rangley.vw_meet_groups;
 
 
-delete FROM rangley.vw_user_inboxes where notification_id between 333 and 345;
-delete FROM rangley.vw_notifications where notification_id between 333 and 345;
+delete FROM rangley.vw_user_inboxes where notification_id between 336 and 365;
+delete FROM rangley.vw_notifications where notification_id between 336 and 365;
 
 
 
