@@ -14,6 +14,7 @@ enum MeetCreationEntryMode
 {
     case tapOnMap(location: LocationInfo)  // Location pre-selected
     case createButton                       // Need to pick location
+    case createWithGroup(group: MeetGroup, members: [GroupMember])
 }
 
 // MARK: - Unified Form View
@@ -26,11 +27,16 @@ struct MeetCreationUnifiedFormView: View
     let onCreate: (MeetInsertBody) async throws -> Void
     let onCreateWithInvites: (MeetWithInvitesInsertBody) async throws -> Void
     let onClose: () -> Void
+    let preselectedGroupMembers: [ViewUsersModel]?
+    let skipInviteStep: Bool
+
+    
     
     // MARK: State
     @StateObject private var vm: MeetFormUnifiedModel
     @State private var currentStep: UnifiedStep = .location
     @State private var invitedUsers: [ViewUsersModel] = []
+    
     @State private var isAnimating = false
     @State private var isSubmitting = false
     @State private var submitError: String?
@@ -59,22 +65,42 @@ struct MeetCreationUnifiedFormView: View
         self.onCreateWithInvites = onCreateWithInvites
         self.onClose = onClose
         
+        // Handle group mode BEFORE initializing StateObject
+        if case .createWithGroup(_, let members) = entryMode {
+            self.skipInviteStep = true
+            self.preselectedGroupMembers = members.map { member in
+                ViewUsersModel(
+                    user_uuid: member.user_uuid,
+                    username: member.username,
+                    display_name: member.display_name,
+                    matched_by: [],
+                    can_invite: true
+                )
+            }
+        } else {
+            self.skipInviteStep = false
+            self.preselectedGroupMembers = nil
+        }
+        
         // Initialize VM with location if available
         let initialLocation: LocationInfo? = {
             switch entryMode {
             case .tapOnMap(let loc): return loc
             case .createButton: return nil
+            case .createWithGroup: return nil // ADD THIS
             }
         }()
         
         _vm = StateObject(wrappedValue: MeetFormUnifiedModel(location: initialLocation))
         
-        // Skip location step if coming from tap
+        // Set initial step based on entry mode
         switch entryMode {
         case .tapOnMap:
             _currentStep = State(initialValue: .name)
         case .createButton:
             _currentStep = State(initialValue: .location)
+        case .createWithGroup:
+            _currentStep = State(initialValue: .location) // or .name if you want to skip location for groups too
         }
     }
     
@@ -115,14 +141,19 @@ struct MeetCreationUnifiedFormView: View
     // Get active steps based on entry mode
     private var activeSteps: [UnifiedStep]
     {
-        switch entryMode {
-        case .tapOnMap:
-            // Skip location step
-            return UnifiedStep.allCases.filter { $0 != .location }
-        case .createButton:
-            // Include all steps
-            return UnifiedStep.allCases
+        var steps = UnifiedStep.allCases
+        
+        // Remove location step for tapOnMap
+        if case .tapOnMap = entryMode {
+            steps.removeAll { $0 == .location }
         }
+        
+        // Remove invite step for group meets
+        if skipInviteStep {
+            steps.removeAll { $0 == .inviteFriends }
+        }
+        
+        return steps
     }
     
     private var totalSteps: Int { activeSteps.count }
@@ -188,6 +219,9 @@ struct MeetCreationUnifiedFormView: View
         .scaleEffect(isAnimating ? 1 : 0.95)
         .opacity(isAnimating ? 1 : 0)
         .onAppear {
+            if let preselected = preselectedGroupMembers {
+                invitedUsers = preselected
+            }
             withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                 isAnimating = true
             }
@@ -807,6 +841,9 @@ struct MeetCreationUnifiedFormView: View
         case .tapOnMap(let location):
             loadLocationAddress(location)
         case .createButton:
+            displayLocationName = "Choose a location"
+            displayLocationSubtitle = "Tap 'Open Location Picker' to select"
+        case .createWithGroup:
             displayLocationName = "Choose a location"
             displayLocationSubtitle = "Tap 'Open Location Picker' to select"
         }

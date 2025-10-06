@@ -1226,7 +1226,7 @@ public func routes(_ app: Application) throws
     // MARK: - Meet Group Routes
     // =========================================================
 
-    // Create meet group
+    ///Create meet group
     s.post("meet-groups", "insert")
     {
         req async throws -> HTTPDTO.MeetGroups.InsertGroupResponse in
@@ -1249,7 +1249,10 @@ public func routes(_ app: Application) throws
             return .init(
                 success: result.success,
                 message: result.message,
-                meet_group_id: result.meet_group_id
+                meet_group_id: result.meet_group_id,
+                validation_failed: result.validation_failed,
+                validation_reason: result.validation_reason,
+                validation_message: result.validation_message
             )
             
         } catch let error as PSQLError {

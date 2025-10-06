@@ -1609,6 +1609,9 @@ enum Func
             let success: Bool
             let message: String
             let meet_group_id: Int64?
+            let validation_failed: Bool
+            let validation_reason: String?
+            let validation_message: String?
         }
 
         static func query(_ input: In) -> SQLQueryString
@@ -1621,11 +1624,13 @@ enum Func
             try .init(
                 success: r.decode(column: "success", as: Bool.self),
                 message: r.decode(column: "message", as: String.self),
-                meet_group_id: r.decode(column: "meet_group_id", as: Int64?.self)
+                meet_group_id: r.decode(column: "meet_group_id", as: Int64?.self),
+                validation_failed: r.decode(column: "validation_failed", as: Bool.self),
+                validation_reason: r.decode(column: "validation_reason", as: String?.self),
+                validation_message: r.decode(column: "validation_message", as: String?.self)
             )
         }
     }
-    
     enum SystemInsertMembersToMeetGroup: PgFunctionRow
     {
         static let funcName: RangleyFunc = .insert_members_to_meet_group // NEED TO ADD THIS TO ENUM

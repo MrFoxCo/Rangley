@@ -92,7 +92,8 @@ class APIService: APIServiceProtocol
         _ = try await AuthAPI.deleteMeet(baseURL: Env.apiBaseURL, token: token, body: body)
     }
     
-    func leaveMeet(_ meetId: UUID) async throws {
+    func leaveMeet(_ meetId: UUID) async throws
+    {
         let token = try await getAuthToken()
         let body = RespondToInviteBody(
             meet_id_uuid: meetId,

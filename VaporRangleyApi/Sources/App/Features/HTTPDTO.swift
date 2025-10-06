@@ -415,7 +415,7 @@ enum HTTPDTO
         struct InsertGroupBody: Content, Sendable
         {
             let group_name: String
-            let image_reference: String?  // Optional, defaults to 'person.3.fill' in PostgreSQL
+            let image_reference: String?
         }
         
         struct InsertGroupResponse: Content, Sendable
@@ -423,6 +423,9 @@ enum HTTPDTO
             let success: Bool
             let message: String
             let meet_group_id: Int64?
+            let validation_failed: Bool
+            let validation_reason: String?
+            let validation_message: String?
         }
         
         // NEW DTO: For adding members directly (not inviting)

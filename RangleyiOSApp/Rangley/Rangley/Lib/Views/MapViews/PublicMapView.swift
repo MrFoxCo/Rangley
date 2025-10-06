@@ -16,6 +16,51 @@ import Amplify
 import UIKit
 import AWSPluginsCore
 
+// ==========================================================================================================
+// ==========================================================================================================
+// ==========================================================================================================
+// MARK: - IGNORE THE BELOW TODOs FOR NOW
+// MARK: - V2
+// TODO: fix the App Icon it appears fussy on the iphone 17 max pro... probably need a cleaner logo or soethign
+// TODO: - figure out why the meet detail doesn't update the participant status... need to tap on
+//          -- ^^need to tap on my meets for it to update
+// TODO: - git commit -m "fix friends notifications meet notificaitons add friends and nearbymoving"
+// TODO: - User inbox needs to update on tap?? also should automatically get a ping when a notificaiton arrives
+// TODO: - make delete notifications look a little better also add a are you sure you want to clear/delete
+// TODO: - Anyone can join a group if a link is sent?
+// TODO: - Banner Notificaitons from outside the app
+// TODO: - Joinable public groups by request to join
+// TODO: - Create UNDO for deletes and updates
+// TODO: - Fix return to user button only appears when not centered
+// TODO: - NEED TO ADD categories and max capacties as options
+// TODO: - add count for people inside radius to the meet bubble button
+// TODO: - start planning version two features (filter by date, public join, friends, .etc, caching etc. etc.
+// TODO: - AWS change username, change display name, wire the account settings to have all of that shit
+// TODO: - meet invitaiton should be single repsonsiblity (maybe give leaveMeet or left meet new one
+// TODO: - Out of App Notifcations???
+// TODO: - Extermely important need to make sure we're not always refetching all the data... need to use cache
+// TODO: - Tweak on Update Screen
+// TODO: - ^^ and only grab the meet affected to what we were updating.
+// TODO: - add a user inbox
+// TODO: - Remeber User when Create New Account .. think this is good need check with dad's phone
+// TODO: - Make sure can't duplicate username or cellphone
+// TODO: - loading is kinda fixed
+// TODO: -  ^^^^this is for first download or simply reopening the app... an ANYTIME open of the app load
+// TODO: - Cleanup jump from MyMeetsView to meetscard overlay
+// TODO: - Make sure KEYBOARDS ARE ALL THE SAME COLOR -- make black theme
+// TODO: - Add throttling for too many requests
+// TODO: - Add Technical Difficulties Page
+// TODO: - Fix key chain so it's not so ugly
+// TODO: - Consider adding other POI's to the map
+// TODO: - Users can create groups... sorta like on iMessage. ex: invite their usual friend groups out
+// TODO: - filtering mechanism for my meets... might get really cluttered for super active users
+// TODO: - NEED TO FIX THE FUCKING locaiton bubble it's not shrinking
+// MARK: - V2
+// MARK: - IGNORE THE ABOVE TODOs FOR NOW
+// ==========================================================================================================
+// ==========================================================================================================
+// ==========================================================================================================
+
 // MARK: - Updated MapDataStore with leaveMeet
 @MainActor
 class MapDataStore: ObservableObject

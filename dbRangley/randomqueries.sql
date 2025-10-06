@@ -1,4 +1,9 @@
-select * from rangley.vw_up_to_date_meets;
+select u.name, us.display_name  from rangley.vw_up_to_date_meets u
+join rangley.vw_meet_ids mi on mi.meet_id = u.meet_id 
+join rangley.vw_users us on us.user_id = mi.created_by_user_id ;
+
+
+
 
 select * from rangley.vw_meet_ids;
 
@@ -43,27 +48,9 @@ delete FROM rangley.vw_notifications where notification_id between 336 and 365;
 
 
 UPDATE rangley.tb_users
-SET dob = DATE '1968-02-19',
+SET dob = DATE '1969-12-31',
     dttm_modified_utc = NOW()
-WHERE user_id = 21;
-
-
-select * from rangley.tb_content_violations;
-
-SELECT dob::text FROM rangley.tb_users WHERE username = 'anthonyguzzardo';
-
-
-
-
-delete from rangley.tb_users where user_id in (9);
-
-
-SELECT 
-    dob,
-    encode(dob::text::bytea, 'hex') as hex_bytes,
-    length(dob::text) as length
-FROM rangley.vw_users 
-WHERE user_id = 36;
+WHERE user_id = 25;
 
 
 

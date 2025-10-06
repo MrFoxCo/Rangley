@@ -409,7 +409,9 @@ struct MeetGroupDetailView: View
     @State private var showDeleteConfirm = false
     @State private var isDeleting = false
     @State private var showImagePicker = false
-    @State private var showInviteMembers = false // REMOVED: showAddMembers
+    @State private var showInviteMembers = false
+    @State private var showCreateMeet = false
+    @State private var meetCreationMode: MeetCreationEntryMode?
     
     
     private var isCurrentUserOwner: Bool
@@ -589,7 +591,8 @@ struct MeetGroupDetailView: View
                         
                         if !members.isEmpty {
                             Button {
-                                // TODO: Navigate to create meet with this group
+                                meetCreationMode = .createWithGroup(group: group, members: members)
+                                showCreateMeet = true
                             } label: {
                                 HStack(spacing: 12) {
                                     Image(systemName: "calendar.badge.plus")
@@ -706,6 +709,55 @@ struct MeetGroupDetailView: View
                     showInviteMembers = false
                 }
             )
+        }
+        .fullScreenCover(isPresented: $showCreateMeet) {
+            if let mode = meetCreationMode {
+                MeetCreationUnifiedOverlay(
+                    showOverlay: $showCreateMeet,
+                    entryMode: .constant(mode),
+                    baseURL: baseURL,
+                    token: token,
+                    onCreateMeet: { location, name, start, end, invites in
+                        // Create the meet body from the provided parameters
+                        let body = MeetInsertBody(
+                            latitude: location.Coordinate.latitude,
+                            longitude: location.Coordinate.longitude,
+                            region_latitude: location.RegionCoordinate.latitude,
+                            region_longitude: location.RegionCoordinate.longitude,
+                            region_radius: location.RegionRadius,
+                            name: name,
+                            dttm_start_utc: start,
+                            dttm_end_utc: end,
+                            description: nil,
+                            meet_category_id: 1,
+                            max_capacity: 8
+                        )
+                        
+                        // Call the API
+                        let response = try await AuthAPI.createMeet(
+                            baseURL: baseURL,
+                            token: token,
+                            body: body
+                        )
+                        
+                        // Check for validation failures
+                        if response.validation_failed {
+                            throw ContentViolationError(
+                                violation: ContentViolation(
+                                    reason: "content_violation",
+                                    message: response.validation_message ?? "Content violates our community guidelines."
+                                )
+                            )
+                        }
+                        
+                        // Success - trigger group refresh and dismiss
+                        await onGroupChanged()
+                    },
+                    onContentViolation: { violation in
+                        errorMessage = violation.message
+                    }
+                )
+            }
         }
     }
     
@@ -1071,6 +1123,7 @@ struct CreateMeetGroupView: View
         }
     }
     
+    ///Contains content violation warnings
     private func createGroup()
     {
         Task {
@@ -1078,38 +1131,42 @@ struct CreateMeetGroupView: View
             errorMessage = nil
             
             do {
-                let body = InsertGroupBody(
+                let createBody = InsertGroupBody(
                     group_name: groupName.trimmingCharacters(in: .whitespacesAndNewlines),
                     image_reference: selectedIcon
                 )
                 
-                print("=== Creating group with body: \(body)")
-                let response = try await AuthAPI.insertMeetGroup(baseURL: baseURL, token: token, body: body)
-                print("=== Response received: \(response)")
+                let createResponse = try await AuthAPI.insertMeetGroup(
+                    baseURL: baseURL,
+                    token: token,
+                    body: createBody
+                )
                 
-                // Check if the response indicates failure
-                if !response.success {
-                    errorMessage = response.message // Server already provides user-friendly message
+                // CHECK FOR VALIDATION FAILURE
+                if createResponse.validation_failed {
+                    errorMessage = createResponse.validation_message ?? "Content violates community guidelines"
                     isCreating = false
                     return
                 }
                 
-                guard let groupId = response.meet_group_id else {
-                    print("=== ERROR: meet_group_id is nil in response")
-                    errorMessage = "Unable to create group. Please try again."
+                guard createResponse.success, let groupId = createResponse.meet_group_id else {
+                    errorMessage = createResponse.message.isEmpty ? "Unable to create group" : createResponse.message
                     isCreating = false
                     return
                 }
                 
                 navigationPath.append(groupId)
                 isCreating = false
+                
             } catch {
-                print("=== Error creating group: \(error)")
                 errorMessage = "Unable to create group. Please check your connection and try again."
                 isCreating = false
             }
         }
     }
+    
+    
+    
 }
 
 

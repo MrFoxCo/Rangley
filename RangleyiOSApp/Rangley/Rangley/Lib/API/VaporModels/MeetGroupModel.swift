@@ -18,6 +18,9 @@ struct InsertGroupResponse: Codable, Sendable
     let success: Bool
     let message: String
     let meet_group_id: Int64?
+    let validation_failed: Bool
+    let validation_reason: String?
+    let validation_message: String?
 }
 
 // NEW DTO: For adding members directly (not inviting)

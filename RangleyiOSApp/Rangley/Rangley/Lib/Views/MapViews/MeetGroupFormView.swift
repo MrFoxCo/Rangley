@@ -187,6 +187,7 @@ struct MeetGroupFormView: View
     
     // MARK: - Actions
     
+    ///Contains content violation warnings
     private func createGroup()
     {
         Task {
@@ -194,7 +195,6 @@ struct MeetGroupFormView: View
             errorMessage = nil
             
             do {
-                // Step 1: Create the group
                 let createBody = InsertGroupBody(
                     group_name: groupName.trimmingCharacters(in: .whitespacesAndNewlines),
                     image_reference: selectedIcon
@@ -205,6 +205,13 @@ struct MeetGroupFormView: View
                     token: token,
                     body: createBody
                 )
+                
+                // CHECK FOR VALIDATION FAILURE
+                if createResponse.validation_failed {
+                    errorMessage = createResponse.validation_message ?? "Content violates community guidelines"
+                    isCreating = false
+                    return
+                }
                 
                 guard createResponse.success, let groupId = createResponse.meet_group_id else {
                     errorMessage = createResponse.message.isEmpty ? "Unable to create group" : createResponse.message
@@ -230,7 +237,6 @@ struct MeetGroupFormView: View
                     }
                 }
                 
-                // Step 3: Just return the group ID, not a full MeetGroup object
                 await MainActor.run {
                     onGroupCreated(groupId)
                 }
