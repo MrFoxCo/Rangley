@@ -20,7 +20,8 @@ import SwiftUI
 import Foundation
 import CoreLocation
 
-private enum MyMeetsTab: String, CaseIterable {
+private enum MyMeetsTab: String, CaseIterable
+{
     case meets  = "Meets"
     case groups = "Groups"
 }
@@ -300,7 +301,8 @@ struct MyMeetsOverlay: View
     }
     
     // MARK: - Groups Tab Content
-    private var groupsTabContent: some View {
+    private var groupsTabContent: some View
+    {
         Group {
             if isLoadingGroups {
                 loadingView
@@ -312,13 +314,14 @@ struct MyMeetsOverlay: View
         }
     }
     
-    private var groupsGridView: some View {
+    private var groupsGridView: some View
+    {
         ScrollView(.vertical, showsIndicators: false) {
             LazyVGrid(
                 columns: [
-                    GridItem(.adaptive(minimum: 100, maximum: 120), spacing: 16)
+                    GridItem(.adaptive(minimum: 110, maximum: 140), spacing: 20)
                 ],
-                spacing: 20
+                spacing: 24
             ) {
                 ForEach(meetGroups, id: \.meet_group_id) { group in
                     GroupCard(
@@ -335,12 +338,15 @@ struct MyMeetsOverlay: View
                     )
                 }
             }
-            .padding(20)
+            .padding(.horizontal, 24)
+            .padding(.top, 24)
+            .padding(.bottom, 32)
         }
         .background(Color(AppPalette.Brand.formBlack))
     }
     
-    private var emptyGroupsView: some View {
+    private var emptyGroupsView: some View
+    {
         VStack(spacing: 20) {
             Image(systemName: "person.3")
                 .font(.system(size: 48, weight: .light))
@@ -363,7 +369,8 @@ struct MyMeetsOverlay: View
     }
     
     // MARK: - Data Loading
-    private func loadMeetGroups() async {
+    private func loadMeetGroups() async
+    {
         isLoadingGroups = true
         defer { isLoadingGroups = false }
         
@@ -377,7 +384,8 @@ struct MyMeetsOverlay: View
         }
     }
     
-    private func deleteOrLeaveGroup(_ group: MeetGroup) async {
+    private func deleteOrLeaveGroup(_ group: MeetGroup) async
+    {
         do {
             // Check member list to determine if current user is owner
             let members = try await AuthAPI.viewMeetGroupMembers(
@@ -425,46 +433,61 @@ private struct GroupCard: View
     
     var body: some View {
         Button(action: onTap) {
-            VStack(spacing: 12) {
+            VStack(spacing: 14) {
+                // Icon with owner crown
                 ZStack(alignment: .topTrailing) {
                     ZStack {
                         Circle()
-                            .fill(AppPalette.Brand.neonPink.opacity(0.2))
-                            .frame(width: 70, height: 70)
+                            .fill(AppPalette.Brand.neonPink.opacity(0.15))
+                            .frame(width: 80, height: 80)
                         
                         Image(systemName: group.image_reference)
-                            .font(.system(size: 28, weight: .semibold))
-                            .foregroundStyle(iconColor(for: group.image_reference))
+                            .font(.system(size: 32, weight: .semibold))
+                            .foregroundStyle(AppPalette.Brand.neonPink)
                     }
                     
                     if isOwner {
                         Image(systemName: "crown.fill")
-                            .font(.system(size: 14))
+                            .font(.system(size: 16))
                             .foregroundStyle(Color.orange)
-                            .offset(x: 8, y: -8)
+                            .shadow(color: .black.opacity(0.3), radius: 2)
+                            .offset(x: 10, y: -10)
                     }
                 }
+                .padding(.top, 8)
                 
+                // Group name
                 Text(group.name)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(AppPalette.Text.primary)
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
-                    .frame(height: 36)
+                    .frame(height: 40)
+                    .fixedSize(horizontal: false, vertical: true)
                 
-                Text("\(group.member_count) member\(group.member_count == 1 ? "" : "s")")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(AppPalette.Text.tertiary)
+                // Member count
+                HStack(spacing: 4) {
+                    Image(systemName: "person.2.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(AppPalette.Text.tertiary)
+                    
+                    Text("\(group.member_count)")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(AppPalette.Text.tertiary)
+                }
+                .padding(.bottom, 8)
             }
-            .frame(width: 100, height: 150)
-            .padding(12)
+            .frame(width: 130)
+            .padding(.vertical, 16)
+            .padding(.horizontal, 12)
             .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .fill(Color(AppPalette.Brand.japPurple))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .stroke(AppPalette.Brand.neonPink.opacity(0.25), lineWidth: 1.5)
                     )
+                    .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
             )
         }
         .buttonStyle(.plain)
@@ -496,10 +519,6 @@ private struct GroupCard: View
         .task {
             await loadMembers()
         }
-    }
-    
-    private func iconColor(for icon: String) -> Color {
-        AppPalette.Brand.neonPink
     }
     
     private func loadMembers() async {
