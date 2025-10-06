@@ -23,50 +23,38 @@ struct MeetGroupBar: View
     var body: some View
     {
         HStack(spacing: 0) {
-            // Plus button - enhanced
+            // Plus button - fixed on left
             Button(action: { showCreateGroup = true }) {
                 Image(systemName: "plus")
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 54, height: 54)
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(AppPalette.Brand.neonPink)
+                    .frame(width: 50, height: 50)
                     .background(
                         Circle()
-                            .fill(
-                                LinearGradient(
-                                    colors: [
-                                        AppPalette.Brand.neonPink,
-                                        AppPalette.Brand.neonPink.opacity(0.8)
-                                    ],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
+                            .fill(AppPalette.Brand.japPurple)
                     )
-                    .shadow(color: AppPalette.Brand.neonPink.opacity(0.4), radius: 8, x: 0, y: 2)
+                    .overlay(
+                        Circle()
+                            .stroke(AppPalette.Brand.neonPink.opacity(0.4), lineWidth: 1.5)
+                    )
             }
             .buttonStyle(.plain)
             .padding(.leading, 16)
             
-            // Divider - more visible
+            // Divider
             Rectangle()
-                .fill(AppPalette.Brand.neonPink.opacity(0.35))
-                .frame(width: 1.5)
-                .padding(.horizontal, 14)
+                .fill(AppPalette.Brand.neonPink.opacity(0.25))
+                .frame(width: 1)
+                .padding(.horizontal, 12)
             
             // Empty state or scrollable groups
             if groups.isEmpty {
-                // Enhanced empty state
-                HStack(spacing: 10) {
-                    Image(systemName: "person.3")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(AppPalette.Brand.neonPink.opacity(0.7))
-                    
-                    Text("My Meet Groups")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(AppPalette.Text.primary.opacity(0.85))
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.trailing, 16)
+                // Empty state label
+                Text("My Meet Groups")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(AppPalette.Text.secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.trailing, 16)
             } else {
                 // Scrollable groups
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -90,27 +78,16 @@ struct MeetGroupBar: View
                 .padding(.trailing, 16)
             }
         }
-        .frame(height: 70)
+        .frame(height: 66)
         .background(
-            RoundedRectangle(cornerRadius: 35, style: .continuous)
-                .fill(AppPalette.Brand.japPurple.opacity(0.95))
+            RoundedRectangle(cornerRadius: 33, style: .continuous)
+                .fill(AppPalette.Brand.neonPink.opacity(0.08))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 35, style: .continuous)
-                        .stroke(
-                            LinearGradient(
-                                colors: [
-                                    AppPalette.Brand.neonPink.opacity(0.5),
-                                    AppPalette.Brand.neonPink.opacity(0.25)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            lineWidth: 1.5
-                        )
+                    RoundedRectangle(cornerRadius: 33, style: .continuous)
+                        .stroke(AppPalette.Brand.neonPink.opacity(0.2), lineWidth: 1)
                 )
         )
-        .shadow(color: .black.opacity(0.25), radius: 16, x: 0, y: 6)
-        .shadow(color: AppPalette.Brand.neonPink.opacity(0.15), radius: 20, x: 0, y: 4)
+        .shadow(color: AppPalette.Brand.neonPink.opacity(0.12), radius: 12, x: 0, y: 4)
         .sheet(isPresented: $showCreateGroup) {
             CreateMeetGroupView(
                 baseURL: baseURL,
@@ -160,54 +137,41 @@ private struct GroupHorizontalButton: View
         Button(action: onTap) {
             VStack(spacing: 6) {
                 Image(systemName: groupIcon)
-                    .font(.system(size: 19, weight: .semibold))
+                    .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(
                         isSelected ? .white : AppPalette.Brand.neonPink
                     )
-                    .frame(width: 52, height: 52)
+                    .frame(width: 50, height: 50)
                     .background(
                         Circle()
                             .fill(
                                 isSelected
-                                    ? LinearGradient(
-                                        colors: [
-                                            AppPalette.Brand.neonPink,
-                                            AppPalette.Brand.neonPink.opacity(0.85)
-                                        ],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                    : LinearGradient(
-                                        colors: [
-                                            AppPalette.Brand.japPurple.opacity(0.6),
-                                            AppPalette.Brand.japPurple.opacity(0.8)
-                                        ],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
+                                    ? AppPalette.Brand.neonPink
+                                    : AppPalette.Brand.japPurple
                             )
                     )
                     .overlay(
                         Circle()
                             .stroke(
                                 isSelected
-                                    ? AppPalette.Brand.neonPink.opacity(0.6)
-                                    : AppPalette.Brand.neonPink.opacity(0.5),
+                                    ? AppPalette.Brand.neonPink
+                                    : AppPalette.Brand.neonPink.opacity(0.4),
                                 lineWidth: isSelected ? 2 : 1.5
                             )
                     )
                     .shadow(
-                        color: isSelected ? AppPalette.Brand.neonPink.opacity(0.5) : .black.opacity(0.15),
-                        radius: isSelected ? 10 : 4,
-                        x: 0,
-                        y: isSelected ? 3 : 2
+                        color: isSelected ? AppPalette.Brand.neonPink.opacity(0.4) : .clear,
+                        radius: isSelected ? 8 : 0
                     )
                 
-                Text(group.name)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(AppPalette.Text.primary.opacity(0.85))
-                    .lineLimit(1)
-                    .frame(maxWidth: 70)
+                // Group name - only show if selected
+                if isSelected {
+                    Text(group.name)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(AppPalette.Text.primary)
+                        .lineLimit(1)
+                        .frame(maxWidth: 70)
+                }
             }
             .padding(.vertical, 4)
         }
@@ -229,7 +193,6 @@ private struct GroupHorizontalButton: View
         }
     }
 }
-
 
 // MARK: - Group Dock Button
 private struct GroupDockButton: View
