@@ -199,7 +199,7 @@ public struct DockView: View
                     .fill(AppPalette.Brand.japDarkerPurple)
                     .overlay(
                         RoundedRectangle(cornerRadius: 24, style: .continuous)
-                            .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1)
+                            .stroke(AppPalette.Brand.neonPink.opacity(0.6), lineWidth: 2)
                     )
             )
             .shadow(color: AppPalette.Brand.neonPink.opacity(0.2), radius: 10, x: 0, y: 5)

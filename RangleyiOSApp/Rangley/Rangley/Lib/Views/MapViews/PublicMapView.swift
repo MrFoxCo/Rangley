@@ -1028,100 +1028,34 @@ struct ControlsView: View
     
     var body: some View
     {
-        ZStack(alignment: .leading)
+        ZStack
         {
             VStack
             {
                 if !shouldHideDock {
-                    // MARK: - TOP BAR: Centered badge with inbox on right
-                    ZStack(alignment: .topTrailing)
-                    {
-                        // Centered badge - truly centered
-                        HStack {
-                            Spacer()
-                            NearbyMeetsBadgeView(
-                                meets: mapData.meets,
-                                userLocation: locationData.userLocation?.coordinate ?? CLLocationCoordinate2D(latitude: 41.9211, longitude: -87.6338),
-                                selectedRadius: $selectedRadius,
-                                onExpandedChange: { isExpanded in
-                                    isBadgeExpanded = isExpanded
-                                },
-                                onRadiusSelectorChange: { showSelector in
-                                    showBadgeRadiusSelector = showSelector
-                                }
-                            )
-                            Spacer()
-                        }
-                        
-                        HStack(spacing: 12) {
-                            Button(action: {
-                                uiState.showMessenger = true
-                            }) {
-                                Image(systemName: "message")
-                                    .font(.system(size: 18, weight: .medium))
-                                    .foregroundColor(AppPalette.Brand.neonPink)
-                                    .frame(width: 44, height: 44)
-                                    .background(
-                                        Circle()
-                                            .fill(AppPalette.Brand.japPurple)
-                                    )
-                                    .shadow(radius: 2)
+                    // MARK: - TOP BAR: Centered badge only
+                    HStack {
+                        Spacer()
+                        NearbyMeetsBadgeView(
+                            meets: mapData.meets,
+                            userLocation: locationData.userLocation?.coordinate ?? CLLocationCoordinate2D(latitude: 41.9211, longitude: -87.6338),
+                            selectedRadius: $selectedRadius,
+                            onExpandedChange: { isExpanded in
+                                isBadgeExpanded = isExpanded
+                            },
+                            onRadiusSelectorChange: { showSelector in
+                                showBadgeRadiusSelector = showSelector
                             }
-                            .frame(width: 44, height: 44)
-                            
-                            Button(action: {
-                                uiState.showInbox = true
-                            }) {
-                                ZStack(alignment: .topTrailing) {
-                                    Image(systemName: "tray")
-                                        .font(.system(size: 18, weight: .medium))
-                                        .foregroundColor(AppPalette.Brand.neonPink)
-                                        .frame(width: 44, height: 44)
-                                        .background(
-                                            Circle()
-                                                .fill(AppPalette.Brand.japPurple)
-                                        )
-                                        .shadow(radius: 2)
-                                    
-                                    if inbox.unreadCount > 0 {
-                                        Text("\(inbox.unreadCount)")
-                                            .font(.system(size: 10, weight: .bold))
-                                            .foregroundColor(.white)
-                                            .padding(4)
-                                            .background(Circle().fill(Color.red))
-                                            .offset(x: 6, y: -6)
-                                    }
-                                }
-                            }
-                            .frame(width: 44, height: 44)
-                        }
-                        .padding(.trailing, 20)
+                        )
+                        Spacer()
                     }
                     .padding(.top, 16)
                     
-                    // MEET GROUP BAR - Right below top bar
-                    MeetGroupBar(
-                        groups: uiState.meetGroups,
-                        selectedGroup: $uiState.selectedMeetGroup,
-                        baseURL: Env.apiBaseURL,
-                        token: authState.currentToken,
-                        onGroupsChanged: {
-                            await uiState.loadMeetGroups(baseURL: Env.apiBaseURL, token: authState.currentToken)
-                        },
-                        onGroupTapped: {
-                            uiState.showMeetGroupDetail = true
-                        }
-                    )
-                    .padding(.horizontal, 20)
-                    .padding(.top, 12) // Just a small gap below the top bar
-                    
                     Spacer()
-                    
-                    // RECENTER BUTTON - Right side, above dock
+
+                    // RECENTER BUTTON - Left side, above dock
                     HStack
                     {
-                        Spacer()
-                        
                         if locationData.shouldShowRecenterButton {
                             Button(action: { locationData.centerOnUser() }) {
                                 Image(systemName: "location.fill")
@@ -1136,8 +1070,10 @@ struct ControlsView: View
                             }
                             .disabled(locationData.userLocation == nil)
                             .transition(.scale.combined(with: .opacity))
-                            .padding(.trailing, 20)
+                            .padding(.leading, 20)
                         }
+                        
+                        Spacer()
                     }
                     .padding(.bottom, 20)
                     .animation(.spring(response: 0.4, dampingFraction: 0.8), value: locationData.shouldShowRecenterButton)
@@ -1173,13 +1109,36 @@ struct ControlsView: View
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
+            
+            // SIDEBAR - Right side
+            if !shouldHideDock {
+                HStack {
+                    Spacer()
+                    
+                    SideBarView(
+                        groups: uiState.meetGroups,
+                        selectedGroup: $uiState.selectedMeetGroup,
+                        baseURL: Env.apiBaseURL,
+                        token: authState.currentToken,
+                        onGroupsChanged: {
+                            await uiState.loadMeetGroups(baseURL: Env.apiBaseURL, token: authState.currentToken)
+                        },
+                        onGroupTapped: {
+                            uiState.showMeetGroupDetail = true
+                        }
+                    )
+                    .padding(.trailing, 10)
+                    .padding(.vertical, 16)
+                    .padding(.bottom, 90)
+                }
+                .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
         }
         .task {
             await authState.updateToken()
         }
         .animation(.easeInOut(duration: 0.1), value: shouldHideDock)
     }
-    
 }
 
 
