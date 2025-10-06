@@ -1029,12 +1029,13 @@ struct ControlsView: View
     var body: some View
     {
         ZStack(alignment: .leading)
-        {  // Add ZStack wrapper
+        {
             VStack
             {
                 if !shouldHideDock {
-                    // TOP BAR: Centered badge with inbox on right
-                    ZStack(alignment: .topTrailing) {
+                    // MARK: - TOP BAR: Centered badge with inbox on right
+                    ZStack(alignment: .topTrailing)
+                    {
                         // Centered badge - truly centered
                         HStack {
                             Spacer()
@@ -1095,16 +1096,30 @@ struct ControlsView: View
                             .frame(width: 44, height: 44)
                         }
                         .padding(.trailing, 20)
-                        
-                        
-                        
                     }
                     .padding(.top, 16)
                     
+                    // MEET GROUP BAR - Right below top bar
+                    MeetGroupBar(
+                        groups: uiState.meetGroups,
+                        selectedGroup: $uiState.selectedMeetGroup,
+                        baseURL: Env.apiBaseURL,
+                        token: authState.currentToken,
+                        onGroupsChanged: {
+                            await uiState.loadMeetGroups(baseURL: Env.apiBaseURL, token: authState.currentToken)
+                        },
+                        onGroupTapped: {
+                            uiState.showMeetGroupDetail = true
+                        }
+                    )
+                    .padding(.horizontal, 20)
+                    .padding(.top, 12) // Just a small gap below the top bar
+                    
                     Spacer()
                     
-                    // RECENTER BUTTON - Left side, above dock
-                    HStack {
+                    // RECENTER BUTTON - Right side, above dock
+                    HStack
+                    {
                         Spacer()
                         
                         if locationData.shouldShowRecenterButton {
@@ -1123,14 +1138,13 @@ struct ControlsView: View
                             .transition(.scale.combined(with: .opacity))
                             .padding(.trailing, 20)
                         }
-                        
-                        
                     }
                     .padding(.bottom, 20)
                     .animation(.spring(response: 0.4, dampingFraction: 0.8), value: locationData.shouldShowRecenterButton)
                     
                     // DOCK - Bottom center
-                    HStack {
+                    HStack
+                    {
                         Spacer()
                         DockView(
                             baseURL: Env.apiBaseURL,
@@ -1159,33 +1173,13 @@ struct ControlsView: View
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
-            // Meet Groups Bar - Left side (will hide with shouldHideDock)
-            if !shouldHideDock {
-                VStack {
-                    MeetGroupBar(
-                        groups: uiState.meetGroups,
-                        selectedGroup: $uiState.selectedMeetGroup,
-                        baseURL: Env.apiBaseURL,
-                        token: authState.currentToken,
-                        onGroupsChanged: {
-                            await uiState.loadMeetGroups(baseURL: Env.apiBaseURL, token: authState.currentToken)
-                        },
-                        onGroupTapped: {
-                            uiState.showMeetGroupDetail = true
-                        }
-                    )
-                    .padding(.leading, 8)
-                    .padding(.top, 80)
-                    .padding(.bottom, 100)
-                }
-            }
         }
         .task {
             await authState.updateToken()
         }
         .animation(.easeInOut(duration: 0.1), value: shouldHideDock)
-        
     }
+    
 }
 
 

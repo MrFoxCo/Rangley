@@ -22,64 +22,95 @@ struct MeetGroupBar: View
     
     var body: some View
     {
-        VStack(spacing: 0) {
+        HStack(spacing: 0) {
+            // Plus button - enhanced
             Button(action: { showCreateGroup = true }) {
                 Image(systemName: "plus")
-                    .font(.system(size: 16, weight: .bold))
-                    .imageScale(.large)
-                    .foregroundStyle(AppPalette.Brand.neonPink)
-                    .frame(width: 44, height: 44)
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 54, height: 54)
                     .background(
                         Circle()
-                            .fill(AppPalette.Brand.neonPink.opacity(0.14))
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        AppPalette.Brand.neonPink,
+                                        AppPalette.Brand.neonPink.opacity(0.8)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
                     )
-                    .overlay(
-                        Circle()
-                            .stroke(AppPalette.Brand.neonPink.opacity(0.55), lineWidth: 1)
-                    )
+                    .shadow(color: AppPalette.Brand.neonPink.opacity(0.4), radius: 8, x: 0, y: 2)
             }
             .buttonStyle(.plain)
-            .padding(.bottom, 12)
+            .padding(.leading, 16)
             
+            // Divider - more visible
             Rectangle()
-                .fill(AppPalette.Brand.neonPink.opacity(0.3))
-                .frame(height: 1)
-                .padding(.horizontal, 8)
-                .padding(.bottom, 16)
+                .fill(AppPalette.Brand.neonPink.opacity(0.35))
+                .frame(width: 1.5)
+                .padding(.horizontal, 14)
             
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 10) {
-                    ForEach(groups, id: \.meet_group_id) { group in
-                        GroupDockButton(
-                            group: group,
-                            isSelected: selectedGroup?.meet_group_id == group.meet_group_id,
-                            onTap: {
-                                selectedGroup = group
-                                onGroupTapped()
-                            },
-                            onDelete: {
-                                deleteGroup(group)
-                            }
-                        )
-                    }
+            // Empty state or scrollable groups
+            if groups.isEmpty {
+                // Enhanced empty state
+                HStack(spacing: 10) {
+                    Image(systemName: "person.3")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(AppPalette.Brand.neonPink.opacity(0.7))
+                    
+                    Text("My Meet Groups")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(AppPalette.Text.primary.opacity(0.85))
                 }
+                .frame(maxWidth: .infinity)
+                .padding(.trailing, 16)
+            } else {
+                // Scrollable groups
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(groups, id: \.meet_group_id) { group in
+                            GroupHorizontalButton(
+                                group: group,
+                                isSelected: selectedGroup?.meet_group_id == group.meet_group_id,
+                                onTap: {
+                                    selectedGroup = group
+                                    onGroupTapped()
+                                },
+                                onDelete: {
+                                    deleteGroup(group)
+                                }
+                            )
+                        }
+                    }
+                    .padding(.horizontal, 4)
+                }
+                .padding(.trailing, 16)
             }
-            
-            Spacer()
         }
-        .padding(.top, 20)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 14)
+        .frame(height: 70)
         .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(AppPalette.Brand.neonPink.opacity(0.12))
+            RoundedRectangle(cornerRadius: 35, style: .continuous)
+                .fill(AppPalette.Brand.japPurple.opacity(0.95))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .stroke(AppPalette.Brand.neonPink.opacity(0.25), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 35, style: .continuous)
+                        .stroke(
+                            LinearGradient(
+                                colors: [
+                                    AppPalette.Brand.neonPink.opacity(0.5),
+                                    AppPalette.Brand.neonPink.opacity(0.25)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1.5
+                        )
                 )
         )
-        .shadow(color: AppPalette.Brand.neonPink.opacity(0.15), radius: 8, x: 0, y: 4)
-        .frame(width: 64)
+        .shadow(color: .black.opacity(0.25), radius: 16, x: 0, y: 6)
+        .shadow(color: AppPalette.Brand.neonPink.opacity(0.15), radius: 20, x: 0, y: 4)
         .sheet(isPresented: $showCreateGroup) {
             CreateMeetGroupView(
                 baseURL: baseURL,
@@ -110,6 +141,95 @@ struct MeetGroupBar: View
         }
     }
 }
+
+private struct GroupHorizontalButton: View
+{
+    let group: MeetGroup
+    let isSelected: Bool
+    let onTap: () -> Void
+    let onDelete: () -> Void
+    
+    @State private var showDeleteConfirm = false
+    
+    private var groupIcon: String {
+        return group.image_reference
+    }
+    
+    var body: some View
+    {
+        Button(action: onTap) {
+            VStack(spacing: 6) {
+                Image(systemName: groupIcon)
+                    .font(.system(size: 19, weight: .semibold))
+                    .foregroundStyle(
+                        isSelected ? .white : AppPalette.Brand.neonPink
+                    )
+                    .frame(width: 52, height: 52)
+                    .background(
+                        Circle()
+                            .fill(
+                                isSelected
+                                    ? LinearGradient(
+                                        colors: [
+                                            AppPalette.Brand.neonPink,
+                                            AppPalette.Brand.neonPink.opacity(0.85)
+                                        ],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                    : LinearGradient(
+                                        colors: [
+                                            AppPalette.Brand.japPurple.opacity(0.6),
+                                            AppPalette.Brand.japPurple.opacity(0.8)
+                                        ],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                            )
+                    )
+                    .overlay(
+                        Circle()
+                            .stroke(
+                                isSelected
+                                    ? AppPalette.Brand.neonPink.opacity(0.6)
+                                    : AppPalette.Brand.neonPink.opacity(0.5),
+                                lineWidth: isSelected ? 2 : 1.5
+                            )
+                    )
+                    .shadow(
+                        color: isSelected ? AppPalette.Brand.neonPink.opacity(0.5) : .black.opacity(0.15),
+                        radius: isSelected ? 10 : 4,
+                        x: 0,
+                        y: isSelected ? 3 : 2
+                    )
+                
+                Text(group.name)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(AppPalette.Text.primary.opacity(0.85))
+                    .lineLimit(1)
+                    .frame(maxWidth: 70)
+            }
+            .padding(.vertical, 4)
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button(role: .destructive) {
+                showDeleteConfirm = true
+            } label: {
+                Label("Delete Group", systemImage: "trash")
+            }
+        }
+        .alert("Delete \(group.name)?", isPresented: $showDeleteConfirm) {
+            Button("Delete", role: .destructive) {
+                onDelete()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will remove the group for all members. This action cannot be undone.")
+        }
+    }
+}
+
 
 // MARK: - Group Dock Button
 private struct GroupDockButton: View
