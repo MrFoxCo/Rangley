@@ -195,6 +195,20 @@ private struct MeetCardView: View
         meet.is_owner
     }
 
+    private var category: MeetCategory?
+    {
+        MeetCategory(rawValue: meet.meet_category_id)
+    }
+    
+    private var categoryName: String
+    {
+        category?.displayName ?? "Event"
+    }
+        
+    private var categoryIcon: String {
+        category?.icon ?? "calendar"
+    }
+    
     private var dateRangeText: String
     {
         let f = DateIntervalFormatter()
@@ -376,7 +390,7 @@ private struct MeetCardView: View
                 
                 // Category
                 HStack(spacing: 12) {
-                    Chip(text: meet.category_name, systemImage: "figure.run")
+                    Chip(text: categoryName, systemImage: categoryIcon)
                 }
                 
                 // MARK: Location Information

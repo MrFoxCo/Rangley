@@ -244,9 +244,13 @@ struct MeetCreationUnifiedFormView: View
                     actionButtons
                 }
             }
-            .navigationTitle(navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text(navigationTitle)
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(AppPalette.Text.primary)
+                }
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") {
                         onClose()
@@ -523,6 +527,11 @@ struct MeetCreationUnifiedFormView: View
                                 )
                         )
                 )
+                .onChange(of: vm.name) { _, newValue in
+                    if newValue.count > 50 {
+                        vm.name = String(newValue.prefix(50))
+                    }
+                }
                 .onAppear {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                         isNameFieldFocused = true
@@ -563,6 +572,11 @@ struct MeetCreationUnifiedFormView: View
                         .background(Color.clear)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
+                        .onChange(of: vm.descriptionText) { _, newValue in
+                            if newValue.count > 200 {
+                                vm.descriptionText = String(newValue.prefix(200))
+                            }
+                        }
                 }
                 .background(
                     RoundedRectangle(cornerRadius: 12)
@@ -573,19 +587,10 @@ struct MeetCreationUnifiedFormView: View
                         )
                 )
                 
-                TextEditor(text: $vm.descriptionText)
-                    .font(.system(size: 16))
-                    .foregroundColor(AppPalette.Text.primary)
-                    .frame(height: 80)
-                    .scrollContentBackground(.hidden)
-                    .background(Color.clear)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .onChange(of: vm.descriptionText) { _, newValue in
-                        if newValue.count > 200 {
-                            vm.descriptionText = String(newValue.prefix(200))
-                        }
-                    }
+                Text("\(vm.descriptionText.count)/200")
+                    .font(.footnote)
+                    .foregroundColor(AppPalette.Text.tertiary)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
             
             // Category
@@ -887,6 +892,7 @@ struct MeetCreationUnifiedFormView: View
                         } else {
                             Text(buttonTitle)
                                 .font(.system(size: 16, weight: .bold))
+                                .foregroundColor(AppPalette.Text.primary)
                         }
                     }
                     .foregroundColor(.white)
@@ -1273,6 +1279,20 @@ enum MeetCategory: Int16, CaseIterable
         case .plannedTrip: return "Planned Trip"
         case .spontaneous: return "Spontaneous"
         case .custom: return "Custom"
+        }
+    }
+    
+    var icon: String {
+        switch self {
+        case .activity: return "figure.run"
+        case .sports: return "sportscourt"
+        case .outdoors: return "tree"
+        case .social: return "person.2"
+        case .music: return "music.note"
+        case .food: return "fork.knife"
+        case .plannedTrip: return "airplane"
+        case .spontaneous: return "bolt.fill"
+        case .custom: return "star.fill"
         }
     }
 }

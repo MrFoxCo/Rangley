@@ -124,9 +124,14 @@ struct GroupMeetCreationFormView: View
                     actionButtons
                 }
             }
-            .navigationTitle("Create Meet with \(group.name)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("Create Meet with \(group.name)")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(AppPalette.Text.primary)
+                }
+                
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") {
                         onDismiss()
@@ -358,6 +363,11 @@ struct GroupMeetCreationFormView: View
                                 )
                         )
                 )
+                .onChange(of: vm.name) { _, newValue in
+                    if newValue.count > 50 {
+                        vm.name = String(newValue.prefix(50))
+                    }
+                }
                 .onAppear {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                         isNameFieldFocused = true
@@ -389,7 +399,6 @@ struct GroupMeetCreationFormView: View
                             .padding(.horizontal, 16)
                             .padding(.vertical, 12)
                     }
-                    
                     TextEditor(text: $vm.descriptionText)
                         .font(.system(size: 16))
                         .foregroundColor(AppPalette.Text.primary)
@@ -398,6 +407,11 @@ struct GroupMeetCreationFormView: View
                         .background(Color.clear)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
+                        .onChange(of: vm.descriptionText) { _, newValue in
+                            if newValue.count > 200 {
+                                vm.descriptionText = String(newValue.prefix(200))
+                            }
+                        }
                 }
                 .background(
                     RoundedRectangle(cornerRadius: 12)
@@ -408,19 +422,10 @@ struct GroupMeetCreationFormView: View
                         )
                 )
                 
-                TextEditor(text: $vm.descriptionText)
-                    .font(.system(size: 16))
-                    .foregroundColor(AppPalette.Text.primary)
-                    .frame(height: 80)
-                    .scrollContentBackground(.hidden)
-                    .background(Color.clear)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .onChange(of: vm.descriptionText) { _, newValue in
-                        if newValue.count > 200 {
-                            vm.descriptionText = String(newValue.prefix(200))
-                        }
-                    }
+                Text("\(vm.descriptionText.count)/200")
+                    .font(.footnote)
+                    .foregroundColor(AppPalette.Text.tertiary)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
             
             // Category
@@ -582,6 +587,7 @@ struct GroupMeetCreationFormView: View
                         } else {
                             Text(buttonTitle)
                                 .font(.system(size: 16, weight: .bold))
+                                .foregroundStyle(AppPalette.Text.primary)
                         }
                     }
                     .foregroundColor(.white)

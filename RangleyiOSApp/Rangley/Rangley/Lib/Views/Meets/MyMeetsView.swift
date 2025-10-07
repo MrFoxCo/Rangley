@@ -1518,6 +1518,18 @@ struct CollapsibleMeetCard: View
         return formatter
     }
     
+    private var category: MeetCategory? {
+        MeetCategory(rawValue: meet.meet_category_id)
+    }
+    
+    private var categoryName: String {
+        category?.displayName ?? "Event"
+    }
+    
+    private var categoryIcon: String {
+        category?.icon ?? "calendar"
+    }
+    
     private var canDelete: Bool {
         meet.is_owner
     }
@@ -1527,7 +1539,7 @@ struct CollapsibleMeetCard: View
     }
     
     var body: some View {
-        cardContent  // <- Split this out
+        cardContent
             .padding(16)
             .background(cardBackground)
             .contentShape(Rectangle())
@@ -1564,7 +1576,7 @@ struct CollapsibleMeetCard: View
                 .foregroundStyle(AppPalette.Text.primary)
                 .lineLimit(isExpanded ? nil : 2)
             
-            Text(meet.category_name)
+            Text(categoryName)
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(AppPalette.Brand.neonPink)
             
@@ -1585,7 +1597,7 @@ struct CollapsibleMeetCard: View
                     .foregroundStyle(Color.orange)
             }
             
-            Image(systemName: categoryIcon(for: meet.category_name))
+            Image(systemName: categoryIcon)
                 .font(.system(size: 16))
                 .foregroundStyle(AppPalette.Brand.neonPink.opacity(0.7))
             
@@ -1742,19 +1754,6 @@ struct CollapsibleMeetCard: View
         }
         Button("Cancel", role: .cancel) {}
     }
-    
-    private func categoryIcon(for category: String) -> String {
-        switch category.lowercased() {
-        case "activity": return "figure.run"
-        case "sports": return "sportscourt"
-        case "outdoors": return "tree"
-        case "social": return "person.2"
-        case "music": return "music.note"
-        case "food": return "fork.knife"
-        case "planned trip": return "airplane"
-        default: return "calendar"
-        }
-    }
 }
 
 // MARK: - Meet Card
@@ -1768,6 +1767,18 @@ struct MeetCard: View
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
         return formatter
+    }
+    
+    private var category: MeetCategory? {
+        MeetCategory(rawValue: meet.meet_category_id)
+    }
+    
+    private var categoryName: String {
+        category?.displayName ?? "Event"
+    }
+    
+    private var categoryIcon: String {
+        category?.icon ?? "calendar"
     }
     
     var body: some View
@@ -1803,7 +1814,7 @@ struct MeetCard: View
                     .foregroundStyle(AppPalette.Text.primary)
                     .lineLimit(2)
                 
-                Text(meet.category_name)
+                Text(categoryName)
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(AppPalette.Brand.neonPink)
                 if !meet.is_owner {
@@ -1823,7 +1834,7 @@ struct MeetCard: View
                         .foregroundStyle(Color.orange)
                 }
                 
-                Image(systemName: categoryIcon(for: meet.category_name))
+                Image(systemName: categoryIcon)
                     .font(.system(size: 16))
                     .foregroundStyle(AppPalette.Brand.neonPink.opacity(0.7))
             }
@@ -1844,23 +1855,6 @@ struct MeetCard: View
                 .foregroundStyle(AppPalette.Text.secondary)
             
             Spacer()
-            
-//            Label("\(meet.max_capacity)", systemImage: "person.3")
-//                .font(.system(size: 12, weight: .medium))
-//                .foregroundStyle(AppPalette.Text.secondary)
-        }
-    }
-    
-    private func categoryIcon(for category: String) -> String {
-        switch category.lowercased() {
-        case "activity": return "figure.run"
-        case "sports": return "sportscourt"
-        case "outdoors": return "tree"
-        case "social": return "person.2"
-        case "music": return "music.note"
-        case "food": return "fork.knife"
-        case "planned trip": return "airplane"
-        default: return "calendar"
         }
     }
 }

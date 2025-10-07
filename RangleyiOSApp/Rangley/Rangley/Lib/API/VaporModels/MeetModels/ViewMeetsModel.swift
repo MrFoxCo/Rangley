@@ -23,7 +23,7 @@ public struct ViewMeetsModel: Codable, Identifiable, Sendable
     public let dttm_end_utc                     : Date
     public let name                             : String
     public let category_name                    : String
-    public let meet_category_id                 : Int16 // might not need this?
+    public let meet_category_id                 : Int16 
     public let description                      : String
     public let max_capacity                     : Int32
     public let created_by_user_uuid             : UUID
