@@ -1079,14 +1079,15 @@ struct ControlsView: View
                             Text("Rangley")
                                 .font(.system(size: 24, weight: .bold))
                                 .foregroundStyle(AppPalette.Brand.neonPink)
-                                .shadow(color: AppPalette.Brand.neonPink.opacity(0.6), radius: 8, x: 0, y: 0) // Neon glow
-                                .shadow(color: AppPalette.Brand.neonPink.opacity(0.3), radius: 12, x: 0, y: 0) // Outer glow
+                                .shadow(color: AppPalette.Brand.neonPink.opacity(0.6), radius: 1.5, x: 0, y: 0) // Neon glow
+                                .shadow(color: AppPalette.Brand.neonPink.opacity(0.3), radius: 3, x: 0, y: 0) // Outer glow
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 6)
                                 .background(
                                     RoundedRectangle(cornerRadius: 8)
                                         .fill(AppPalette.Brand.japDarkerPurple)
-                                        .shadow(color: .black.opacity(0.4), radius: 4, x: 0, y: 2)
+//                                        .shadow(color: .black.opacity(0.4), radius: 4, x: 0, y: 2)
+                                        .stroke(AppPalette.Brand.neonPink.opacity(0.6), lineWidth: 2)
                                 )
                                 .padding(.leading, 20)
                             
