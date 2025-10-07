@@ -10,10 +10,10 @@ CREATE OR REPLACE PROCEDURE rangley.rangley_i_meet
 	,IN p_dttm_start_utc 		timestamp with time zone
 	,IN p_dttm_end_utc 			timestamp with time zone
 
-	,IN p_description 			character 	varying DEFAULT ''::character varying(50)
+	,IN p_description 			character 	varying DEFAULT ''::character varying(200)
 	,IN p_change_reason 		character 	varying DEFAULT ''::character varying(50)
 	,IN p_meet_category_id 		int2 		DEFAULT (1)::int2
-	,IN p_max_capacity 			int4 		DEFAULT 2::int4
+	,IN p_max_capacity 			int4 		DEFAULT -1::int4
 
 )
 LANGUAGE plpgsql

@@ -20,9 +20,9 @@ CREATE OR REPLACE PROCEDURE rangley.rangley_s_insert_meet
     ,IN  p_name                  varchar(50)
     ,IN  p_dttm_start_utc        timestamptz
     ,IN  p_dttm_end_utc          timestamptz
-    ,IN  p_description           varchar(50) DEFAULT ''::varchar
+    ,IN  p_description           varchar(200) DEFAULT ''::varchar
     ,IN  p_meet_category_id      int2        DEFAULT 1::int2
-    ,IN  p_max_capacity          int4        DEFAULT 2::int4
+    ,IN  p_max_capacity          int4        DEFAULT -1::int4
 )
 LANGUAGE plpgsql
 /*
@@ -63,12 +63,13 @@ BEGIN
           DETAIL=format('start=%s end=%s', p_dttm_start_utc, p_dttm_end_utc);
     END IF;
 
-    IF p_max_capacity IS NULL OR p_max_capacity < 2 THEN
-        RAISE EXCEPTION USING
-          ERRCODE='22023',
-          MESSAGE='[ERRO] max_capacity must be >= 2',
-          DETAIL=format('max_capacity=%s', p_max_capacity);
-    END IF;
+	-- Validation
+	IF p_max_capacity > 0 AND p_max_capacity < 2 THEN
+	    RAISE EXCEPTION USING
+	      ERRCODE='22023',
+	      MESSAGE='[ERRO] max_capacity must be >= 2 (or -1 for unlimited)',
+	      DETAIL=format('max_capacity=%s', p_max_capacity);
+	END IF;
 
     -- ===== Resolve user_id from Cognito sub (trimmed)
     SELECT rangley.rangley_fn_v_user_id_by_cognito_sub(v_sub)

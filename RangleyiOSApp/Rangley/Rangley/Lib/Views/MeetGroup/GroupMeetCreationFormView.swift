@@ -10,12 +10,12 @@ import CoreLocation
 
 struct GroupMeetCreationFormView: View
 {
-    let group: MeetGroup
-    let members: [GroupMember]
-    let baseURL: URL
-    let token: String
-    let onSuccess: () async -> Void
-    let onDismiss: () -> Void
+    let group       : MeetGroup
+    let members     : [GroupMember]
+    let baseURL     : URL
+    let token       : String
+    let onSuccess   : () async -> Void
+    let onDismiss   : () -> Void
     
     @StateObject private var vm: GroupMeetFormModel
     @State private var currentStep: FormStep = .location
@@ -408,10 +408,19 @@ struct GroupMeetCreationFormView: View
                         )
                 )
                 
-                Text("\(vm.descriptionText.count)/50")
-                    .font(.footnote)
-                    .foregroundColor(AppPalette.Text.tertiary)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
+                TextEditor(text: $vm.descriptionText)
+                    .font(.system(size: 16))
+                    .foregroundColor(AppPalette.Text.primary)
+                    .frame(height: 80)
+                    .scrollContentBackground(.hidden)
+                    .background(Color.clear)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .onChange(of: vm.descriptionText) { _, newValue in
+                        if newValue.count > 200 {
+                            vm.descriptionText = String(newValue.prefix(200))
+                        }
+                    }
             }
             
             // Category
@@ -457,53 +466,7 @@ struct GroupMeetCreationFormView: View
                 }
             }
             
-            // Max Capacity
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Max Capacity")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(AppPalette.Text.secondary)
-                
-                HStack {
-                    Text("\(vm.maxCapacity) people")
-                        .font(.system(size: 16))
-                        .foregroundColor(AppPalette.Text.primary)
-                    
-                    Spacer()
-                    
-                    HStack(spacing: 16) {
-                        Button {
-                            if vm.maxCapacity > 2 {
-                                vm.maxCapacity -= 1
-                            }
-                        } label: {
-                            Image(systemName: "minus.circle.fill")
-                                .font(.system(size: 28))
-                                .foregroundColor(vm.maxCapacity > 2 ? AppPalette.Brand.neonPink : AppPalette.Text.tertiary)
-                        }
-                        .disabled(vm.maxCapacity <= 2)
-                        
-                        Button {
-                            if vm.maxCapacity < 50 {
-                                vm.maxCapacity += 1
-                            }
-                        } label: {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.system(size: 28))
-                                .foregroundColor(vm.maxCapacity < 50 ? AppPalette.Brand.neonPink : AppPalette.Text.tertiary)
-                        }
-                        .disabled(vm.maxCapacity >= 50)
-                    }
-                }
-                .padding(16)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(AppPalette.Surface.fieldFill)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
-                        )
-                )
-            }
+
         }
         .padding(.horizontal, 24)
     }
@@ -567,7 +530,6 @@ struct GroupMeetCreationFormView: View
                 }
                 
                 DetailRow(label: "Category", value: MeetCategory(rawValue: vm.meetCategoryID)?.displayName ?? "Activity")
-                DetailRow(label: "Max Capacity", value: "\(vm.maxCapacity) people")
                 DetailRow(label: "Start", value: formatDate(vm.start))
                 DetailRow(label: "End", value: formatDate(vm.end))
                 DetailRow(label: "Duration", value: formatDuration(from: vm.start, to: vm.end))
@@ -827,7 +789,7 @@ final class GroupMeetFormModel: ObservableObject
     init(
         descriptionText: String = "",
         meetCategoryID: Int16 = 1,
-        defaultMaxCapacity: Int32 = 8
+        defaultMaxCapacity: Int32 = -1
     ) {
         self.descriptionText = descriptionText
         self.meetCategoryID = meetCategoryID
@@ -844,7 +806,8 @@ final class GroupMeetFormModel: ObservableObject
         regionRadius != nil
     }
     
-    var hasChangedOptionalDetails: Bool {
+    var hasChangedOptionalDetails: Bool
+    {
         let hasDescription = !descriptionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let changedCategory = meetCategoryID != initialMeetCategoryID
         let changedCapacity = maxCapacity != initialMaxCapacity
@@ -852,7 +815,8 @@ final class GroupMeetFormModel: ObservableObject
         return hasDescription || changedCategory || changedCapacity
     }
     
-    var currentLocationInfo: LocationInfo {
+    var currentLocationInfo: LocationInfo
+    {
         LocationInfo(
             Coordinate: .init(latitude ?? 37.7749, longitude ?? -122.4194),
             RegionCoordinate: .init(regionLatitude ?? 37.7749, regionLongitude ?? -122.4194),
@@ -864,7 +828,8 @@ final class GroupMeetFormModel: ObservableObject
         )
     }
     
-    func applyLocation(_ location: LocationInfo) {
+    func applyLocation(_ location: LocationInfo)
+    {
         latitude = location.Coordinate.latitude
         longitude = location.Coordinate.longitude
         regionLatitude = location.RegionCoordinate.latitude
@@ -889,17 +854,19 @@ final class GroupMeetFormModel: ObservableObject
         locationSubtitle = components.joined(separator: ", ")
     }
     
-    func validate() -> String? {
+    func validate() -> String?
+    {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "Name is required" }
         guard trimmed.count <= 50 else { return "Name must be 50 characters or fewer" }
         guard start < end else { return "Start time must be before end time" }
         guard hasValidLocation else { return "Location is required" }
-        if maxCapacity < 2 { return "Capacity must be at least 2" }
+        if maxCapacity > 0 && maxCapacity < 2 { return "Capacity must be at least 2 (or -1 for unlimited)" }
         return nil
     }
     
-    func makeCreateBodyWithInvites(invitedUserUUIDs: [UUID]) -> MeetWithInvitesInsertBody? {
+    func makeCreateBodyWithInvites(invitedUserUUIDs: [UUID]) -> MeetWithInvitesInsertBody?
+    {
         guard hasValidLocation,
               let lat = latitude,
               let lon = longitude,

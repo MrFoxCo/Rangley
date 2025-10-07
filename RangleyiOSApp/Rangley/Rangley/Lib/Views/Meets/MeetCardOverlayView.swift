@@ -956,7 +956,8 @@ private struct ParticipantDetailOverlay: View
 }
 
 // notused
-private struct DirectionsSelectionOverlay: View {
+private struct DirectionsSelectionOverlay: View
+{
     @Binding var showDirections: Bool
     let onDriving: () -> Void
     let onWalking: () -> Void
@@ -1083,7 +1084,8 @@ private struct DirectionsSelectionOverlay: View {
     }
 }
 
-private struct DirectionOptionButton: View {
+private struct DirectionOptionButton: View
+{
     let title: String
     let icon: String
     let color: Color
@@ -1346,7 +1348,8 @@ private struct InviteUsersOverlay: View
 
 
 // MARK: - DateFormatter Extension
-extension DateFormatter {
+extension DateFormatter
+{
     static let shortDateTime: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .short

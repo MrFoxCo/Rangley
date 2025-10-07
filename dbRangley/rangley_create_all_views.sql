@@ -8,7 +8,7 @@ DROP VIEW IF EXISTS rangley.vw_features CASCADE;
 DROP VIEW IF EXISTS rangley.vw_meet_category CASCADE;
 DROP VIEW IF EXISTS rangley.vw_sub_category CASCADE;
 
-DROP VIEW IF EXISTS rangley.td_stock_assets CASCADE;
+DROP VIEW IF EXISTS rangley.vw_stock_assets CASCADE;
 DROP VIEW IF EXISTS rangley.vw_notification_type CASCADE;
 
 DROP VIEW IF EXISTS rangley.vw_notifications CASCADE;

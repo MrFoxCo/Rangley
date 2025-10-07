@@ -12,10 +12,10 @@ CREATE OR REPLACE PROCEDURE rangley.rangley_i_updated_meet
 	,IN p_dttm_end_utc 			timestamp with time zone
 	
 	,in p_meet_status_id        int2 	  default 0::int2
-	,IN p_description 			character varying DEFAULT ''::character varying(50)
+	,IN p_description 			character varying DEFAULT ''::character varying(200)
 	,IN p_change_reason 		character varying DEFAULT ''::character varying(50)
 	,IN p_meet_category_id 		smallint  DEFAULT 1::smallint
-	,IN p_max_capacity 			integer   DEFAULT 2::smallint
+	,IN p_max_capacity 			integer   DEFAULT -1::smallint
 )
 LANGUAGE plpgsql
 AS $procedure$
@@ -119,6 +119,14 @@ BEGIN
             DETAIL  = format('start=%s end=%s', p_dttm_start_utc, p_dttm_end_utc),
             HINT    = 'Swap or adjust the timestamps.';
     END IF;
+
+	-- Add this validation block after the time window check
+	IF p_max_capacity > 0 AND p_max_capacity < 2 THEN
+	    RAISE EXCEPTION USING
+	      ERRCODE='22023',
+	      MESSAGE='[ERRO] max_capacity must be >= 2 (or -1 for unlimited)',
+	      DETAIL=format('max_capacity=%s', p_max_capacity);
+	END IF;
 
     -- ===== Optional status validation (only 2/3/7 allowed when provided)
     IF p_meet_status_id IS NOT NULL AND p_meet_status_id <> 0 THEN

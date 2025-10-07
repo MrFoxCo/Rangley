@@ -272,7 +272,7 @@ CREATE TABLE rangley.tb_meets
     ,meet_coordinate_id  	INT8      	 NOT NULL DEFAULT 0
     ,meet_status_id         INT2	     NOT NULL DEFAULT 0
     ,name             		VARCHAR(50)  NOT NULL DEFAULT ''
-    ,description      		VARCHAR(50)  NOT NULL DEFAULT ''
+    ,description      		VARCHAR(200) NOT NULL DEFAULT ''
     ,change_reason    		VARCHAR(50)  NOT NULL DEFAULT ''
     ,meet_category_id 		INT2	     NOT NULL DEFAULT 0
     ,max_capacity     		INT4	     NOT NULL DEFAULT 2

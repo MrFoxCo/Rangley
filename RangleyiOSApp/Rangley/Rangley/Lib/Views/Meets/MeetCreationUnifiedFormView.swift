@@ -12,9 +12,10 @@ import QuartzCore
 // MARK: - Entry Mode
 enum MeetCreationEntryMode
 {
-    case tapOnMap(location: LocationInfo)  // Location pre-selected
-    case createButton                       // Need to pick location
+    case tapOnMap(location: LocationInfo)
+    case createButton
     case createWithGroup(group: MeetGroup, members: [GroupMember])
+    case update(meet: ViewMeetsModel)  // NEW: Update mode
 }
 
 // MARK: - Unified Form View
@@ -26,6 +27,7 @@ struct MeetCreationUnifiedFormView: View
     let token: String
     let onCreate: (MeetInsertBody) async throws -> Void
     let onCreateWithInvites: (MeetWithInvitesInsertBody) async throws -> Void
+    let onUpdate: ((UpdatedMeetInsertBody) async throws -> Void)?  // NEW: Update handler
     let onClose: () -> Void
     let preselectedGroupMembers: [ViewUsersModel]?
     let skipInviteStep: Bool
@@ -47,6 +49,18 @@ struct MeetCreationUnifiedFormView: View
     @State private var createdGroupId: Int64?
     @State private var existingMeetGroups: [MeetGroup] = []
     @State private var selectedGroupId: Int64?
+    
+    // NEW: Track if we're in update mode
+    private var isUpdateMode: Bool {
+        if case .update = entryMode { return true }
+        return false
+    }
+    
+    // NEW: Get the meet being edited
+    private var meetToEdit: ViewMeetsModel? {
+        if case .update(let meet) = entryMode { return meet }
+        return nil
+    }
 
     init(
         entryMode: MeetCreationEntryMode,
@@ -54,6 +68,7 @@ struct MeetCreationUnifiedFormView: View
         token: String,
         onCreate: @escaping (MeetInsertBody) async throws -> Void,
         onCreateWithInvites: @escaping (MeetWithInvitesInsertBody) async throws -> Void,
+        onUpdate: ((UpdatedMeetInsertBody) async throws -> Void)? = nil,
         onClose: @escaping () -> Void
     ) {
         self.entryMode = entryMode
@@ -61,6 +76,7 @@ struct MeetCreationUnifiedFormView: View
         self.token = token
         self.onCreate = onCreate
         self.onCreateWithInvites = onCreateWithInvites
+        self.onUpdate = onUpdate
         self.onClose = onClose
         
         // Handle group mode
@@ -80,18 +96,40 @@ struct MeetCreationUnifiedFormView: View
             self.preselectedGroupMembers = nil
         }
         
-        // Initialize VM - ONLY with location if tapOnMap mode
-        let initialLocation: LocationInfo? = {
-            if case .tapOnMap(let loc) = entryMode {
-                return loc
-            }
-            return nil
-        }()
+        // Initialize VM based on mode
+        let initialLocation: LocationInfo?
+        let existingMeet: ViewMeetsModel?
         
-        _vm = StateObject(wrappedValue: MeetFormUnifiedModel(location: initialLocation))
+        switch entryMode {
+        case .tapOnMap(let loc):
+            initialLocation = loc
+            existingMeet = nil
+        case .update(let meet):
+            // For updates, create location from existing meet
+            initialLocation = LocationInfo(
+                Coordinate: .init(meet.latitude, meet.longitude),
+                RegionCoordinate: .init(meet.region_latitude, meet.region_longitude),
+                RegionRadius: meet.region_radius,
+                Name: meet.name,
+                ThoroughFare: nil, SubThoroughFare: nil, Locality: nil, SubLocality: nil,
+                AdministrativeArea: nil, SubAdministrativeArea: nil, PostalCode: nil,
+                Country: nil, IsoCountryCode: nil, TimeZone: nil, InlandWater: nil, Ocean: nil
+            )
+            existingMeet = meet
+        default:
+            initialLocation = nil
+            existingMeet = nil
+        }
         
-        // Set initial step based on whether we have a location
+        _vm = StateObject(wrappedValue: MeetFormUnifiedModel(
+            location: initialLocation,
+            existingMeet: existingMeet
+        ))
+        
+        // Set initial step based on mode
         if case .tapOnMap = entryMode {
+            _currentStep = State(initialValue: .name)
+        } else if case .update = entryMode {
             _currentStep = State(initialValue: .name)
         } else {
             _currentStep = State(initialValue: .location)
@@ -121,13 +159,15 @@ struct MeetCreationUnifiedFormView: View
     {
         var steps = UnifiedStep.allCases
         
-        // Remove location step for tapOnMap
+        // Remove location step for tapOnMap and update modes
         if case .tapOnMap = entryMode {
+            steps.removeAll { $0 == .location }
+        } else if case .update = entryMode {
             steps.removeAll { $0 == .location }
         }
         
-        // Remove invite step for group meets
-        if skipInviteStep {
+        // Remove invite step for group meets and update mode
+        if skipInviteStep || isUpdateMode {
             steps.removeAll { $0 == .inviteFriends }
         }
         
@@ -159,7 +199,11 @@ struct MeetCreationUnifiedFormView: View
         case .inviteFriends:
             return true
         case .review:
-            return vm.validate() == nil
+            if isUpdateMode {
+                return vm.validate() == nil && vm.makeUpdateBody() != nil
+            } else {
+                return vm.validate() == nil
+            }
         }
     }
     
@@ -268,8 +312,10 @@ struct MeetCreationUnifiedFormView: View
             }
             setupInitialState()
             
-            Task {
-                await loadExistingGroups()
+            if !isUpdateMode {
+                Task {
+                    await loadExistingGroups()
+                }
             }
             
             // Auto-show location picker for createButton flow on location step
@@ -289,7 +335,12 @@ struct MeetCreationUnifiedFormView: View
     
     // MARK: - Components
     
-    private var navigationTitle: String {
+    private var navigationTitle: String
+    {
+        if isUpdateMode {
+            return "Update Meet"
+        }
+        
         switch entryMode {
         case .tapOnMap:
             return "Create Meet"
@@ -297,6 +348,8 @@ struct MeetCreationUnifiedFormView: View
             return "Create Meet"
         case .createWithGroup(let group, _):
             return "Create Meet with \(group.name)"
+        case .update:
+            return "Update Meet"
         }
     }
     
@@ -354,8 +407,25 @@ struct MeetCreationUnifiedFormView: View
                     )
             )
             
-            // Change location button (only for createButton flow)
+            // Change location button
             if case .createButton = entryMode {
+                Button {
+                    showLocationPicker = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "mappin.and.ellipse")
+                        Text("Change Location")
+                    }
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(AppPalette.Brand.neonPink)
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(AppPalette.Brand.neonPink.opacity(0.6), lineWidth: 1)
+                    )
+                }
+            } else if isUpdateMode {
                 Button {
                     showLocationPicker = true
                 } label: {
@@ -503,10 +573,19 @@ struct MeetCreationUnifiedFormView: View
                         )
                 )
                 
-                Text("\(vm.descriptionText.count)/50")
-                    .font(.footnote)
-                    .foregroundColor(AppPalette.Text.tertiary)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
+                TextEditor(text: $vm.descriptionText)
+                    .font(.system(size: 16))
+                    .foregroundColor(AppPalette.Text.primary)
+                    .frame(height: 80)
+                    .scrollContentBackground(.hidden)
+                    .background(Color.clear)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .onChange(of: vm.descriptionText) { _, newValue in
+                        if newValue.count > 200 {
+                            vm.descriptionText = String(newValue.prefix(200))
+                        }
+                    }
             }
             
             // Category
@@ -550,54 +629,6 @@ struct MeetCreationUnifiedFormView: View
                             )
                     )
                 }
-            }
-            
-            // Max Capacity
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Max Capacity")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(AppPalette.Text.secondary)
-                
-                HStack {
-                    Text("\(vm.maxCapacity) people")
-                        .font(.system(size: 16))
-                        .foregroundColor(AppPalette.Text.primary)
-                    
-                    Spacer()
-                    
-                    HStack(spacing: 16) {
-                        Button {
-                            if vm.maxCapacity > 2 {
-                                vm.maxCapacity -= 1
-                            }
-                        } label: {
-                            Image(systemName: "minus.circle.fill")
-                                .font(.system(size: 28))
-                                .foregroundColor(vm.maxCapacity > 2 ? AppPalette.Brand.neonPink : AppPalette.Text.tertiary)
-                        }
-                        .disabled(vm.maxCapacity <= 2)
-                        
-                        Button {
-                            if vm.maxCapacity < 50 {
-                                vm.maxCapacity += 1
-                            }
-                        } label: {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.system(size: 28))
-                                .foregroundColor(vm.maxCapacity < 50 ? AppPalette.Brand.neonPink : AppPalette.Text.tertiary)
-                        }
-                        .disabled(vm.maxCapacity >= 50)
-                    }
-                }
-                .padding(16)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(AppPalette.Surface.fieldFill)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
-                        )
-                )
             }
         }
         .padding(.horizontal, 24)
@@ -755,12 +786,11 @@ struct MeetCreationUnifiedFormView: View
                 }
                 
                 DetailRow(label: "Category", value: MeetCategory(rawValue: vm.meetCategoryID)?.displayName ?? "Activity")
-                DetailRow(label: "Max Capacity", value: "\(vm.maxCapacity) people")
                 DetailRow(label: "Start", value: formatDate(vm.start))
                 DetailRow(label: "End", value: formatDate(vm.end))
                 DetailRow(label: "Duration", value: formatDuration(from: vm.start, to: vm.end))
                 
-                if !invitedUsers.isEmpty {
+                if !invitedUsers.isEmpty && !isUpdateMode {
                     DetailRow(label: "Invites", value: "\(invitedUsers.count) friend\(invitedUsers.count == 1 ? "" : "s")")
                 }
             }
@@ -773,6 +803,50 @@ struct MeetCreationUnifiedFormView: View
                             .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
                     )
             )
+            
+            // Show changes for update mode
+            if isUpdateMode, let updateBody = vm.makeUpdateBody()
+            {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Changes Made:")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(AppPalette.Brand.neonPink)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    
+                    VStack(alignment: .leading, spacing: 8) {
+                        if updateBody.name != nil {
+                            ChangeRow(text: "Name updated")
+                        }
+                        if updateBody.description != nil {
+                            ChangeRow(text: "Description changed")
+                        }
+                        if updateBody.meet_category_id != nil {
+                            ChangeRow(text: "Category changed")
+                        }
+                        if updateBody.max_capacity != nil {
+                            ChangeRow(text: "Capacity changed")
+                        }
+                        if updateBody.dttm_start_utc != nil {
+                            ChangeRow(text: "Start time changed")
+                        }
+                        if updateBody.dttm_end_utc != nil {
+                            ChangeRow(text: "End time changed")
+                        }
+                        if updateBody.latitude != nil || updateBody.longitude != nil {
+                            ChangeRow(text: "Location updated")
+                        }
+                    }
+                }
+                .padding(20)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(AppPalette.Brand.neonPink.opacity(0.05))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(AppPalette.Brand.neonPink.opacity(0.2), lineWidth: 1)
+                        )
+                )
+            }
             
             if let error = submitError {
                 Text(error)
@@ -804,7 +878,7 @@ struct MeetCreationUnifiedFormView: View
                     .disabled(isSubmitting)
                 }
                 
-                // Next/Create button
+                // Next/Create/Update button
                 Button(action: nextStep) {
                     HStack {
                         if isSubmitting {
@@ -834,14 +908,9 @@ struct MeetCreationUnifiedFormView: View
     {
         switch currentStep {
         case .details:
-            // If any detail was changed from defaults, show "Next" instead of "Skip"
-            let hasDescription = !vm.descriptionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            let changedCategory = vm.meetCategoryID != 1  // Default is Activity (1)
-            let changedCapacity = vm.maxCapacity != 8     // Default is 8
-            
-            return (hasDescription || changedCategory || changedCapacity) ? "Next" : "Skip"
+            return vm.hasChangedOptionalDetails ? "Next" : "Skip"
         case .review:
-            return "Create Meet"
+            return isUpdateMode ? "Save Changes" : "Create Meet"
         case .inviteFriends:
             return invitedUsers.isEmpty ? "Skip" : "Continue"
         default:
@@ -891,31 +960,53 @@ struct MeetCreationUnifiedFormView: View
         guard submitError == nil else { return }
         
         isSubmitting = true
-        Task {
-            do {
-                if invitedUsers.isEmpty {
-                    if let body = vm.makeCreateBody() {
-                        try await onCreate(body)
-                    } else {
-                        await MainActor.run {
-                            isSubmitting = false
-                            submitError = "Missing required information"
-                        }
-                    }
-                } else {
-                    if let body = vm.makeCreateBodyWithInvites(invitedUserUUIDs: invitedUsers.map { $0.user_uuid }) {
-                        try await onCreateWithInvites(body)
-                    } else {
-                        await MainActor.run {
-                            isSubmitting = false
-                            submitError = "Missing required information"
-                        }
+        
+        if isUpdateMode {
+            // Update existing meet
+            guard let updateBody = vm.makeUpdateBody() else {
+                submitError = "No changes to save"
+                isSubmitting = false
+                return
+            }
+            
+            Task {
+                do {
+                    try await onUpdate?(updateBody)
+                } catch {
+                    await MainActor.run {
+                        isSubmitting = false
+                        submitError = parseErrorMessage(error)
                     }
                 }
-            } catch {
-                await MainActor.run {
-                    isSubmitting = false
-                    submitError = parseErrorMessage(error)
+            }
+        } else {
+            // Create new meet
+            Task {
+                do {
+                    if invitedUsers.isEmpty {
+                        if let body = vm.makeCreateBody() {
+                            try await onCreate(body)
+                        } else {
+                            await MainActor.run {
+                                isSubmitting = false
+                                submitError = "Missing required information"
+                            }
+                        }
+                    } else {
+                        if let body = vm.makeCreateBodyWithInvites(invitedUserUUIDs: invitedUsers.map { $0.user_uuid }) {
+                            try await onCreateWithInvites(body)
+                        } else {
+                            await MainActor.run {
+                                isSubmitting = false
+                                submitError = "Missing required information"
+                            }
+                        }
+                    }
+                } catch {
+                    await MainActor.run {
+                        isSubmitting = false
+                        submitError = parseErrorMessage(error)
+                    }
                 }
             }
         }
@@ -954,6 +1045,18 @@ struct MeetCreationUnifiedFormView: View
             displayLocationName = "Choose a location"
         case .createWithGroup:
             displayLocationName = "Choose a location"
+        case .update(let meet):
+            displayLocationName = "Loading location..."
+            let location = LocationInfo(
+                Coordinate: .init(meet.latitude, meet.longitude),
+                RegionCoordinate: .init(meet.region_latitude, meet.region_longitude),
+                RegionRadius: meet.region_radius,
+                Name: meet.name,
+                ThoroughFare: nil, SubThoroughFare: nil, Locality: nil, SubLocality: nil,
+                AdministrativeArea: nil, SubAdministrativeArea: nil, PostalCode: nil,
+                Country: nil, IsoCountryCode: nil, TimeZone: nil, InlandWater: nil, Ocean: nil
+            )
+            loadLocationAddress(location)
         }
     }
     
@@ -1078,6 +1181,25 @@ struct MeetCreationUnifiedFormView: View
     }
 }
 
+// MARK: - Change Row Helper
+private struct ChangeRow: View
+{
+    let text: String
+    
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 14))
+                .foregroundColor(AppPalette.Brand.neonPink)
+            
+            Text(text)
+                .font(.system(size: 14))
+                .foregroundColor(AppPalette.Text.primary)
+            
+            Spacer()
+        }
+    }
+}
 
 // MARK: - Supporting Components
 private struct GroupQuickSelectButton: View
@@ -1171,43 +1293,115 @@ final class MeetFormUnifiedModel: ObservableObject
     @Published var meetCategoryID: Int16
     @Published var maxCapacity: Int32
     
-    // Store initial default values
+    // Store initial defaults
     private let initialDescriptionText: String
     private let initialMeetCategoryID: Int16
     private let initialMaxCapacity: Int32
     
+    // Track originals for update mode
+    private let meetIDUUID: UUID?
+    private let origName: String?
+    private let origStart: Date?
+    private let origEnd: Date?
+    private let origDescription: String?
+    private let origCategoryID: Int16?
+    private let origMaxCapacity: Int32?
+    private let origLat: Double?
+    private let origLon: Double?
+    private let origRegLat: Double?
+    private let origRegLon: Double?
+    private let origRegRad: Double?
+    
     init(
         location: LocationInfo? = nil,
+        existingMeet: ViewMeetsModel? = nil,
         descriptionText: String = "",
         meetCategoryID: Int16 = 1,
-        maxCapacity: Int32 = 8
+        maxCapacity: Int32 = -1
     ) {
-        self.descriptionText = descriptionText
-        self.meetCategoryID = meetCategoryID
-        self.maxCapacity = maxCapacity
-        
-        self.initialDescriptionText = descriptionText
-        self.initialMeetCategoryID = meetCategoryID
-        self.initialMaxCapacity = maxCapacity
-        
-        if let loc = location {
-            applyLocation(loc)
+        if let meet = existingMeet {
+            // Update mode - initialize from existing meet
+            self.meetIDUUID = meet.meet_id_uuid
+            self.name = meet.name
+            self.start = meet.dttm_start_utc
+            self.end = meet.dttm_end_utc
+            self.descriptionText = meet.description
+            self.meetCategoryID = meet.meet_category_id
+            self.maxCapacity = meet.max_capacity
+            
+            // Store originals for diffing
+            self.origName = meet.name
+            self.origStart = meet.dttm_start_utc
+            self.origEnd = meet.dttm_end_utc
+            self.origDescription = meet.description
+            self.origCategoryID = meet.meet_category_id
+            self.origMaxCapacity = meet.max_capacity
+            self.origLat = meet.latitude
+            self.origLon = meet.longitude
+            self.origRegLat = meet.region_latitude
+            self.origRegLon = meet.region_longitude
+            self.origRegRad = meet.region_radius
+            
+            // Location starts as unchanged (nil) until user picks new one
+            self.latitude = nil
+            self.longitude = nil
+            self.regionLatitude = nil
+            self.regionLongitude = nil
+            self.regionRadius = nil
+            
+            self.initialDescriptionText = meet.description
+            self.initialMeetCategoryID = meet.meet_category_id
+            self.initialMaxCapacity = meet.max_capacity
+        } else {
+            // Create mode
+            self.meetIDUUID = nil
+            self.descriptionText = descriptionText
+            self.meetCategoryID = meetCategoryID
+            self.maxCapacity = maxCapacity
+            
+            self.initialDescriptionText = descriptionText
+            self.initialMeetCategoryID = meetCategoryID
+            self.initialMaxCapacity = maxCapacity
+            
+            // No originals for create mode
+            self.origName = nil
+            self.origStart = nil
+            self.origEnd = nil
+            self.origDescription = nil
+            self.origCategoryID = nil
+            self.origMaxCapacity = nil
+            self.origLat = nil
+            self.origLon = nil
+            self.origRegLat = nil
+            self.origRegLon = nil
+            self.origRegRad = nil
+            
+            if let loc = location {
+                applyLocation(loc)
+            }
         }
     }
     
-    var hasValidLocation: Bool {
-        latitude != nil &&
+    var hasValidLocation: Bool
+    {
+        // For update mode, location is valid even if nil (means unchanged)
+        if meetIDUUID != nil {
+            return true // In update mode, location is always valid
+        }
+        // For create mode, all location fields are required
+        return latitude != nil &&
         longitude != nil &&
         regionLatitude != nil &&
         regionLongitude != nil &&
         regionRadius != nil
     }
     
-    var currentLocationInfo: LocationInfo {
+    var currentLocationInfo: LocationInfo
+    {
         LocationInfo(
-            Coordinate: .init(latitude ?? 37.7749, longitude ?? -122.4194),
-            RegionCoordinate: .init(regionLatitude ?? 37.7749, regionLongitude ?? -122.4194),
-            RegionRadius: regionRadius ?? 1000.0,
+            Coordinate: .init(latitude ?? origLat ?? 37.7749, longitude ?? origLon ?? -122.4194),
+            RegionCoordinate: .init(regionLatitude ?? origRegLat ?? 37.7749, regionLongitude ?? origRegLon ?? -122.4194),
+            RegionRadius: regionRadius ?? origRegRad ?? 1000.0,
             Name: "Current Location",
             ThoroughFare: nil, SubThoroughFare: nil, Locality: nil, SubLocality: nil,
             AdministrativeArea: nil, SubAdministrativeArea: nil, PostalCode: nil,
@@ -1215,8 +1409,8 @@ final class MeetFormUnifiedModel: ObservableObject
         )
     }
     
-    // Check if any optional details have been changed from defaults
-    var hasChangedOptionalDetails: Bool {
+    var hasChangedOptionalDetails: Bool
+    {
         let hasDescription = !descriptionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let changedCategory = meetCategoryID != initialMeetCategoryID
         let changedCapacity = maxCapacity != initialMaxCapacity
@@ -1224,7 +1418,8 @@ final class MeetFormUnifiedModel: ObservableObject
         return hasDescription || changedCategory || changedCapacity
     }
     
-    func applyLocation(_ location: LocationInfo) {
+    func applyLocation(_ location: LocationInfo)
+    {
         latitude = location.Coordinate.latitude
         longitude = location.Coordinate.longitude
         regionLatitude = location.RegionCoordinate.latitude
@@ -1232,22 +1427,29 @@ final class MeetFormUnifiedModel: ObservableObject
         regionRadius = location.RegionRadius
     }
     
-    func validate() -> String? {
+    func validate() -> String?
+    {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "Name is required" }
         guard trimmed.count <= 50 else { return "Name must be 50 characters or fewer" }
         guard start < end else { return "Start time must be before end time" }
-        guard hasValidLocation else { return "Location is required" }
-        if maxCapacity < 2 { return "Capacity must be at least 2" }
+        
+        // For create mode, location is required
+        if meetIDUUID == nil {
+            guard hasValidLocation else { return "Location is required" }
+        }
+        
+        if maxCapacity > 0 && maxCapacity < 2
+        {
+            return "Capacity must be at least 2 (or -1 for unlimited)"
+        }
         return nil
     }
     
     func makeCreateBody() -> MeetInsertBody? {
-        guard hasValidLocation,
-              let lat = latitude,
-              let lon = longitude,
-              let rLat = regionLatitude,
-              let rLon = regionLongitude,
+        guard meetIDUUID == nil else { return nil } // Only for create mode
+        guard let lat = latitude, let lon = longitude,
+              let rLat = regionLatitude, let rLon = regionLongitude,
               let rRad = regionRadius else {
             return nil
         }
@@ -1271,11 +1473,9 @@ final class MeetFormUnifiedModel: ObservableObject
     }
     
     func makeCreateBodyWithInvites(invitedUserUUIDs: [UUID]) -> MeetWithInvitesInsertBody? {
-        guard hasValidLocation,
-              let lat = latitude,
-              let lon = longitude,
-              let rLat = regionLatitude,
-              let rLon = regionLongitude,
+        guard meetIDUUID == nil else { return nil } // Only for create mode
+        guard let lat = latitude, let lon = longitude,
+              let rLat = regionLatitude, let rLon = regionLongitude,
               let rRad = regionRadius else {
             return nil
         }
@@ -1297,6 +1497,86 @@ final class MeetFormUnifiedModel: ObservableObject
             meet_category_id: meetCategoryID,
             max_capacity: maxCapacity,
             invitation_message: nil
+        )
+    }
+    
+    func makeUpdateBody() -> UpdatedMeetInsertBody? {
+        guard let id = meetIDUUID else { return nil } // Only for update mode
+        
+        // Build diffs
+        let trimmed = String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(50))
+        let nameOpt: String? = (trimmed != origName) ? trimmed : nil
+        let startOpt: Date? = (start != origStart) ? start : nil
+        let endOpt: Date? = (end != origEnd) ? end : nil
+        
+        let descOpt: String? = {
+            let current = descriptionText.trimmingCharacters(in: .whitespacesAndNewlines)
+            let original = origDescription?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return current != original ? (current.isEmpty ? nil : current) : nil
+        }()
+        
+        let catOpt: Int16? = (meetCategoryID != origCategoryID) ? meetCategoryID : nil
+        let capOpt: Int32? = (maxCapacity != origMaxCapacity) ? maxCapacity : nil
+        
+        // Coords: all-or-none
+        let coordProvided = [latitude, longitude, regionLatitude, regionLongitude, regionRadius]
+            .compactMap { $0 }.count
+        
+        var latOpt: Double? = nil
+        var lonOpt: Double? = nil
+        var rLatOpt: Double? = nil
+        var rLonOpt: Double? = nil
+        var rRadOpt: Double? = nil
+        
+        if coordProvided == 5 {
+            guard let lat = latitude, let lon = longitude,
+                  let rLat = regionLatitude, let rLon = regionLongitude,
+                  let rRad = regionRadius else {
+                return nil
+            }
+            
+            let eps = 1e-7
+            let epsR = 1e-3
+            let sameAsOrig =
+                abs(lat - (origLat ?? lat)) < eps &&
+                abs(lon - (origLon ?? lon)) < eps &&
+                abs(rLat - (origRegLat ?? rLat)) < eps &&
+                abs(rLon - (origRegLon ?? rLon)) < eps &&
+                abs(rRad - (origRegRad ?? rRad)) < epsR
+            
+            if !sameAsOrig {
+                latOpt = lat
+                lonOpt = lon
+                rLatOpt = rLat
+                rLonOpt = rLon
+                rRadOpt = rRad
+            }
+        }
+        
+        // Check if anything changed
+        let nothingChanged = ![
+            nameOpt as Any?, startOpt as Any?, endOpt as Any?, descOpt as Any?,
+            catOpt as Any?, capOpt as Any?,
+            latOpt as Any?, lonOpt as Any?, rLatOpt as Any?, rLonOpt as Any?, rRadOpt as Any?
+        ].contains { $0 != nil }
+        
+        if nothingChanged { return nil }
+        
+        return UpdatedMeetInsertBody(
+            meet_id_uuid: id,
+            latitude: latOpt,
+            longitude: lonOpt,
+            region_latitude: rLatOpt,
+            region_longitude: rLonOpt,
+            region_radius: rRadOpt,
+            meet_status_id: nil,
+            name: nameOpt,
+            dttm_start_utc: startOpt,
+            dttm_end_utc: endOpt,
+            description: descOpt,
+            change_reason: nil,
+            meet_category_id: catOpt,
+            max_capacity: capOpt
         )
     }
 }

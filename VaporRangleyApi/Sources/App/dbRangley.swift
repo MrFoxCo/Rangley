@@ -242,9 +242,9 @@ enum Proc
                 ,\(bind: i.name                     )::varchar(50)
                 ,\(bind: i.dttm_start_utc           )::timestamptz
                 ,\(bind: i.dttm_end_utc             )::timestamptz
-                ,COALESCE(\(bind: i.description     ), ''::varchar(50))::varchar(50)
+                ,COALESCE(\(bind: i.description     ), ''::varchar(200))::varchar(200)
                 ,COALESCE(\(bind: i.meet_category_id), 1::int2)::int2
-                ,COALESCE(\(bind: i.max_capacity    ), 2::int4)::int4
+                ,COALESCE(\(bind: i.max_capacity    ), -1::int4)::int4
             );
             """
         }
@@ -260,8 +260,6 @@ enum Proc
                 )
             }
     }
-
-
 
     
     enum SystemInsertUpdatedMeet: PgCallableRow
@@ -318,7 +316,7 @@ enum Proc
                 ,\(bind: i.name             )::varchar(50)
                 ,\(bind: i.dttm_start_utc   )::timestamptz
                 ,\(bind: i.dttm_end_utc     )::timestamptz
-                ,\(bind: i.description      )::varchar(50)
+                ,\(bind: i.description      )::varchar(200)
                 ,\(bind: i.change_reason    )::varchar(50)
                 ,\(bind: i.meet_category_id )::int2
                 ,\(bind: i.max_capacity     )::int4

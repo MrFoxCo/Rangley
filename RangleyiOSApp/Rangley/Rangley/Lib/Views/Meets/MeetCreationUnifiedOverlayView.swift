@@ -246,6 +246,7 @@ struct CreateMeetConfirmationPopup: View
         case .tapOnMap: return "Create Meet Here?"
         case .createButton: return "Create New Meet?"
         case .createWithGroup(let group, _): return "Create Meet with \(group.name)?"
+        case .update: return "Update This Meet?"
         }
     }
 
@@ -255,6 +256,8 @@ struct CreateMeetConfirmationPopup: View
         case .createButton: return "Start planning your meetup"
         case .createWithGroup(_, let members):
             return "Inviting \(members.count) member\(members.count == 1 ? "" : "s")"
+        case .update(let meet):
+            return "Make changes to \(meet.name)"
         }
     }
     
