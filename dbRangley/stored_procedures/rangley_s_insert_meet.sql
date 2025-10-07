@@ -198,3 +198,24 @@ EXCEPTION
           HINT=COALESCE(_hint, 'Check server logs for full context and stack trace.');
 END;
 $procedure$;
+
+
+
+/*
+
+Meet Category ID  and Category
+
+0	NULL_VALUE
+1	Activity
+2	Sports
+3	Outdoors
+4	Social
+5	Music
+6	Food
+7	Planned Trip
+8	Spontaneous
+9	Custom
+
+
+
+*/

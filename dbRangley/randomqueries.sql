@@ -11,13 +11,19 @@ select * from rangley.vw_users;
 
 select * from rangley.vw_meets;
 
+select * from rangley.vw_up_to_date_meets;
+
 select * from rangley.vw_participant_status;
+
+select * from rangley.td_meet_category;
 
 select * from rangley.vw_notification_type;
 
 select * from rangley.vw_meet_status;
 
 select * from rangley.vw_stock_assets;
+
+select * from rangley.td_violation_categories;
 
 
 select * from rangley.vw_user_inboxes where user_id  in (2,4);

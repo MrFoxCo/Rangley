@@ -477,7 +477,7 @@ private struct GroupCard: View
                 }
                 .padding(.bottom, 8)
             }
-            .frame(width: 130)
+            .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
             .padding(.horizontal, 12)
             .background(

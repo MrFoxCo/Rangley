@@ -29,8 +29,6 @@ struct MeetCreationUnifiedFormView: View
     let onClose: () -> Void
     let preselectedGroupMembers: [ViewUsersModel]?
     let skipInviteStep: Bool
-
-    
     
     // MARK: State
     @StateObject private var vm: MeetFormUnifiedModel
@@ -65,7 +63,7 @@ struct MeetCreationUnifiedFormView: View
         self.onCreateWithInvites = onCreateWithInvites
         self.onClose = onClose
         
-        // Handle group mode BEFORE initializing StateObject
+        // Handle group mode
         if case .createWithGroup(_, let members) = entryMode {
             self.skipInviteStep = true
             self.preselectedGroupMembers = members.map { member in
@@ -82,58 +80,38 @@ struct MeetCreationUnifiedFormView: View
             self.preselectedGroupMembers = nil
         }
         
-        // Initialize VM with location if available
+        // Initialize VM - ONLY with location if tapOnMap mode
         let initialLocation: LocationInfo? = {
-            switch entryMode {
-            case .tapOnMap(let loc): return loc
-            case .createButton: return nil
-            case .createWithGroup: return nil // ADD THIS
+            if case .tapOnMap(let loc) = entryMode {
+                return loc
             }
+            return nil
         }()
         
         _vm = StateObject(wrappedValue: MeetFormUnifiedModel(location: initialLocation))
         
-        // Set initial step based on entry mode
-        switch entryMode {
-        case .tapOnMap:
+        // Set initial step based on whether we have a location
+        if case .tapOnMap = entryMode {
             _currentStep = State(initialValue: .name)
-        case .createButton:
+        } else {
             _currentStep = State(initialValue: .location)
-        case .createWithGroup:
-            _currentStep = State(initialValue: .location) // or .name if you want to skip location for groups too
         }
     }
     
     // MARK: Steps
     enum UnifiedStep: CaseIterable
     {
-        case location    // Only for createButton flow
-        case name
-        case startTime
-        case endTime
-        case inviteFriends
-        case review
+        case location, name, details, startTime, endTime, inviteFriends, review
         
         var title: String {
             switch self {
-            case .location: return "Choose your location"
+            case .location: return "Choose Location"
             case .name: return "Name your meet"
+            case .details: return "Meet Details (optional)"
             case .startTime: return "When does it start?"
             case .endTime: return "When does it end?"
             case .inviteFriends: return "Invite Friends"
             case .review: return "Review & Create"
-            }
-        }
-        
-        var stepNumber: Int {
-            // Adjust numbering based on entry mode
-            switch self {
-            case .location: return 1
-            case .name: return 2
-            case .startTime: return 3
-            case .endTime: return 4
-            case .inviteFriends: return 5
-            case .review: return 6
             }
         }
     }
@@ -172,12 +150,14 @@ struct MeetCreationUnifiedFormView: View
             return vm.hasValidLocation
         case .name:
             return !vm.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .details:
+            return true  // Optional step - always can proceed
         case .startTime:
             return true
         case .endTime:
             return vm.end > vm.start
         case .inviteFriends:
-            return true // Optional step
+            return true
         case .review:
             return vm.validate() == nil
         }
@@ -186,36 +166,97 @@ struct MeetCreationUnifiedFormView: View
     // MARK: Body
     var body: some View
     {
-        VStack(spacing: 0) {
-            // Header
-            header
-            
-            // Progress bar
-            progressBar
-            
-            // Location card (always visible except during location step)
-            if currentStep != .location {
-                locationCard
+        NavigationView {
+            ZStack {
+                AppPalette.Brand.formBlack.ignoresSafeArea()
+                
+                VStack(spacing: 0) {
+                    // Progress bar
+                    progressBar
+                    
+                    ScrollView {
+                        VStack(spacing: 24) {
+                            // Location card (if not on location step)
+                            if currentStep != .location {
+                                locationCard
+                            }
+                            
+                            // Step title
+                            Text(currentStep.title)
+                                .font(.system(size: 24, weight: .bold))
+                                .foregroundColor(AppPalette.Text.primary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 24)
+                            
+                            // Step content
+                            stepContent
+                        }
+                        .padding(.bottom, 100)
+                    }
+                    
+                    Spacer()
+                    
+                    // Action buttons
+                    actionButtons
+                }
             }
-            
-            // Current step content
-            stepContent
-            
-            Spacer(minLength: 0)
-            
-            // Action button
-            actionButton
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: 24)
-                .fill(AppPalette.Brand.japDarkerPurple)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 24)
-                        .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1)
+            .navigationTitle(navigationTitle)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        onClose()
+                    }
+                    .foregroundStyle(AppPalette.Text.secondary)
+                }
+            }
+            .fullScreenCover(isPresented: $showLocationPicker) {
+                LocationPickerSheet(
+                    initial: vm.currentLocationInfo,
+                    onPick: { picked in
+                        vm.applyLocation(picked)
+                        
+                        if let name = picked.Name, !name.isEmpty {
+                            displayLocationName = name
+                        } else {
+                            displayLocationName = "Selected Location"
+                        }
+                        
+                        loadLocationAddress(picked)
+                        showLocationPicker = false
+                        
+                        if currentStep == .location {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                nextStep()
+                            }
+                        }
+                    },
+                    onCancel: {
+                        showLocationPicker = false
+                        if currentStep == .location {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                onClose()
+                            }
+                        }
+                    }
                 )
-        )
-        .shadow(color: AppPalette.Brand.neonPink.opacity(0.3), radius: 20, x: 0, y: 10)
+            }
+            .sheet(isPresented: $showCreateGroupForm) {
+                MeetGroupFormView(
+                    baseURL: baseURL,
+                    token: token,
+                    preselectedUsers: invitedUsers,
+                    onGroupCreated: { groupId in
+                        createdGroupId = groupId
+                        showCreateGroupForm = false
+                        Task {
+                            await loadExistingGroups()
+                        }
+                    },
+                    onCancel: { showCreateGroupForm = false }
+                )
+            }
+        }
         .scaleEffect(isAnimating ? 1 : 0.95)
         .opacity(isAnimating ? 1 : 0)
         .onAppear {
@@ -227,115 +268,36 @@ struct MeetCreationUnifiedFormView: View
             }
             setupInitialState()
             
+            Task {
+                await loadExistingGroups()
+            }
+            
             // Auto-show location picker for createButton flow on location step
             if case .createButton = entryMode, currentStep == .location {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                     showLocationPicker = true
                 }
             }
         }
-        .onChange(of: vm.start, initial: false) { _, newStart in
+        .onChange(of: vm.start) { _, newStart in
             if vm.end <= newStart {
                 vm.end = newStart.addingTimeInterval(3600)
             }
         }
-        .onTapGesture { isNameFieldFocused = false }
         .onDisappear { geocodingTask?.cancel() }
-        // Replace the fullScreenCover in MeetCreationUnifiedFormView.swift with this
-        .fullScreenCover(isPresented: $showLocationPicker) {
-            LocationPickerSheet(
-                initial: vm.currentLocationInfo,
-                onPick: { picked in
-                    // Apply location immediately
-                    vm.applyLocation(picked)
-                    
-                    // Update display with picked location data first
-                    if let name = picked.Name, !name.isEmpty {
-                        displayLocationName = name
-                    } else {
-                        displayLocationName = "Selected Location"
-                    }
-                    
-                    // Then start geocoding for better display
-                    loadLocationAddress(picked)
-                    
-                    // Close picker first, then advance step
-                    showLocationPicker = false
-                    
-                    if currentStep == .location {
-                        // Small delay to let the picker fully dismiss
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                            nextStep()
-                        }
-                    }
-                },
-                onCancel: {
-                    showLocationPicker = false
-                    if currentStep == .location {
-                        // Small delay before closing form to prevent graphics conflicts
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                            onClose()
-                        }
-                    }
-                }
-            )
-        }
-        .sheet(isPresented: $showCreateGroupForm) {
-            MeetGroupFormView(
-                baseURL: baseURL,
-                token: token,
-                preselectedUsers: invitedUsers,
-                onGroupCreated: { groupId in
-                    createdGroupId = groupId
-                    showCreateGroupForm = false
-                    // Reload groups so the new one appears in the list
-                    Task {
-                        await loadExistingGroups()
-                    }
-                },
-                onCancel: { showCreateGroupForm = false }
-            )
-        }
     }
     
-    // MARK: Components
-    private var header: some View
-    {
-        VStack(spacing: 16) {
-            HStack {
-                Button(action: previousStep) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 16, weight: .medium))
-                        Text(isFirstStep ? "Cancel" : "Back")
-                            .font(.system(size: 16, weight: .medium))
-                    }
-                    .foregroundColor(AppPalette.Brand.neonPink)
-                }
-                
-                Spacer()
-                
-                Text("Step \(currentStepNumber) of \(totalSteps)")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(AppPalette.Text.secondary)
-                
-                Spacer()
-                
-                Button(action: onClose) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(AppPalette.Brand.neonPink)
-                        .frame(width: 28, height: 28)
-                        .background(
-                            Circle()
-                                .fill(AppPalette.Brand.neonPink.opacity(0.1))
-                        )
-                }
-            }
-            .padding(.horizontal, 24)
-            .padding(.top, 20)
+    // MARK: - Components
+    
+    private var navigationTitle: String {
+        switch entryMode {
+        case .tapOnMap:
+            return "Create Meet"
+        case .createButton:
+            return "Create Meet"
+        case .createWithGroup(let group, _):
+            return "Create Meet with \(group.name)"
         }
-        .padding(.bottom, 12)
     }
     
     private var progressBar: some View
@@ -357,6 +319,7 @@ struct MeetCreationUnifiedFormView: View
         }
         .frame(height: 4)
         .padding(.horizontal, 24)
+        .padding(.top, 12)
         .padding(.bottom, 24)
     }
     
@@ -391,7 +354,7 @@ struct MeetCreationUnifiedFormView: View
                     )
             )
             
-            // Change location button (optional based on flow)
+            // Change location button (only for createButton flow)
             if case .createButton = entryMode {
                 Button {
                     showLocationPicker = true
@@ -412,52 +375,61 @@ struct MeetCreationUnifiedFormView: View
             }
         }
         .padding(.horizontal, 24)
-        .padding(.bottom, 24)
     }
     
+    @ViewBuilder
     private var stepContent: some View
     {
-        VStack(spacing: 24) {
-            Text(currentStep.title)
-                .font(.system(size: 24, weight: .bold))
-                .foregroundColor(AppPalette.Text.primary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 24)
-            
-            Group {
-                switch currentStep {
-                case .location:
-                    locationStepContent
-                case .name:
-                    nameStepContent
-                case .startTime:
-                    startTimeStepContent
-                case .endTime:
-                    endTimeStepContent
-                case .inviteFriends:
-                    inviteFriendsStepContent
-                case .review:
-                    reviewStepContent
-                }
+        Group {
+            switch currentStep {
+            case .location:
+                locationStepContent
+            case .name:
+                nameStepContent
+            case .details:
+                detailsStepContent
+            case .startTime:
+                startTimeStepContent
+            case .endTime:
+                endTimeStepContent
+            case .inviteFriends:
+                inviteFriendsStepContent
+            case .review:
+                reviewStepContent
             }
-            .transition(.asymmetric(
-                insertion: .move(edge: .trailing).combined(with: .opacity),
-                removal: .move(edge: .leading).combined(with: .opacity)
-            ))
         }
+        .transition(.asymmetric(
+            insertion: .move(edge: .trailing).combined(with: .opacity),
+            removal: .move(edge: .leading).combined(with: .opacity)
+        ))
     }
     
-    // MARK: Step Contents
     private var locationStepContent: some View
     {
         VStack(spacing: 12) {
-            Text("Selecting your location...")
+            Text("Tap below to search for a location")
                 .font(.system(size: 16))
                 .foregroundColor(AppPalette.Text.secondary)
-                .frame(maxWidth: .infinity, alignment: .center)
+                .multilineTextAlignment(.center)
             
-            ProgressView()
-                .tint(AppPalette.Brand.neonPink)
+            Button {
+                showLocationPicker = true
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "mappin.and.ellipse")
+                        .font(.system(size: 18))
+                    Text("Open Location Picker")
+                        .font(.system(size: 16, weight: .semibold))
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(AppPalette.Brand.neonPink)
+                )
+            }
+            .buttonStyle(.plain)
         }
         .padding(.horizontal, 24)
     }
@@ -486,24 +458,6 @@ struct MeetCreationUnifiedFormView: View
                         isNameFieldFocused = true
                     }
                 }
-                .onAppear {
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                        isAnimating = true
-                    }
-                    setupInitialState()
-                    
-                    // Load existing groups
-                    Task {
-                        await loadExistingGroups()
-                    }
-                    
-                    // Auto-show location picker for createButton flow on location step
-                    if case .createButton = entryMode, currentStep == .location {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                            showLocationPicker = true
-                        }
-                    }
-                }
             
             Text("\(vm.name.count)/50")
                 .font(.footnote)
@@ -513,12 +467,33 @@ struct MeetCreationUnifiedFormView: View
         .padding(.horizontal, 24)
     }
     
-    private var startTimeStepContent: some View
+    private var detailsStepContent: some View
     {
-        VStack(spacing: 16) {
-            ThemedDatePicker(selection: $vm.start)
-                .frame(height: 200)
-                .padding(.horizontal, 8)
+        VStack(alignment: .leading, spacing: 20) {
+            // Description
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Description")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(AppPalette.Text.secondary)
+                
+                ZStack(alignment: .topLeading) {
+                    if vm.descriptionText.isEmpty {
+                        Text("What's this meet about?")
+                            .font(.system(size: 16))
+                            .foregroundColor(AppPalette.Text.tertiary)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+                    }
+                    
+                    TextEditor(text: $vm.descriptionText)
+                        .font(.system(size: 16))
+                        .foregroundColor(AppPalette.Text.primary)
+                        .frame(height: 80)
+                        .scrollContentBackground(.hidden)
+                        .background(Color.clear)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                }
                 .background(
                     RoundedRectangle(cornerRadius: 12)
                         .fill(AppPalette.Surface.fieldFill)
@@ -527,9 +502,122 @@ struct MeetCreationUnifiedFormView: View
                                 .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
                         )
                 )
+                
+                Text("\(vm.descriptionText.count)/50")
+                    .font(.footnote)
+                    .foregroundColor(AppPalette.Text.tertiary)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+            
+            // Category
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Category")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(AppPalette.Text.secondary)
+                
+                Menu {
+                    ForEach(MeetCategory.allCases, id: \.rawValue) { category in
+                        Button {
+                            vm.meetCategoryID = category.rawValue
+                        } label: {
+                            HStack {
+                                Text(category.displayName)
+                                if vm.meetCategoryID == category.rawValue {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    HStack {
+                        Text(MeetCategory(rawValue: vm.meetCategoryID)?.displayName ?? "Activity")
+                            .font(.system(size: 16))
+                            .foregroundColor(AppPalette.Text.primary)
+                        
+                        Spacer()
+                        
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(AppPalette.Text.tertiary)
+                    }
+                    .padding(16)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(AppPalette.Surface.fieldFill)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
+                            )
+                    )
+                }
+            }
+            
+            // Max Capacity
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Max Capacity")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(AppPalette.Text.secondary)
+                
+                HStack {
+                    Text("\(vm.maxCapacity) people")
+                        .font(.system(size: 16))
+                        .foregroundColor(AppPalette.Text.primary)
+                    
+                    Spacer()
+                    
+                    HStack(spacing: 16) {
+                        Button {
+                            if vm.maxCapacity > 2 {
+                                vm.maxCapacity -= 1
+                            }
+                        } label: {
+                            Image(systemName: "minus.circle.fill")
+                                .font(.system(size: 28))
+                                .foregroundColor(vm.maxCapacity > 2 ? AppPalette.Brand.neonPink : AppPalette.Text.tertiary)
+                        }
+                        .disabled(vm.maxCapacity <= 2)
+                        
+                        Button {
+                            if vm.maxCapacity < 50 {
+                                vm.maxCapacity += 1
+                            }
+                        } label: {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.system(size: 28))
+                                .foregroundColor(vm.maxCapacity < 50 ? AppPalette.Brand.neonPink : AppPalette.Text.tertiary)
+                        }
+                        .disabled(vm.maxCapacity >= 50)
+                    }
+                }
+                .padding(16)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(AppPalette.Surface.fieldFill)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
+                        )
+                )
+            }
         }
-        .foregroundColor(AppPalette.Text.primary)
         .padding(.horizontal, 24)
+    }
+    
+    private var startTimeStepContent: some View
+    {
+        ThemedDatePicker(selection: $vm.start)
+            .frame(height: 200)
+            .padding(.horizontal, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(AppPalette.Surface.fieldFill)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
+                    )
+            )
+            .foregroundColor(AppPalette.Text.primary)
+            .padding(.horizontal, 24)
     }
     
     private var endTimeStepContent: some View
@@ -564,7 +652,7 @@ struct MeetCreationUnifiedFormView: View
     private var inviteFriendsStepContent: some View
     {
         VStack(spacing: 16) {
-            // Show existing groups first
+            // Existing groups
             if !existingMeetGroups.isEmpty {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Your Groups")
@@ -580,13 +668,11 @@ struct MeetCreationUnifiedFormView: View
                                     isSelected: selectedGroupId == group.meet_group_id,
                                     onTap: {
                                         if selectedGroupId == group.meet_group_id {
-                                            // Unselect - clear the group selection and remove those users
                                             selectedGroupId = nil
                                             invitedUsers.removeAll()
                                         } else {
-                                            // Select new group - replace all invited users with this group's members
                                             selectedGroupId = group.meet_group_id
-                                            invitedUsers.removeAll() // Clear first
+                                            invitedUsers.removeAll()
                                             Task { await loadGroupMembers(group) }
                                         }
                                     }
@@ -602,7 +688,7 @@ struct MeetCreationUnifiedFormView: View
                     .padding(.horizontal, 24)
             }
             
-            // Existing invite UI - disable when group is selected
+            // Invite friends UI
             InviteFriendsEmbedded(
                 baseURL: baseURL,
                 token: token,
@@ -611,7 +697,7 @@ struct MeetCreationUnifiedFormView: View
             .disabled(selectedGroupId != nil)
             .opacity(selectedGroupId != nil ? 0.5 : 1.0)
             
-            // "Save as Group" button when users are selected AND no group is selected
+            // Save as group button
             if !invitedUsers.isEmpty && selectedGroupId == nil {
                 Divider()
                     .background(AppPalette.Surface.fieldStroke)
@@ -663,6 +749,13 @@ struct MeetCreationUnifiedFormView: View
             VStack(alignment: .leading, spacing: 16) {
                 DetailRow(label: "Location", value: displayLocationName)
                 DetailRow(label: "Meet Name", value: vm.name)
+                
+                if !vm.descriptionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    DetailRow(label: "Description", value: vm.descriptionText)
+                }
+                
+                DetailRow(label: "Category", value: MeetCategory(rawValue: vm.meetCategoryID)?.displayName ?? "Activity")
+                DetailRow(label: "Max Capacity", value: "\(vm.maxCapacity) people")
                 DetailRow(label: "Start", value: formatDate(vm.start))
                 DetailRow(label: "End", value: formatDate(vm.end))
                 DetailRow(label: "Duration", value: formatDuration(from: vm.start, to: vm.end))
@@ -680,46 +773,84 @@ struct MeetCreationUnifiedFormView: View
                             .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
                     )
             )
+            
+            if let error = submitError {
+                Text(error)
+                    .font(.system(size: 14))
+                    .foregroundColor(.red)
+                    .multilineTextAlignment(.center)
+            }
         }
         .padding(.horizontal, 24)
     }
     
-    private var actionButton: some View
+    private var actionButtons: some View
     {
-        Button(action: nextStep) {
-            Text(buttonTitle)
-                .font(.system(size: 16, weight: .bold))
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(canProceed ? AppPalette.Brand.neonPink : AppPalette.Brand.neonPink.opacity(0.5))
-                )
-        }
-        .disabled(!canProceed || isSubmitting)
-        .padding(.horizontal, 24)
-        .padding(.bottom, 24)
-        .overlay(alignment: .bottom) {
-            if let submitError, currentStep == .review {
-                Text(submitError)
-                    .font(.footnote)
-                    .foregroundColor(.red)
-                    .padding(.bottom, 4)
+        VStack(spacing: 12) {
+            HStack(spacing: 12) {
+                // Back button (only show if not on first step)
+                if !isFirstStep {
+                    Button(action: previousStep) {
+                        Text("Back")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(AppPalette.Text.secondary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
+                            )
+                    }
+                    .disabled(isSubmitting)
+                }
+                
+                // Next/Create button
+                Button(action: nextStep) {
+                    HStack {
+                        if isSubmitting {
+                            ProgressView()
+                                .tint(.white)
+                        } else {
+                            Text(buttonTitle)
+                                .font(.system(size: 16, weight: .bold))
+                        }
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(canProceed && !isSubmitting ? AppPalette.Brand.neonPink : AppPalette.Brand.neonPink.opacity(0.5))
+                    )
+                }
+                .disabled(!canProceed || isSubmitting)
             }
         }
+        .padding(.horizontal, 24)
+        .padding(.bottom, 24)
     }
     
     private var buttonTitle: String
     {
         switch currentStep {
-        case .review: return "Create Meet"
-        case .inviteFriends: return invitedUsers.isEmpty ? "Skip" : "Continue"
-        default: return "Next"
+        case .details:
+            // If any detail was changed from defaults, show "Next" instead of "Skip"
+            let hasDescription = !vm.descriptionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            let changedCategory = vm.meetCategoryID != 1  // Default is Activity (1)
+            let changedCapacity = vm.maxCapacity != 8     // Default is 8
+            
+            return (hasDescription || changedCategory || changedCapacity) ? "Next" : "Skip"
+        case .review:
+            return "Create Meet"
+        case .inviteFriends:
+            return invitedUsers.isEmpty ? "Skip" : "Continue"
+        default:
+            return "Next"
         }
     }
     
-    // MARK: Navigation
+    // MARK: - Navigation
+    
     private var isFirstStep: Bool
     {
         currentStep == activeSteps.first
@@ -744,16 +875,15 @@ struct MeetCreationUnifiedFormView: View
     private func previousStep()
     {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-            if isFirstStep {
-                onClose()
-            } else if let currentIndex = activeSteps.firstIndex(of: currentStep),
-                      currentIndex > 0 {
+            if let currentIndex = activeSteps.firstIndex(of: currentStep),
+               currentIndex > 0 {
                 currentStep = activeSteps[currentIndex - 1]
             }
         }
     }
     
-    // MARK: Submit
+    // MARK: - Submit
+    
     private func submit()
     {
         guard !isSubmitting else { return }
@@ -766,21 +896,19 @@ struct MeetCreationUnifiedFormView: View
                 if invitedUsers.isEmpty {
                     if let body = vm.makeCreateBody() {
                         try await onCreate(body)
-                        // Success - form will be dismissed by parent
                     } else {
                         await MainActor.run {
                             isSubmitting = false
-                            submitError = "Missing required information. Please check all fields."
+                            submitError = "Missing required information"
                         }
                     }
                 } else {
                     if let body = vm.makeCreateBodyWithInvites(invitedUserUUIDs: invitedUsers.map { $0.user_uuid }) {
                         try await onCreateWithInvites(body)
-                        // Success - form will be dismissed by parent
                     } else {
                         await MainActor.run {
                             isSubmitting = false
-                            submitError = "Missing required information. Please check all fields."
+                            submitError = "Missing required information"
                         }
                     }
                 }
@@ -797,40 +925,22 @@ struct MeetCreationUnifiedFormView: View
     {
         let errorString = error.localizedDescription.lowercased()
         
-        // Check for content moderation
         if errorString.contains("content not allowed") ||
            errorString.contains("violates") ||
-           errorString.contains("inappropriate") ||
-           errorString.contains("community guidelines") {
+           errorString.contains("inappropriate") {
             return "Content not allowed - please review your meet details"
-        }
-        
-        // Check for common API errors without exposing HTTP codes
-        if errorString.contains("failed to create meet") ||
-           errorString.contains("500") {
-            return "Unable to create meet right now. Please try again."
-        }
-        
-        if errorString.contains("invalid input") ||
-           errorString.contains("400") {
-            return "Please check your meet details and try again."
-        }
-        
-        if errorString.contains("unauthorized") ||
-           errorString.contains("401") {
-            return "Please log in and try again."
         }
         
         if errorString.contains("network") ||
            errorString.contains("connection") {
-            return "Network error. Please check your connection and try again."
+            return "Network error. Please check your connection."
         }
         
-        // Generic fallback that doesn't expose technical details
         return "Something went wrong. Please try again."
     }
-
-    // MARK: Helpers
+    
+    // MARK: - Helpers
+    
     private func setupInitialState()
     {
         if vm.end <= vm.start {
@@ -842,10 +952,8 @@ struct MeetCreationUnifiedFormView: View
             loadLocationAddress(location)
         case .createButton:
             displayLocationName = "Choose a location"
-            displayLocationSubtitle = "Tap 'Open Location Picker' to select"
         case .createWithGroup:
             displayLocationName = "Choose a location"
-            displayLocationSubtitle = "Tap 'Open Location Picker' to select"
         }
     }
     
@@ -864,36 +972,68 @@ struct MeetCreationUnifiedFormView: View
                 guard let p = placemarks.first else {
                     await MainActor.run {
                         displayLocationName = "Selected location"
-                        displayLocationSubtitle = formatCoordinates(location)
                     }
                     return
                 }
                 
                 let name = p.name?.trimmingCharacters(in: .whitespacesAndNewlines)
                 let street = p.thoroughfare?.trimmingCharacters(in: .whitespacesAndNewlines)
-                let number = p.subThoroughfare?.trimmingCharacters(in: .whitespacesAndNewlines)
                 let city = p.locality?.trimmingCharacters(in: .whitespacesAndNewlines)
                 let state = p.administrativeArea?.trimmingCharacters(in: .whitespacesAndNewlines)
                 
                 await MainActor.run {
                     displayLocationName = name ?? street ?? "Selected Location"
-                    displayLocationSubtitle = [
-                        [number, street].compactMap { $0 }.joined(separator: " "),
-                        [city, state].compactMap { $0 }.joined(separator: ", ")
-                    ].filter { !$0.isEmpty }.joined(separator: " • ")
+                    displayLocationSubtitle = [city, state].compactMap { $0 }.joined(separator: ", ")
                 }
             } catch {
                 await MainActor.run {
                     displayLocationName = "Selected location"
-                    displayLocationSubtitle = formatCoordinates(location)
                 }
             }
         }
     }
     
-    private func formatCoordinates(_ location: LocationInfo) -> String
+    private func loadExistingGroups() async
     {
-        "Lat: \(String(format: "%.4f", location.Coordinate.latitude)), Lng: \(String(format: "%.4f", location.Coordinate.longitude))"
+        do {
+            let groups = try await AuthAPI.viewMeetGroups(baseURL: baseURL, token: token)
+            await MainActor.run {
+                existingMeetGroups = groups
+            }
+        } catch {
+            print("Failed to load groups: \(error)")
+        }
+    }
+    
+    private func loadGroupMembers(_ group: MeetGroup) async
+    {
+        do {
+            let members = try await AuthAPI.viewMeetGroupMembers(
+                baseURL: baseURL,
+                token: token,
+                meetGroupId: group.meet_group_id
+            )
+            
+            let memberUsers = members.map { member in
+                ViewUsersModel(
+                    user_uuid: member.user_uuid,
+                    username: member.username,
+                    display_name: member.display_name,
+                    matched_by: [],
+                    can_invite: true
+                )
+            }
+            
+            await MainActor.run {
+                for user in memberUsers {
+                    if !invitedUsers.contains(where: { $0.user_uuid == user.user_uuid }) {
+                        invitedUsers.append(user)
+                    }
+                }
+            }
+        } catch {
+            print("Failed to load group members: \(error)")
+        }
     }
     
     private struct DetailRow: View
@@ -936,54 +1076,10 @@ struct MeetCreationUnifiedFormView: View
         if hours > 0 { return "\(hours) hour\(hours == 1 ? "" : "s")" }
         return "\(minutes) minute\(minutes == 1 ? "" : "s")"
     }
-    
-    private func loadExistingGroups() async
-    {
-        do {
-            let groups = try await AuthAPI.viewMeetGroups(baseURL: baseURL, token: token)
-            await MainActor.run {
-                existingMeetGroups = groups
-            }
-        } catch {
-            print("Failed to load groups: \(error)")
-        }
-    }
-
-    // Function to load group members and add to invites
-    private func loadGroupMembers(_ group: MeetGroup) async
-    {
-        do {
-            let members = try await AuthAPI.viewMeetGroupMembers(
-                baseURL: baseURL,
-                token: token,
-                meetGroupId: group.meet_group_id
-            )
-            
-            // Convert members to ViewUsersModel and add to invitedUsers
-            let memberUsers = members.map { member in
-                ViewUsersModel(
-                    user_uuid: member.user_uuid,
-                    username: member.username,
-                    display_name: member.display_name,
-                    matched_by: [],
-                    can_invite: true
-                )
-            }
-            
-            await MainActor.run {
-                // TODO: Add members that aren't already selected
-                for user in memberUsers {
-                    if !invitedUsers.contains(where: { $0.user_uuid == user.user_uuid }) {
-                        invitedUsers.append(user)
-                    }
-                }
-            }
-        } catch {
-            print("Failed to load group members: \(error)")
-        }
-    }
 }
 
+
+// MARK: - Supporting Components
 private struct GroupQuickSelectButton: View
 {
     let group: MeetGroup
@@ -1031,25 +1127,69 @@ private struct GroupQuickSelectButton: View
     }
 }
 
+// MARK: - Meet Category Enum
+enum MeetCategory: Int16, CaseIterable
+{
+    case activity = 1
+    case sports = 2
+    case outdoors = 3
+    case social = 4
+    case music = 5
+    case food = 6
+    case plannedTrip = 7
+    case spontaneous = 8
+    case custom = 9
+    
+    var displayName: String {
+        switch self {
+        case .activity: return "Activity"
+        case .sports: return "Sports"
+        case .outdoors: return "Outdoors"
+        case .social: return "Social"
+        case .music: return "Music"
+        case .food: return "Food"
+        case .plannedTrip: return "Planned Trip"
+        case .spontaneous: return "Spontaneous"
+        case .custom: return "Custom"
+        }
+    }
+}
+
 // MARK: - Unified View Model
 final class MeetFormUnifiedModel: ObservableObject
 {
-    // Location
     @Published var latitude: Double?
     @Published var longitude: Double?
     @Published var regionLatitude: Double?
     @Published var regionLongitude: Double?
     @Published var regionRadius: Double?
     
-    // Meet details
     @Published var name = ""
     @Published var start = Date().addingTimeInterval(3600)
     @Published var end = Date().addingTimeInterval(7200)
-    @Published var descriptionText = ""
-    @Published var meetCategoryID: Int16 = 1
-    @Published var maxCapacity: Int32 = 8
+    @Published var descriptionText: String
+    @Published var meetCategoryID: Int16
+    @Published var maxCapacity: Int32
     
-    init(location: LocationInfo? = nil) {
+    // Store initial default values
+    private let initialDescriptionText: String
+    private let initialMeetCategoryID: Int16
+    private let initialMaxCapacity: Int32
+    
+    init(
+        location: LocationInfo? = nil,
+        descriptionText: String = "",
+        meetCategoryID: Int16 = 1,
+        maxCapacity: Int32 = 8
+    ) {
+        self.descriptionText = descriptionText
+        self.meetCategoryID = meetCategoryID
+        self.maxCapacity = maxCapacity
+        
+        self.initialDescriptionText = descriptionText
+        self.initialMeetCategoryID = meetCategoryID
+        self.initialMaxCapacity = maxCapacity
+        
         if let loc = location {
             applyLocation(loc)
         }
@@ -1065,29 +1205,23 @@ final class MeetFormUnifiedModel: ObservableObject
     
     var currentLocationInfo: LocationInfo {
         LocationInfo(
-            Coordinate: .init(
-                latitude ?? 37.7749,
-                longitude ?? -122.4194
-            ),
-            RegionCoordinate: .init(
-                regionLatitude ?? 37.7749,
-                regionLongitude ?? -122.4194
-            ),
+            Coordinate: .init(latitude ?? 37.7749, longitude ?? -122.4194),
+            RegionCoordinate: .init(regionLatitude ?? 37.7749, regionLongitude ?? -122.4194),
             RegionRadius: regionRadius ?? 1000.0,
             Name: "Current Location",
-            ThoroughFare: nil,
-            SubThoroughFare: nil,
-            Locality: nil,
-            SubLocality: nil,
-            AdministrativeArea: nil,
-            SubAdministrativeArea: nil,
-            PostalCode: nil,
-            Country: nil,
-            IsoCountryCode: nil,
-            TimeZone: nil,
-            InlandWater: nil,
-            Ocean: nil
+            ThoroughFare: nil, SubThoroughFare: nil, Locality: nil, SubLocality: nil,
+            AdministrativeArea: nil, SubAdministrativeArea: nil, PostalCode: nil,
+            Country: nil, IsoCountryCode: nil, TimeZone: nil, InlandWater: nil, Ocean: nil
         )
+    }
+    
+    // Check if any optional details have been changed from defaults
+    var hasChangedOptionalDetails: Bool {
+        let hasDescription = !descriptionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let changedCategory = meetCategoryID != initialMeetCategoryID
+        let changedCapacity = maxCapacity != initialMaxCapacity
+        
+        return hasDescription || changedCategory || changedCapacity
     }
     
     func applyLocation(_ location: LocationInfo) {

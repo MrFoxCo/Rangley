@@ -8,162 +8,6 @@
 
 import SwiftUI
 
-// MARK: - Meet Group Bar (Floating Vertical Dock Style)
-struct MeetGroupBar: View
-{
-    let groups: [MeetGroup]
-    @Binding var selectedGroup: MeetGroup?
-    let baseURL: URL
-    let token: String
-    let onGroupsChanged: () async -> Void
-    let onGroupTapped: () -> Void
-    
-    @EnvironmentObject var authState: AuthStateStore
-    @State private var showCreateGroup = false
-    
-    var body: some View
-    {
-        HStack(spacing: 0) {
-            plusButton
-            divider
-            groupsContent
-        }
-        .frame(height: 66)
-        .background(barBackground)
-        .shadow(color: AppPalette.Brand.neonPink.opacity(0.12), radius: 12, x: 0, y: 4)
-        .sheet(isPresented: $showCreateGroup) {
-            CreateMeetGroupView(
-                baseURL: baseURL,
-                token: token,
-                onDismiss: {
-                    showCreateGroup = false
-                    Task { await onGroupsChanged() }
-                }
-            )
-        }
-    }
-    
-    // MARK: - Subviews
-    
-    private var plusButton: some View {
-        Button(action: { showCreateGroup = true }) {
-            Image(systemName: "plus")
-                .font(.system(size: 16, weight: .bold))
-                .foregroundStyle(AppPalette.Brand.neonPink)
-                .frame(width: 50, height: 50)
-                .background(
-                    Circle()
-                        .fill(AppPalette.Brand.japPurple)
-                )
-                .overlay(
-                    Circle()
-                        .stroke(AppPalette.Brand.neonPink.opacity(0.4), lineWidth: 1.5)
-                )
-        }
-        .buttonStyle(.plain)
-        .padding(.leading, 16)
-    }
-    
-    private var divider: some View {
-        Rectangle()
-            .fill(AppPalette.Brand.neonPink.opacity(0.25))
-            .frame(width: 1)
-            .padding(.horizontal, 12)
-    }
-    
-    @ViewBuilder
-    private var groupsContent: some View {
-        if groups.isEmpty {
-            emptyState
-        } else {
-            scrollableGroups
-        }
-    }
-    
-    private var emptyState: some View {
-        Text("My Meet Groups")
-            .font(.system(size: 16, weight: .semibold))
-            .foregroundStyle(AppPalette.Text.secondary)
-            .frame(maxWidth: .infinity)
-            .padding(.trailing, 16)
-    }
-    
-    private var scrollableGroups: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 12) {
-                ForEach(groups, id: \.meet_group_id) { group in
-                    GroupHorizontalButton(
-                        group: group,
-                        isSelected: selectedGroup?.meet_group_id == group.meet_group_id,
-                        onTap: {
-                            selectedGroup = group
-                            onGroupTapped()
-                        },
-                        onDelete: {
-                            deleteGroup(group)
-                        },
-                        onLeave: {
-                            leaveGroup(group)
-                        },
-                        baseURL: baseURL,
-                        token: token
-                    )
-                }
-            }
-            .padding(.horizontal, 4)
-        }
-        .padding(.trailing, 16)
-    }
-    
-    private var barBackground: some View {
-        RoundedRectangle(cornerRadius: 33, style: .continuous)
-            .fill(AppPalette.Brand.neonPink.opacity(0.08))
-            .overlay(
-                RoundedRectangle(cornerRadius: 33, style: .continuous)
-                    .stroke(AppPalette.Brand.neonPink.opacity(0.9), lineWidth: 1)
-            )
-    }
-    
-    // MARK: - Actions
-    
-    private func leaveGroup(_ group: MeetGroup) {
-        Task {
-            do {
-                let body = LeaveMeetGroupBody(meet_group_id: group.meet_group_id)
-                let response = try await AuthAPI.leaveMeetGroup(baseURL: baseURL, token: token, body: body)
-                
-                if response.success {
-                    if selectedGroup?.meet_group_id == group.meet_group_id {
-                        selectedGroup = nil
-                    }
-                    await onGroupsChanged()
-                }
-            } catch {
-                print("Failed to leave group: \(error)")
-            }
-        }
-    }
-    
-    private func deleteGroup(_ group: MeetGroup) {
-        Task {
-            do {
-                let body = DeleteGroupBody(meet_group_id: group.meet_group_id)
-                let response = try await AuthAPI.deleteMeetGroup(baseURL: baseURL, token: token, body: body)
-                
-                if response.success {
-                    if selectedGroup?.meet_group_id == group.meet_group_id {
-                        selectedGroup = nil
-                    }
-                    await onGroupsChanged()
-                }
-            } catch {
-                print("Failed to delete group: \(error)")
-            }
-        }
-    }
-}
-
-
 private struct GroupHorizontalButton: View
 {
     let group: MeetGroup
@@ -320,73 +164,6 @@ private struct GroupHorizontalButton: View
             }
         } catch {
             print("Failed to load members: \(error)")
-        }
-    }
-}
-
-// MARK: - Group Dock Button
-private struct GroupDockButton: View
-{
-    let group: MeetGroup
-    let isSelected: Bool
-    let onTap: () -> Void
-    let onDelete: () -> Void
-    
-    @State private var showDeleteConfirm = false
-    
-    private var groupIcon: String {
-        // Use the image_reference for SF Symbol
-        return group.image_reference
-    }
-    
-    var body: some View
-    {
-        Button(action: onTap) {
-            Image(systemName: groupIcon)
-                .font(.system(size: 20, weight: .semibold))
-                .foregroundStyle(
-                    isSelected ? AppPalette.Brand.neonPink : AppPalette.Text.primary
-                )
-                .frame(width: 44, height: 44)
-                .background(
-                    Circle()
-                        .fill(
-                            isSelected
-                                ? AppPalette.Brand.neonPink.opacity(0.2)
-                                : AppPalette.Brand.japPurple
-                        )
-                )
-                .overlay(
-                    Circle()
-                        .stroke(
-                            isSelected
-                                ? AppPalette.Brand.neonPink.opacity(0.8)
-                                : AppPalette.Brand.neonPink.opacity(0.3),
-                            lineWidth: isSelected ? 2 : 1
-                        )
-                )
-                .shadow(
-                    color: isSelected ? AppPalette.Brand.neonPink.opacity(0.3) : .clear,
-                    radius: isSelected ? 8 : 0,
-                    x: 0,
-                    y: 0
-                )
-        }
-        .buttonStyle(.plain)
-        .contextMenu {
-            Button(role: .destructive) {
-                showDeleteConfirm = true
-            } label: {
-                Label("Delete Group", systemImage: "trash")
-            }
-        }
-        .alert("Delete \(group.name)?", isPresented: $showDeleteConfirm) {
-            Button("Delete", role: .destructive) {
-                onDelete()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This will remove the group for all members. This action cannot be undone.")
         }
     }
 }
@@ -589,7 +366,7 @@ struct MeetGroupDetailView: View
                         Divider()
                             .background(AppPalette.Surface.fieldStroke)
                         
-                        if !members.isEmpty {
+                        if members.count >= 2 {
                             Button {
                                 meetCreationMode = .createWithGroup(group: group, members: members)
                                 showCreateMeet = true
@@ -610,6 +387,28 @@ struct MeetGroupDetailView: View
                                 )
                             }
                             .buttonStyle(.plain)
+                        } else {
+                            // Show message when group has only 1 member
+                            VStack(spacing: 8) {
+                                Text("Can't create meet")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(AppPalette.Text.secondary)
+                                
+                                Text("Need at least 2 members in group to create a meet")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(AppPalette.Text.tertiary)
+                                    .multilineTextAlignment(.center)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(AppPalette.Surface.fieldFill)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(AppPalette.Surface.fieldStroke, lineWidth: 1)
+                                    )
+                            )
                         }
                         
                         if isCurrentUserOwner {
@@ -711,53 +510,19 @@ struct MeetGroupDetailView: View
             )
         }
         .fullScreenCover(isPresented: $showCreateMeet) {
-            if let mode = meetCreationMode {
-                MeetCreationUnifiedOverlay(
-                    showOverlay: $showCreateMeet,
-                    entryMode: .constant(mode),
-                    baseURL: baseURL,
-                    token: token,
-                    onCreateMeet: { location, name, start, end, invites in
-                        // Create the meet body from the provided parameters
-                        let body = MeetInsertBody(
-                            latitude: location.Coordinate.latitude,
-                            longitude: location.Coordinate.longitude,
-                            region_latitude: location.RegionCoordinate.latitude,
-                            region_longitude: location.RegionCoordinate.longitude,
-                            region_radius: location.RegionRadius,
-                            name: name,
-                            dttm_start_utc: start,
-                            dttm_end_utc: end,
-                            description: nil,
-                            meet_category_id: 1,
-                            max_capacity: 8
-                        )
-                        
-                        // Call the API
-                        let response = try await AuthAPI.createMeet(
-                            baseURL: baseURL,
-                            token: token,
-                            body: body
-                        )
-                        
-                        // Check for validation failures
-                        if response.validation_failed {
-                            throw ContentViolationError(
-                                violation: ContentViolation(
-                                    reason: "content_violation",
-                                    message: response.validation_message ?? "Content violates our community guidelines."
-                                )
-                            )
-                        }
-                        
-                        // Success - trigger group refresh and dismiss
-                        await onGroupChanged()
-                    },
-                    onContentViolation: { violation in
-                        errorMessage = violation.message
-                    }
-                )
-            }
+            GroupMeetCreationFormView(
+                group: group,
+                members: members,
+                baseURL: baseURL,
+                token: token,
+                onSuccess: {
+                    await onGroupChanged()
+                },
+                onDismiss: {
+                    showCreateMeet = false
+                    meetCreationMode = nil
+                }
+            )
         }
     }
     

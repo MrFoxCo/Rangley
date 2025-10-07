@@ -16,7 +16,7 @@ struct MeetCreationUnifiedOverlay: View
     @Binding var entryMode: MeetCreationEntryMode?
     let baseURL: URL
     let token: String
-    let onCreateMeet: (LocationInfo, String, Date, Date, [ViewUsersModel]) async throws -> Void
+    let onCreateMeet: (LocationInfo, String, Date, Date, [ViewUsersModel], String?, Int16?, Int32?) async throws -> Void
     let onContentViolation: (ContentViolation) -> Void
     
     // MARK: State
@@ -116,14 +116,23 @@ struct MeetCreationUnifiedOverlay: View
         )
         
         do {
-            try await onCreateMeet(location, body.name, body.dttm_start_utc, body.dttm_end_utc, invites)
+            try await onCreateMeet(
+                location,
+                body.name,
+                body.dttm_start_utc,
+                body.dttm_end_utc,
+                invites,
+                body.description,
+                body.meet_category_id,
+                body.max_capacity
+            )
             await MainActor.run { explodeThenDismiss() }
         } catch {
             if let violation = parseContentViolation(from: error) {
                 await MainActor.run {
                     onContentViolation(violation)
                 }
-                throw error // Re-throw so the form can reset isSubmitting
+                throw error
             } else {
                 throw error
             }
@@ -147,14 +156,23 @@ struct MeetCreationUnifiedOverlay: View
         }
         
         do {
-            try await onCreateMeet(location, body.name, body.dttm_start_utc, body.dttm_end_utc, invitedUsers)
+            try await onCreateMeet(
+                location,
+                body.name,
+                body.dttm_start_utc,
+                body.dttm_end_utc,
+                invitedUsers,
+                body.description,
+                body.meet_category_id,
+                body.max_capacity
+            )
             await MainActor.run { explodeThenDismiss() }
         } catch {
             if let violation = parseContentViolation(from: error) {
                 await MainActor.run {
                     onContentViolation(violation)
                 }
-                throw error // Re-throw so the form can reset isSubmitting
+                throw error
             } else {
                 throw error
             }
@@ -211,6 +229,7 @@ struct MeetCreationUnifiedOverlay: View
         UINotificationFeedbackGenerator().notificationOccurred(.success)
     }
 }
+
 
 // MARK: - form to ask if users actually want to create a meet
 struct CreateMeetConfirmationPopup: View

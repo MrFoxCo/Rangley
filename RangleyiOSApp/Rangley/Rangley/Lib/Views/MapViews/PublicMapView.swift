@@ -565,7 +565,10 @@ class MeetCreationService
         locationInfo: LocationInfo,
         name: String,
         startTime: Date,
-        endTime: Date
+        endTime: Date,
+        description: String?,
+        meetCategoryID: Int16?,
+        maxCapacity: Int32?
     ) -> MeetInsertBody {
         MeetInsertBody(
             latitude: locationInfo.Coordinate.latitude,
@@ -576,9 +579,9 @@ class MeetCreationService
             name: name,
             dttm_start_utc: startTime,
             dttm_end_utc: endTime,
-            description: "",
-            meet_category_id: 1,
-            max_capacity: 8
+            description: description,
+            meet_category_id: meetCategoryID,
+            max_capacity: maxCapacity
         )
     }
     
@@ -587,7 +590,11 @@ class MeetCreationService
         name: String,
         startTime: Date,
         endTime: Date,
-        invitedUsers: [UUID]
+        invitedUsers: [UUID],
+        description: String?,
+        meetCategoryID: Int16?,
+        maxCapacity: Int32?,
+        invitationMessage: String?
     ) -> MeetWithInvitesInsertBody {
         MeetWithInvitesInsertBody(
             initial_invitee_uuids: invitedUsers,
@@ -599,10 +606,10 @@ class MeetCreationService
             name: name,
             dttm_start_utc: startTime,
             dttm_end_utc: endTime,
-            description: "",
-            meet_category_id: 1,
-            max_capacity: 8,
-            invitation_message: ""
+            description: description,
+            meet_category_id: meetCategoryID,
+            max_capacity: maxCapacity,
+            invitation_message: invitationMessage
         )
     }
 }
@@ -834,13 +841,25 @@ struct OverlaysView: View
         ZStack
         {
             // Meet Creation Overlay (Unified)
+            // In OverlaysView, update the MeetCreationUnifiedOverlay call:
+
             MeetCreationUnifiedOverlay(
                 showOverlay: $uiState.showLocationPopup,
                 entryMode: $meetCreationMode,
                 baseURL: Env.apiBaseURL,
                 token: authToken,
-                onCreateMeet: { location, name, start, end, invitedUsers in
-                    try await handleMeetCreation(location, name, start, end, invitedUsers)
+                onCreateMeet: { location, name, start, end, invitedUsers, description, categoryID, capacity in
+                    try await handleMeetCreation(
+                        location,
+                        name,
+                        start,
+                        end,
+                        invitedUsers,
+                        description: description,
+                        meetCategoryID: categoryID,
+                        maxCapacity: capacity,
+                        invitationMessage: nil
+                    )
                 },
                 onContentViolation: { violation in
                     uiState.showContentViolation = violation
@@ -975,8 +994,16 @@ struct OverlaysView: View
     }
     
     private func handleMeetCreation(
-        _ location: LocationInfo,_ name: String,
-        _ start: Date,_ end: Date,_ invitedUsers: [ViewUsersModel]) async throws  
+        _ location: LocationInfo,
+        _ name: String,
+        _ start: Date,
+        _ end: Date,
+        _ invitedUsers: [ViewUsersModel],
+        description: String? = nil,
+        meetCategoryID: Int16? = nil,
+        maxCapacity: Int32? = nil,
+        invitationMessage: String? = nil
+    ) async throws
     {
         let invitedUUIDs = invitedUsers.map(\.user_uuid)
         
@@ -985,7 +1012,10 @@ struct OverlaysView: View
                 locationInfo: location,
                 name: name,
                 startTime: start,
-                endTime: end
+                endTime: end,
+                description: description,
+                meetCategoryID: meetCategoryID,
+                maxCapacity: maxCapacity
             )
             try await mapData.createMeet(body)
         } else {
@@ -994,7 +1024,11 @@ struct OverlaysView: View
                 name: name,
                 startTime: start,
                 endTime: end,
-                invitedUsers: invitedUUIDs
+                invitedUsers: invitedUUIDs,
+                description: description,
+                meetCategoryID: meetCategoryID,
+                maxCapacity: maxCapacity,
+                invitationMessage: invitationMessage
             )
             try await mapData.createMeetWithInvites(body)
         }

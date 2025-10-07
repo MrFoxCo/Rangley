@@ -441,18 +441,23 @@ private struct MeetCardView: View
                 }
                 
                 // Description (if exists)
+                // Replace the existing description section (lines 361-373) with this:
+
+                // Description (if exists)
                 if !meet.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("About")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(AppPalette.Text.primary)
-                        Text(meet.description)
-                            .font(.system(size: 14))
-                            .foregroundStyle(AppPalette.Text.secondary)
-                            .lineLimit(6)
-                            .fixedSize(horizontal: false, vertical: true)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label {
+                            Text(meet.description)
+                                .font(.system(size: 14))
+                                .foregroundStyle(AppPalette.Text.secondary)
+                                .lineLimit(3)
+                                .fixedSize(horizontal: false, vertical: true)
+                        } icon: {
+                            Image(systemName: "text.alignleft")
+                                .font(.system(size: 12))
+                                .foregroundStyle(AppPalette.Brand.neonPink)
+                        }
                     }
-                    .padding(.top, 4)
                 }
 
                 // Participant Information - UPDATED SECTION
