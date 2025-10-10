@@ -238,7 +238,7 @@ struct MyProfileView: View
                 .font(.system(size: 20, weight: .bold))
                 .foregroundStyle(AppPalette.Text.primary)
             
-            Text("Add a bio to tell others about yourself.")
+            Text("Available in future updates")
                 .font(.system(size: 15))
                 .foregroundStyle(AppPalette.Text.secondary)
                 .italic()
@@ -255,7 +255,7 @@ struct MyProfileView: View
                 .font(.system(size: 20, weight: .bold))
                 .foregroundStyle(AppPalette.Text.primary)
             
-            Text("Your recent meets will appear here.")
+            Text("Available in future updates")
                 .font(.system(size: 15))
                 .foregroundStyle(AppPalette.Text.secondary)
                 .italic()

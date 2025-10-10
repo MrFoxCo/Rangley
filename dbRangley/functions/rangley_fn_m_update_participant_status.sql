@@ -69,6 +69,27 @@ BEGIN
         dttm_modified_utc = NOW()
     WHERE participant_id = v_participant_id;
     
+
+
+	-- Clean up invitation notification if user is being removed
+	IF p_new_status_id = v_status_removed THEN
+	    WITH deleted_notifications AS (
+	        DELETE FROM rangley.tb_notifications n
+	        WHERE n.meet_id = v_meet_id
+	          AND n.notification_type_id = 8  -- Meet Invitation Received
+	          AND n.notification_id IN (
+	              SELECT ui.notification_id 
+	              FROM rangley.tb_user_inboxes ui 
+	              WHERE ui.user_id = v_target_user_id
+	          )
+	        RETURNING n.notification_id
+	    )
+	    DELETE FROM rangley.tb_user_inboxes ui
+	    USING deleted_notifications dn
+	    WHERE ui.notification_id = dn.notification_id;
+	END IF;
+
+
     RETURN QUERY SELECT TRUE, 'Participant status updated successfully'::text,
                         v_participant_id, v_old_status_id, p_new_status_id;
 END;

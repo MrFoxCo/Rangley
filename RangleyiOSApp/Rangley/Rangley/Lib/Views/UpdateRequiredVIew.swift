@@ -33,6 +33,10 @@ struct UpdateRequiredView: View {
                     .multilineTextAlignment(.center)
                     .foregroundColor(.white)
                 
+                Text("If redirection link does not work please search for update in the App Store.")
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(.white)
+                
                 Button("Update Now") {
                     openAppStore()
                 }
@@ -47,8 +51,14 @@ struct UpdateRequiredView: View {
     }
     
     private func openAppStore() {
+        // This is the ONLY format that reliably opens App Store app on iOS 14+
         if let url = URL(string: "https://apps.apple.com/app/id6751070400") {
-            UIApplication.shared.open(url)
+            UIApplication.shared.open(url, options: [.universalLinksOnly: true]) { success in
+                if !success {
+                    // If universal link fails, open normally (will go to App Store app)
+                    UIApplication.shared.open(url, options: [:], completionHandler: nil)
+                }
+            }
         }
     }
 }

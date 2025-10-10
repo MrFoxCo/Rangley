@@ -23,7 +23,7 @@ CREATE OR REPLACE PROCEDURE rangley.rangley_s_insert_updated_meet
     , IN  p_name                  varchar(50)   DEFAULT NULL
     , IN  p_dttm_start_utc        timestamptz   DEFAULT NULL
     , IN  p_dttm_end_utc          timestamptz   DEFAULT NULL
-    , IN  p_description           varchar(50)   DEFAULT NULL
+    , IN  p_description           varchar(200)   DEFAULT NULL
     , IN  p_change_reason         varchar(50)   DEFAULT NULL
     , IN  p_meet_category_id      int2          DEFAULT NULL
     , IN  p_max_capacity          int4          DEFAULT NULL
@@ -44,7 +44,7 @@ DECLARE
     current_coordinate_id   int8;
     current_meet_status_id  int2;
     current_name            varchar(50);
-    current_description     varchar(50);
+    current_description     varchar(200);
     current_category_id     int2;
     current_max_capacity    int4;
     current_dttm_start_utc  timestamptz;
@@ -54,7 +54,7 @@ DECLARE
     final_coordinate_id     int8;
     final_meet_status_id    int2;
     final_name              varchar(50);
-    final_description       varchar(50);
+    final_description       varchar(200);
     final_change_reason     varchar(50);
     final_category_id       int2;
     final_max_capacity      int4;
@@ -181,11 +181,11 @@ BEGIN
           DETAIL=format('start=%s end=%s', final_dttm_start_utc, final_dttm_end_utc);
     END IF;
 
-    IF final_max_capacity IS NULL OR final_max_capacity < 2 THEN
-        RAISE EXCEPTION USING ERRCODE='22023',
-          MESSAGE='[ERRO] max_capacity must be >= 2',
-          DETAIL=format('max_capacity=%s', final_max_capacity);
-    END IF;
+	IF final_max_capacity IS NULL OR (final_max_capacity < 2 AND final_max_capacity <> -1) THEN
+	    RAISE EXCEPTION USING ERRCODE='22023',
+	      MESSAGE='[ERRO] max_capacity must be -1 or >= 2',
+	      DETAIL=format('max_capacity=%s', final_max_capacity);
+	END IF;
 
     -- Coordinate handling
     _provided := (CASE WHEN p_latitude         IS NULL THEN 0 ELSE 1 END)

@@ -96,8 +96,7 @@ BEGIN
        OR v_combined_text ~* '(fentanyl|carfentanil|synthetic\s+opioids|designer\s+drugs|bath\s+salts|spice|k2)'
        OR v_combined_text ~* '(drug\s+dealer|drug\s+supplier|connect|plug|dope\s+man|trap\s+house)'
        OR v_combined_text ~* '(buy\s+drugs|sell\s+drugs|drug\s+deal|drug\s+trade|drug\s+exchange|drug\s+transaction)'
-       OR v_combined_text ~* '(cocaine|heroin|meth|methamphetamine|crack|ecstasy|mdma|lsd|pcp|ketamine)'
-       OR v_combined_text ~* '(prescription\s+drugs|oxy|oxycontin|adderall|xanax|percocet|vicodin|morphine)'
+       OR v_combined_spaces ~* '\s(cocaine|heroin|meth|methamphetamine|crack|ecstasy|mdma|lsd|pcp|ketamine)\s'       OR v_combined_text ~* '(prescription\s+drugs|oxy|oxycontin|adderall|xanax|percocet|vicodin|morphine)'
        OR v_combined_text ~* '(pill\s+mill|prescription\s+fraud|fake\s+prescription|doctor\s+shopping)'
        OR v_combined_text ~* '(drug\s+party|rave\s+supplies|party\s+favors|molly|rolls|tabs|dime\s+bag)'
        OR v_combined_text ~* '(grow\s+operation|hydroponic|cultivation|harvest|trimming|dispensary)'
@@ -226,15 +225,15 @@ BEGIN
         RETURN json_build_object('valid', FALSE, 'reason', 'content_hate_crime', 'message', 'Content contains language that could incite hate crimes or discriminatory violence');
     END IF;
 
-	-- CATEGORY 10.5: HATE SPEECH AND RACIAL SLURS
-    IF v_combined_text ~* '\y(n[i1]gg[ae]r?s?|f[a4]gg[o0]ts?|sp[i1]ck?s?|ch[i1]nks?|k[i1]kes?|w[e3]tb[a4]ck|b[e3][a4]n[e3]r|c[o0]{2}n|h[o0]nky|cr[a4]ck[e3]r|wh[i1]t[e3]y|r[a4]g\s?h[e3][a4]d|s[a4]nd\s?n[i1]gg[e3]r|t[o0]w[e3]l\s?h[e3][a4]d)\y'
-    THEN
-        INSERT INTO rangley.tb_content_violations (violation_category_id, user_id, attempted_name, attempted_description)
-        VALUES (26, p_user_id, p_name, p_description);
-        
-        RAISE LOG 'CRITICAL: Hate speech content detected - combined_text: "%"', v_combined_text;
-        RETURN json_build_object('valid', FALSE, 'reason', 'content_hate_speech', 'message', 'Content contains hate speech or slurs that violate community guidelines');
-    END IF;
+	-- CATEGORY 10.5: HATE SPEECH AND RACIAL SLURS (FIXED VERSION)
+	IF v_combined_spaces ~* '\s(nigger|nigga|faggot|spic|chink|kike|wetback|beaner|coon|raghead|towelhead)\s'
+	THEN
+	    INSERT INTO rangley.tb_content_violations (violation_category_id, user_id, attempted_name, attempted_description)
+	    VALUES (26, p_user_id, p_name, p_description);
+	    
+	    RAISE LOG 'CRITICAL: Hate speech content detected - combined_text: "%"', v_combined_text;
+	    RETURN json_build_object('valid', FALSE, 'reason', 'content_hate_speech', 'message', 'Content contains hate speech or slurs that violate community guidelines');
+	END IF;
 
     -- CATEGORY 11: KIDNAPPING AND ABDUCTION
     IF v_combined_text ~ '(kidnap|abduct|snatch|grab|take|capture).*(child|kid|person|someone)'

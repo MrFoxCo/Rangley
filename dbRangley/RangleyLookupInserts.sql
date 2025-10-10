@@ -171,5 +171,9 @@ INSERT INTO rangley.td_stock_assets (asset_id, asset_name, asset_category, displ
 
 
 
+INSERT INTO rangley.te_version_statuses VALUES
+    (1, 'active'),
+    (2, 'pending'),
+    (3, 'deprecated');
 
 

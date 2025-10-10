@@ -90,6 +90,27 @@ BEGIN
         dttm_accepted_utc = CASE WHEN p_response_status_id = v_status_accepted THEN NOW() ELSE NULL END,
         dttm_modified_utc = NOW()
     WHERE mp.participant_id = v_participant_id;
+
+
+
+	-- Clean up invitation notification for BOTH accept and decline
+	IF p_response_status_id IN (v_status_accepted, v_status_declined) THEN
+	    WITH deleted_notifications AS (
+	        DELETE FROM rangley.tb_notifications n
+	        WHERE n.meet_id = v_meet_id
+	          AND n.notification_type_id = 8  -- Meet Invitation Received
+	          AND n.notification_id IN (
+	              SELECT ui.notification_id 
+	              FROM rangley.tb_user_inboxes ui 
+	              WHERE ui.user_id = v_user_id
+	          )
+	        RETURNING n.notification_id
+	    )
+	    DELETE FROM rangley.tb_user_inboxes ui
+	    USING deleted_notifications dn
+	    WHERE ui.notification_id = dn.notification_id;
+	END IF;
+
     
     -- Updated notification logic to handle all statuses
     v_notification_type_id := CASE

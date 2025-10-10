@@ -2,9 +2,12 @@
 
 DROP VIEW IF EXISTS rangley.vw_meet_category_id_and_name CASCADE;
 DROP VIEW IF EXISTS rangley.vw_version_features CASCADE;
+DROP VIEW IF EXISTS rangley.vw_versions CASCADE;
+DROP VIEW IF EXISTS rangley.vw_features CASCADE;
+DROP VIEW IF EXISTS rangley.vw_version_statuses CASCADE;
+
 DROP VIEW IF EXISTS rangley.vw_participant_status CASCADE;
 DROP VIEW IF EXISTS rangley.vw_meet_status CASCADE;
-DROP VIEW IF EXISTS rangley.vw_features CASCADE;
 DROP VIEW IF EXISTS rangley.vw_meet_category CASCADE;
 DROP VIEW IF EXISTS rangley.vw_sub_category CASCADE;
 
@@ -39,6 +42,28 @@ DROP VIEW IF EXISTS rangley.vw_meet_group_members CASCADE;
 DROP VIEW IF EXISTS rangley.vw_meet_group_invitations CASCADE;
 
 
+
+
+CREATE OR REPLACE VIEW rangley.vw_version_statuses AS
+SELECT
+     status_id , status
+FROM rangley.te_version_statuses;
+
+
+CREATE OR REPLACE VIEW rangley.vw_versions AS
+SELECT
+     version
+    ,status_id
+    ,dttm_created_utc
+    ,dttm_released_utc
+    ,dttm_deprecated_utc
+from rangley.td_versions;
+
+
+CREATE OR REPLACE VIEW rangley.vw_version_features AS
+SELECT
+     version, feature_id 
+from rangley.te_version_features;
 
 
 CREATE OR REPLACE VIEW rangley.vw_meets AS 

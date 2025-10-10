@@ -3,11 +3,29 @@ join rangley.vw_meet_ids mi on mi.meet_id = u.meet_id
 join rangley.vw_users us on us.user_id = mi.created_by_user_id ;
 
 
+select * from rangley.te_version_features;
+
+
+INSERT INTO rangley.td_features (feature_id, name) VALUES (13, 'meet groups');
+INSERT INTO rangley.te_version_features (version, feature_id) VALUES (20000, 13);
+
+INSERT INTO rangley.td_versions (version, status_id) VALUES (20001, 2);
+
+
+select * from rangley.te_version_statuses;
+
+select * from rangley.td_features;
+select * from rangley.td_versions;
+
+UPDATE rangley.td_versions 
+SET dttm_created_utc = '2025-09-01'::TIMESTAMPTZ 
+WHERE version = 10000;
 
 
 select * from rangley.vw_meet_ids;
 
 select * from rangley.vw_users;
+
 
 select * from rangley.vw_meets;
 
@@ -24,6 +42,8 @@ select * from rangley.vw_meet_status;
 select * from rangley.vw_stock_assets;
 
 select * from rangley.td_violation_categories;
+
+select * from rangley.tb_content_violations;
 
 
 select * from rangley.vw_user_inboxes where user_id  in (2,4);
@@ -52,6 +72,16 @@ delete FROM rangley.vw_notifications where notification_id between 336 and 365;
 
 
 
+SELECT 
+    v.version,
+    v.status_id,
+    vs.status,
+    v.dttm_released_utc,
+    v.dttm_deprecated_utc
+FROM rangley.td_versions v
+JOIN rangley.te_version_statuses vs ON v.status_id = vs.status_id
+ORDER BY v.version DESC;
+
 
 UPDATE rangley.tb_users
 SET dob = DATE '1969-12-31',
@@ -60,29 +90,12 @@ WHERE user_id = 25;
 
 
 
-select user_id, display_name, dob from rangley.vw_users order by dttm_created_utc desc;
+select 
+	user_id, display_name, dob 
+from rangley.vw_users
+where user_id > 15
+order by dttm_created_utc desc;
 
-
-
-DELETE FROM rangley.tb_user_inboxes ui
-WHERE ui.notification_id IN (
-    SELECT n.notification_id
-    FROM rangley.tb_notifications n
-    JOIN rangley.tb_meet_participants mp 
-        ON mp.meet_id = n.meet_id 
-        AND mp.user_id = ui.user_id
-    WHERE n.notification_type_id = 8  -- Meet Invitation Received
-      AND mp.participant_status_id IN (5, 6, 8, 9)  -- Declined, Accepted, Left, Removed
-);
-
-
--- Delete all friend requests (both directions) for users you're currently friends with
-DELETE FROM rangley.tb_friend_requests fr
-WHERE EXISTS (
-    SELECT 1 FROM rangley.tb_friendships f
-    WHERE (f.user_id_a = fr.requester_user_id AND f.user_id_b = fr.recipient_user_id)
-       OR (f.user_id_a = fr.recipient_user_id AND f.user_id_b = fr.requester_user_id)
-);
-
+select user_id, username, display_name, dob, cellphone,dttm_created_utc from rangley.vw_users order by dttm_created_utc desc;
 
 

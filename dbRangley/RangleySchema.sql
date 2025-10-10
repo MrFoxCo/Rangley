@@ -1,7 +1,10 @@
 DROP TABLE IF EXISTS rangley.te_version_features;
+DROP TABLE IF EXISTS rangley.td_versions;
+DROP TABLE IF EXISTS rangley.te_version_statuses;
+DROP TABLE IF exists rangley.td_versions;
+DROP TABLE IF EXISTS rangley.td_features;
 
 DROP TABLE IF EXISTS rangley.td_meet_status;
-DROP TABLE IF EXISTS rangley.td_features;
 DROP TABLE IF EXISTS rangley.td_meet_category;
 DROP TABLE IF EXISTS rangley.td_sub_category;
 DROP TABLE IF EXISTS rangley.td_stock_assets;
@@ -75,6 +78,32 @@ CREATE INDEX idx_violations_category_time
 -- "1.2.3" becomes 10203 (major*10000 + minor*100 + patch)
 -- "2.0.1" becomes 20001
 
+CREATE TABLE rangley.te_version_statuses
+(
+    status_id INT2 PRIMARY KEY,
+    status VARCHAR(20) NOT NULL,
+    UNIQUE (status_id, status)
+);
+
+
+CREATE TABLE rangley.td_versions
+(
+    version 			INT4 PRIMARY KEY,
+    status_id 			INT2 NOT NULL DEFAULT 1,
+    dttm_created_utc    TIMESTAMPTZ not null default N)
+    dttm_released_utc 	TIMESTAMPTZ not null DEFAULT NOW(),
+    dttm_deprecated_utc TIMESTAMPTZ
+);
+
+
+ALTER TABLE rangley.td_versions
+RENAME COLUMN dttm_deprecated_utc TO dttm_released_utc;
+
+
+
+ALTER TABLE rangley.td_versions
+ADD COLUMN dttm_deprecated_utc TIMESTAMPTZ;
+
 CREATE TABLE rangley.te_version_features
 (
      version     INT4 NOT NULL
@@ -89,6 +118,20 @@ CREATE TABLE rangley.td_features
      feature_id  INT4		  PRIMARY KEY
     ,name        VARCHAR(100) NOT NULL DEFAULT ''
 );
+
+
+-- Add a versions master table
+CREATE TABLE rangley.td_versions
+(
+    version  		INT4 NOT NULLL,  -- "1.0.0", "2.0.0"
+    status 			VARCHAR(20) NOT NULL DEFAULT 'active',  -- 'active', 'pending', 'deprecated'
+    released_at 	TIMESTAMPTZ,
+    deprecated_at 	TIMESTAMPTZ,
+    
+
+);
+
+
 
 
 update rangley.te_version_features

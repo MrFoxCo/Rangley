@@ -80,15 +80,24 @@ BEGIN
         dttm_modified_utc = NOW()
     WHERE mp.participant_id = v_participant_id;
     
-    -- Delete any pending invitations from inbox
-    DELETE FROM rangley.tb_user_inboxes ui
-    WHERE ui.user_id = v_user_id
-      AND ui.notification_id IN (
-          SELECT n.notification_id 
-          FROM rangley.tb_notifications n
-          WHERE n.meet_id = v_meet_id
-            AND n.notification_type_id = 8  -- Meet Invitation Received
-      );
+
+	-- Delete notifications and inbox entries for this user's meet invitations
+	WITH deleted_notifications AS (
+	    DELETE FROM rangley.tb_notifications n
+	    WHERE n.meet_id = v_meet_id
+	      AND n.notification_type_id = 8
+	      AND n.notification_id IN (
+	          SELECT ui.notification_id 
+	          FROM rangley.tb_user_inboxes ui 
+	          WHERE ui.user_id = v_user_id
+	      )
+	    RETURNING n.notification_id
+	)
+	DELETE FROM rangley.tb_user_inboxes ui
+	USING deleted_notifications dn
+	WHERE ui.notification_id = dn.notification_id;
+
+
     
     -- Get meet creator to notify them
     SELECT mi.created_by_user_id
