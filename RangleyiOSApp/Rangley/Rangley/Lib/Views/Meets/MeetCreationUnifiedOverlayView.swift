@@ -24,6 +24,7 @@ struct MeetCreationUnifiedOverlay: View
     @State private var isExploding = false
     @State private var showConfetti = false
     @State private var showCreateForm = false
+    @State private var showAiChat = false  // NEW
     @State private var isSoftDismissing = false
     
     // MARK: Body
@@ -36,7 +37,7 @@ struct MeetCreationUnifiedOverlay: View
                     .ignoresSafeArea()
                     .onTapGesture {
                         // Allow backdrop dismiss only when showing confirmation
-                        if !showCreateForm {
+                        if !showCreateForm && !showAiChat {
                             dismiss()
                         }
                     }
@@ -44,12 +45,17 @@ struct MeetCreationUnifiedOverlay: View
                 // Content
                 ZStack {
                     // Initial confirmation popup (for both flows)
-                    if !showCreateForm {
+                    if !showCreateForm && !showAiChat {
                         CreateMeetConfirmationPopup(
                             entryMode: mode,
                             onConfirm: {
                                 withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                                     showCreateForm = true
+                                }
+                            },
+                            onConfirmWithAI: {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                    showAiChat = true
                                 }
                             },
                             onCancel: dismiss
@@ -60,7 +66,29 @@ struct MeetCreationUnifiedOverlay: View
                         ))
                     }
                     
-                    // Main form (after confirmation)
+                    // AI Chat interface
+                    if showAiChat {
+                        AiChatInterfaceView(
+                            entryMode: mode,
+                            baseURL: baseURL,
+                            token: token,
+                            onClose: { softDismiss() },
+                            onCreateMeet: { body in
+                                try await handleCreateMeet(body: body, invites: [])
+                            }
+                        )
+                        .allowsHitTesting(!isExploding)
+                        .scaleEffect(isExploding ? 0.6 : (isSoftDismissing ? 0.95 : 1.0))
+                        .opacity(isExploding ? 0.0 : (isSoftDismissing ? 0.0 : 1.0))
+                        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: isExploding)
+                        .animation(.easeOut(duration: 0.25), value: isSoftDismissing)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .trailing).combined(with: .opacity),
+                            removal: .move(edge: .leading).combined(with: .opacity)
+                        ))
+                    }
+                    
+                    // Manual form (after confirmation)
                     if showCreateForm {
                         MeetCreationUnifiedFormView(
                             entryMode: mode,
@@ -100,6 +128,7 @@ struct MeetCreationUnifiedOverlay: View
         }
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showOverlay)
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showCreateForm)
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showAiChat)
     }
     
     // MARK: Handlers
@@ -195,6 +224,7 @@ struct MeetCreationUnifiedOverlay: View
             showOverlay = false
             entryMode = nil
             showCreateForm = false
+            showAiChat = false
         }
     }
     
@@ -206,6 +236,7 @@ struct MeetCreationUnifiedOverlay: View
             showOverlay = false
             entryMode = nil
             showCreateForm = false
+            showAiChat = false
             isSoftDismissing = false
         }
     }
@@ -223,6 +254,7 @@ struct MeetCreationUnifiedOverlay: View
                 showOverlay = false
                 entryMode = nil
                 showCreateForm = false
+                showAiChat = false
                 isExploding = false
             }
         }
@@ -236,6 +268,7 @@ struct CreateMeetConfirmationPopup: View
 {
     let entryMode: MeetCreationEntryMode
     let onConfirm: () -> Void
+    let onConfirmWithAI: () -> Void  // NEW
     let onCancel: () -> Void
     
     @State private var isAnimating = false
@@ -283,11 +316,38 @@ struct CreateMeetConfirmationPopup: View
                 .minimumScaleFactor(0.9)
 
             // Buttons
-            HStack(spacing: 12) {
-                Button(action: onCancel) {
-                    Text("Cancel")
+            VStack(spacing: 10) {
+                // AI Assistant Button
+                Button(action: onConfirmWithAI) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 14, weight: .semibold))
+                        Text("Use AI Assistant")
+                            .font(.system(size: 15, weight: .bold))
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        AppPalette.Brand.neonPink,
+                                        AppPalette.Brand.neonPink.opacity(0.8)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                    )
+                }
+                
+                // Manual Entry Button
+                Button(action: onConfirm) {
+                    Text("Manual Entry")
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(AppPalette.Text.secondary)
+                        .foregroundColor(AppPalette.Text.primary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
                         .background(
@@ -296,18 +356,14 @@ struct CreateMeetConfirmationPopup: View
                                 .stroke(Color.white.opacity(0.2), lineWidth: 1)
                         )
                 }
-
-                Button(action: onConfirm) {
-                    Text("Yes, Create")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(AppPalette.Brand.neonPink)
-                        )
+                
+                // Cancel Button
+                Button(action: onCancel) {
+                    Text("Cancel")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(AppPalette.Text.secondary)
                 }
+                .padding(.top, 4)
             }
         }
         .padding(20)

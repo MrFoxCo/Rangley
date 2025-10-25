@@ -1539,12 +1539,21 @@ struct AuthAPI
         }
     }
     
-    static func postChatBot(baseURL: URL,token: String,
+    static func postChatBot(baseURL: URL, token: String,
         message: String,
         history: [ClaudeModel.ChatMessage]?
     ) async throws -> String
     {
-        var req = URLRequest(url: makeURL(baseURL, ["s", "chatbot", "chat"]))
+        let url = makeURL(baseURL, ["s", "chatbot", "chat"])
+        
+        #if DEBUG
+        print("=== ChatBot Request ===")
+        print("URL: \(url.absoluteString)")
+        print("Message: \(message)")
+        print("History count: \(history?.count ?? 0)")
+        #endif
+        
+        var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -1554,6 +1563,12 @@ struct AuthAPI
         let chatRequest = ClaudeModel.ChatbotRequest(message: message, history: history)
         let encoder = JSONEncoder()
         req.httpBody = try encoder.encode(chatRequest)
+        
+        #if DEBUG
+        if let bodyString = String(data: req.httpBody ?? Data(), encoding: .utf8) {
+            print("Request body: \(bodyString)")
+        }
+        #endif
 
         let (data, resp) = try await URLSession.shared.data(for: req)
         guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }

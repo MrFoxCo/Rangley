@@ -1168,12 +1168,16 @@ public func routes(_ app: Application) throws
             cleared_count: result.cleared_count
         )
     }
-    
+    //comment
     
     // MARK: - Chatbot
     s.post("chatbot", "chat")
     {
         req async throws -> Claude.ChatbotResponse in
+        
+        let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
+        
         let input = try req.content.decode(Claude.ChatbotRequest.self)
         
         let response = try await req.claudeService.generateChatResponse(
