@@ -6,14 +6,7 @@
 //
 
 // =========================================================
-// =========================================================
-// =========================================================
-// MARK: - IGNORE THE BELOW TODOs FOR NOW
-// TODO: - Need to setup a refresh so that you don't have to tap on MyMeets button just to see updated shit
-// TODO: - My meets button is still kinda not working 
-// MARK: - IGNORE THE ABOVE TODOs FOR NOW
-// =========================================================
-// =========================================================
+// TODO: - Fix Leave/Delete group on hold it's not working
 // =========================================================
 
 import SwiftUI

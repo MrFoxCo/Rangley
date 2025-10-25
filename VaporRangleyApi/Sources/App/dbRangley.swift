@@ -1947,3 +1947,22 @@ enum Func
     // MARK: - END Transaction Level Meet View
     // =========================================================
 }
+
+
+enum Claude
+{
+    // MARK: - Chatbot Models
+    struct ChatMessage: Content {
+        let role: String  // "user" or "assistant"
+        let content: String
+    }
+    
+    struct ChatbotRequest: Content {
+        let message: String
+        let history: [ChatMessage]?
+    }
+
+    struct ChatbotResponse: Content {
+        let message: String
+    }
+}

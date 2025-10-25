@@ -1169,6 +1169,22 @@ public func routes(_ app: Application) throws
         )
     }
     
+    
+    // MARK: - Chatbot
+    s.post("chatbot", "chat")
+    {
+        req async throws -> Claude.ChatbotResponse in
+        let input = try req.content.decode(Claude.ChatbotRequest.self)
+        
+        let response = try await req.claudeService.generateChatResponse(
+            userMessage: input.message,
+            conversationHistory: input.history
+        )
+        
+        return Claude.ChatbotResponse(message: response)
+    }
+    
+    
     s.delete("inbox", "notification")
     {
         req async throws -> HTTPDTO.Inbox.DeleteNotificationResponse in

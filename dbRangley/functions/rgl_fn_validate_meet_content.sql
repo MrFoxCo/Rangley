@@ -206,17 +206,17 @@ BEGIN
         RETURN json_build_object('valid', FALSE, 'reason', 'content_cybercrime', 'message', 'Content contains language related to cybercrime or hacking activities');
     END IF;
     
-    -- CATEGORY 10: HATE CRIMES AND DISCRIMINATORY VIOLENCE
-    IF v_combined_text ~* '(burn\s+cross|lynch|hang|string\s+up|tar\s+and\s+feather)'
-       OR v_combined_text ~* '(synagogue|mosque|church|temple).*(bomb|attack|burn|destroy)'
-       OR v_combined_text ~* '(race\s+war|ethnic\s+cleansing|genocide|final\s+solution)'
-       OR v_combined_text ~* '(gay\s+bash|fag\s+drag|beat\s+up\s+queers|kill\s+the\s+gays)'
-       OR v_combined_text ~* '(immigrant\s+hunt|deport\s+them\s+all|build\s+the\s+wall|send\s+them\s+back)'
-       OR v_combined_text ~* '(white\s+power|white\s+supremacy|master\s+race|racial\s+purity)'
-       OR v_combined_text ~* '(hitler\s+was\s+right|heil\s+hitler|sieg\s+heil|14\s+words)'
-       OR v_combined_text ~* '(kkk|ku\s+klux|white\s+hood|cross\s+burning)'
-       OR v_combined_text ~* '(neo\s+nazi|skinhead|blood\s+and\s+honor|white\s+nationalist)'
-       OR v_combined_text ~* '(jews\s+will\s+not\s+replace|great\s+replacement|white\s+genocide)'
+	-- CATEGORY 10: HATE CRIMES AND DISCRIMINATORY VIOLENCE
+	IF v_combined_spaces ~* '\s(burn\s+cross|lynch|hang|string\s+up|tar\s+and\s+feather)\s'
+	   OR v_combined_spaces ~* '\s(synagogue|mosque|church|temple)\s.*(bomb|attack|burn|destroy)'
+	   OR v_combined_spaces ~* '\s(race\s+war|ethnic\s+cleansing|genocide|final\s+solution)\s'
+	   OR v_combined_spaces ~* '\s(gay\s+bash|fag\s+drag|beat\s+up\s+queers|kill\s+the\s+gays)\s'
+	   OR v_combined_spaces ~* '\s(immigrant\s+hunt|deport\s+them\s+all|build\s+the\s+wall|send\s+them\s+back)\s'
+	   OR v_combined_spaces ~* '\s(white\s+power|white\s+supremacy|master\s+race|racial\s+purity)\s'
+	   OR v_combined_spaces ~* '\s(hitler\s+was\s+right|heil\s+hitler|sieg\s+heil|14\s+words)\s'
+	   OR v_combined_spaces ~* '\s(kkk|ku\s+klux|white\s+hood|cross\s+burning)\s'
+	   OR v_combined_spaces ~* '\s(neo\s+nazi|skinhead|blood\s+and\s+honor|white\s+nationalist)\s'
+	   OR v_combined_spaces ~* '\s(jews\s+will\s+not\s+replace|great\s+replacement|white\s+genocide)\s'
     THEN
         INSERT INTO rangley.tb_content_violations (violation_category_id, user_id, attempted_name, attempted_description)
         VALUES (20, p_user_id, p_name, p_description);
@@ -257,14 +257,13 @@ BEGIN
     END IF;
     
     -- CATEGORY 12: ANIMAL CRUELTY AND ILLEGAL ANIMAL ACTIVITIES
-    IF v_combined_text ~ '(dog\s+fighting|cock\s+fighting|animal\s+fighting|blood\s+sport)'
-       OR v_combined_text ~ '(animal\s+cruelty|torture\s+animals|kill\s+animals|abuse\s+animals)'
-       OR v_combined_text ~ '(puppy\s+mill|kitten\s+mill|breeding\s+operation|backyard\s+breeder)'
-       OR v_combined_text ~ '(exotic\s+animals|illegal\s+pets|smuggling\s+animals|endangered\s+species)'
-       OR v_combined_text ~ '(poaching|illegal\s+hunting|trophy\s+hunting|ivory|rhino\s+horn)'
-       OR v_combined_text ~ '(bestiality|zoophilia|animal\s+sex|sexual\s+abuse\s+of\s+animals)'
-       OR v_combined_text ~ '(crush\s+videos|snuff\s+films|animal\s+torture\s+videos)'
-    THEN
+		IF v_combined_spaces ~* '\s(dog\s+fighting|cock\s+fighting|animal\s+fighting|blood\s+sport)\s'
+		   OR v_combined_spaces ~* '\s(animal\s+cruelty|torture\s+animals|kill\s+animals|abuse\s+animals)\s'
+		   OR v_combined_spaces ~* '\s(puppy\s+mill|kitten\s+mill|breeding\s+operation|backyard\s+breeder)\s'
+		   OR v_combined_spaces ~* '\s(exotic\s+animals|illegal\s+pets|smuggling\s+animals|endangered\s+species)\s'
+		   OR v_combined_spaces ~* '\s(poaching|illegal\s+hunting|trophy\s+hunting|ivory|rhino\s+horn)\s'
+		   OR v_combined_spaces ~* '\s(bestiality|zoophilia|animal\s+sex|sexual\s+abuse\s+of\s+animals)\s'
+		   OR v_combined_spaces ~* '\s(crush\s+videos|snuff\s+films|animal\s+torture\s+videos)\s'    THEN
         INSERT INTO rangley.tb_content_violations (violation_category_id, user_id, attempted_name, attempted_description)
         VALUES (22, p_user_id, p_name, p_description);
         

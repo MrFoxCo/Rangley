@@ -61,27 +61,14 @@ select * FROM rangley.vw_meet_group_members;
 
 select * FROM rangley.vw_meet_groups;
 
+SELECT COUNT(DISTINCT m.meet_id)
+FROM rangley.vw_meets m
+JOIN rangley.vw_meet_ids vm ON vm.meet_id = m.meet_id
+JOIN rangley.vw_users us     ON us.user_id = vm.created_by_user_id
+WHERE us.user_id = 2;
 
 
-delete FROM rangley.vw_meet_group_members;
-delete FROM rangley.vw_meet_groups;
-
-
-delete FROM rangley.vw_user_inboxes where notification_id between 336 and 365;
-delete FROM rangley.vw_notifications where notification_id between 336 and 365;
-
-
-
-SELECT 
-    v.version,
-    v.status_id,
-    vs.status,
-    v.dttm_released_utc,
-    v.dttm_deprecated_utc
-FROM rangley.td_versions v
-JOIN rangley.te_version_statuses vs ON v.status_id = vs.status_id
-ORDER BY v.version DESC;
-
+select * from rangley.vw_meet_ids;
 
 UPDATE rangley.tb_users
 SET dob = DATE '1969-12-31',
@@ -91,11 +78,17 @@ WHERE user_id = 25;
 
 
 select 
-	user_id, display_name, dob 
+	 user_id
+	,display_name
+	,username
+	,dttm_created_utc AT TIME ZONE 'America/Chicago'
+	,dob, cellphone 
 from rangley.vw_users
-where user_id > 15
+where user_id > 15 
 order by dttm_created_utc desc;
 
-select user_id, username, display_name, dob, cellphone,dttm_created_utc from rangley.vw_users order by dttm_created_utc desc;
 
+
+select * from rangley.tb_content_violations;
+select * from rangley.td_violation_categories;
 

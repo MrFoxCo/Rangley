@@ -249,7 +249,8 @@ public struct SearchView: View
         ScrollView(.vertical, showsIndicators: false) {
             LazyVStack(spacing: 16) {
                 // Meets Section
-                if !searchResults.meets.isEmpty && (selectedScope == .all || selectedScope == .meets) {
+                if !searchResults.meets.isEmpty && (selectedScope == .all || selectedScope == .meets)
+                {
                     searchSection(
                         title: "Meets",
                         icon: "calendar",
@@ -264,7 +265,8 @@ public struct SearchView: View
                 }
                 
                 // Users Section
-                if !searchResults.users.isEmpty && (selectedScope == .all || selectedScope == .users) {
+                if !searchResults.users.isEmpty && (selectedScope == .all || selectedScope == .users)
+                {
                     searchSection(
                         title: "Users",
                         icon: "person",

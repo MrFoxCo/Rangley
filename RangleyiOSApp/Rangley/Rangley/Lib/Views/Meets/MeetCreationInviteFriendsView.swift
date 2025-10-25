@@ -112,7 +112,7 @@ struct InviteFriendsEmbedded: View
                 .padding(.vertical, 12)
                 .background(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(AppPalette.Brand.japPurple)
+                        .fill(AppPalette.Brand.formBlack)
                         .overlay(
                             RoundedRectangle(cornerRadius: 12, style: .continuous)
                                 .stroke(AppPalette.Surface.fieldStroke, lineWidth: 3)
@@ -320,7 +320,7 @@ struct UserSearchView: View
                     selectedUsersBottomSection
                 }
             }
-            .background(AppPalette.Brand.japDarkerPurple)
+            .background(AppPalette.Brand.formBlack)
             .navigationBarHidden(true)
         }
         .alert("Search Error", isPresented: $showError) {
@@ -372,7 +372,7 @@ struct UserSearchView: View
             .padding(.vertical, 12)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(AppPalette.Brand.japDarkerPurple))
+                    .fill(Color(AppPalette.Brand.formBlack))
                     .overlay(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
                             .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 3)
@@ -495,7 +495,7 @@ struct UserSearchView: View
                 }
             }
             .padding(16)
-            .background(Color(AppPalette.Brand.japPurple).opacity(0.95))
+            .background(Color(AppPalette.Brand.formBlack).opacity(0.95))
 
             Button(action: onDismiss) {
                 Text("Continue")

@@ -74,6 +74,13 @@ public func configure(_ app: Application) throws
     // MARK: - END SMS
     
     
+    // MARK: - CLAUDE CONFIGURATION
+
+    app.claudeConfig = try ClaudeConfig.fromEnvironment()
+
+    // MARK: - END CLAUDE
+    
+    
     
     // MARK: - COGNITO
     // Env
