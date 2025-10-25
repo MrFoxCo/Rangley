@@ -1539,6 +1539,46 @@ struct AuthAPI
         }
     }
     
+    static func postChatBot(baseURL: URL,token: String,
+        message: String,
+        history: [ClaudeModel.ChatMessage]?
+    ) async throws -> String
+    {
+        var req = URLRequest(url: makeURL(baseURL, ["s", "chatbot", "chat"]))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        
+        // Encode the request body
+        let chatRequest = ClaudeModel.ChatbotRequest(message: message, history: history)
+        let encoder = JSONEncoder()
+        req.httpBody = try encoder.encode(chatRequest)
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
+        guard (200..<300).contains(http.statusCode) else {
+           #if DEBUG
+           print("=== Send Message to Chatbot ===")
+           print("Status Code: \(http.statusCode)")
+           print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+           #endif
+           throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        }
+
+        do {
+            let decoder = JSONDecoder()
+            let response = try decoder.decode(ClaudeModel.ChatbotResponse.self, from: data)
+            return response.message
+        } catch {
+           #if DEBUG
+           print("=== Decode Error in postChatBot ===")
+           print("Error: \(error)")
+           print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+           #endif
+           throw AuthAPIError.decode(error.localizedDescription)
+        }
+    }
 
     // View meet group members
     static func viewMeetGroupMembers(baseURL: URL, token: String, meetGroupId: Int64)
