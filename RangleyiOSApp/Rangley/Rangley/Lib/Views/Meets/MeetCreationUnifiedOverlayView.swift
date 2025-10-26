@@ -74,11 +74,53 @@ struct MeetCreationUnifiedOverlay: View
                             token: token,
                             onClose: { softDismiss() },
                             onCreateMeet: { body in
-                                try await handleCreateMeet(body: body, invites: [])
+                                // Convert body back to the parent's expected format
+                                let location = LocationInfo(
+                                    Coordinate: .init(body.latitude, body.longitude),
+                                    RegionCoordinate: .init(body.region_latitude, body.region_longitude),
+                                    RegionRadius: body.region_radius,
+                                    Name: body.name,
+                                    ThoroughFare: nil, SubThoroughFare: nil, Locality: nil, SubLocality: nil,
+                                    AdministrativeArea: nil, SubAdministrativeArea: nil, PostalCode: nil,
+                                    Country: nil, IsoCountryCode: nil, TimeZone: nil, InlandWater: nil, Ocean: nil
+                                )
+                                
+                                try await onCreateMeet(
+                                    location,
+                                    body.name,
+                                    body.dttm_start_utc,
+                                    body.dttm_end_utc,
+                                    [],
+                                    body.description,
+                                    body.meet_category_id,
+                                    body.max_capacity
+                                )
                             },
                             onCreateWithInvites: { body in
-                                // Extract invitee UUIDs from the body
-                                try await handleCreateMeetWithInvites(body: body)
+                                let location = LocationInfo(
+                                    Coordinate: .init(body.latitude, body.longitude),
+                                    RegionCoordinate: .init(body.region_latitude, body.region_longitude),
+                                    RegionRadius: body.region_radius,
+                                    Name: body.name,
+                                    ThoroughFare: nil, SubThoroughFare: nil, Locality: nil, SubLocality: nil,
+                                    AdministrativeArea: nil, SubAdministrativeArea: nil, PostalCode: nil,
+                                    Country: nil, IsoCountryCode: nil, TimeZone: nil, InlandWater: nil, Ocean: nil
+                                )
+                                
+                                let invitedUsers = body.initial_invitee_uuids.map { uuid in
+                                    ViewUsersModel(user_uuid: uuid, username: "", display_name: "", matched_by: [], can_invite: false)
+                                }
+                                
+                                try await onCreateMeet(
+                                    location,
+                                    body.name,
+                                    body.dttm_start_utc,
+                                    body.dttm_end_utc,
+                                    invitedUsers,
+                                    body.description,
+                                    body.meet_category_id,
+                                    body.max_capacity
+                                )
                             }
                         )
                         .allowsHitTesting(!isExploding)

@@ -23,6 +23,8 @@ struct AiChatInterfaceView: View
     @State private var showConfirmation: Bool = false
     @State private var proposedMeet: ProposedMeet?
     @State private var resolvedInvitees: [ViewUsersModel] = []
+    @State private var showLocationPicker: Bool = false
+    @State private var selectedLocation: LocationInfo?
     @FocusState private var isTextFieldFocused: Bool
     
     // Struct to hold the AI's proposed meet data
@@ -36,6 +38,12 @@ struct AiChatInterfaceView: View
         let invitees: [String]?  // Raw usernames (without @)
         let assumptions: [String]?  // AI's assumptions about the meet
         let confidence: Double?  // AI's confidence level (0.0-1.0)
+        
+        // Location fields - AI can provide these when location isn't from map tap
+        let location_name: String?  // Human-readable location name
+        let latitude: Double?
+        let longitude: Double?
+        let region_radius: Double?
     }
     
     var body: some View
@@ -375,33 +383,94 @@ struct AiChatInterfaceView: View
     }
     
     private func extractTextBeforeJSON(from response: String) -> String {
-        // Extract any text that appears before the JSON block
-        if let jsonStart = response.range(of: "```json") ?? response.range(of: "{") {
-            let textBefore = String(response[..<jsonStart.lowerBound])
-            return textBefore.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Look for all possible JSON start patterns
+        var earliestJsonStart: String.Index? = nil
+        
+        let jsonPatterns = [
+            "```json",           // Markdown code block
+            "```",               // Generic code block
+            "{\"ready\"",        // Direct JSON object start
+            "{ \"ready\"",       // JSON with space
+            "{",                 // Any object start (last resort)
+        ]
+        
+        for pattern in jsonPatterns {
+            if let range = response.range(of: pattern) {
+                if earliestJsonStart == nil || range.lowerBound < earliestJsonStart! {
+                    earliestJsonStart = range.lowerBound
+                }
+            }
         }
+        
+        // Extract text BEFORE the JSON
+        if let jsonStart = earliestJsonStart {
+            let textBefore = String(response[..<jsonStart])
+            let cleaned = textBefore.trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            // If there's meaningful text before JSON, return it
+            if !cleaned.isEmpty && cleaned.count > 5 {
+                return cleaned
+            }
+        }
+        
+        // If we get here, either:
+        // 1. No JSON was found (unlikely)
+        // 2. There was no meaningful text before the JSON
+        // Return a default message
         return ""
     }
     
-    private func tryParseProposedMeet(from response: String) -> ProposedMeet? {
-        // Try to extract JSON from response (in case Claude wraps it)
-        let cleaned = response
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: "```json", with: "")
-            .replacingOccurrences(of: "```", with: "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+    private func tryParseProposedMeet(from response: String) -> ProposedMeet?
+    {
+        // Find the JSON object in the response
+        var jsonString = ""
         
+        // Try to find JSON in markdown code block first
+        if let codeBlockStart = response.range(of: "```json"),
+           let codeBlockEnd = response.range(of: "```", range: codeBlockStart.upperBound..<response.endIndex) {
+            jsonString = String(response[codeBlockStart.upperBound..<codeBlockEnd.lowerBound])
+        }
+        // Try to find raw JSON object
+        else if let jsonStart = response.range(of: "{\"ready\"") ?? response.range(of: "{ \"ready\"") {
+            // Find the matching closing brace
+            var braceCount = 0
+            var foundStart = false
+            var endIndex = response.endIndex
+            
+            for i in response[jsonStart.lowerBound...].indices {
+                let char = response[i]
+                if char == "{" {
+                    braceCount += 1
+                    foundStart = true
+                } else if char == "}" {
+                    braceCount -= 1
+                    if foundStart && braceCount == 0 {
+                        endIndex = response.index(after: i)
+                        break
+                    }
+                }
+            }
+            
+            jsonString = String(response[jsonStart.lowerBound..<endIndex])
+        }
+        
+        guard !jsonString.isEmpty else { return nil }
+        
+        // Clean up the JSON string
+        let cleaned = jsonString.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let data = cleaned.data(using: .utf8) else { return nil }
         
         do {
             let proposed = try JSONDecoder().decode(ProposedMeet.self, from: data)
             return proposed
         } catch {
+            print("Failed to decode ProposedMeet: \(error)")
             return nil
         }
     }
     
-    private func resolveInvitees(from usernames: [String]?) async {
+    private func resolveInvitees(from usernames: [String]?) async
+    {
         guard let usernames = usernames, !usernames.isEmpty else {
             await MainActor.run { resolvedInvitees = [] }
             return
@@ -439,51 +508,70 @@ struct AiChatInterfaceView: View
         }
     }
     
-    private func handleApproval(_ proposed: ProposedMeet) async throws {
-        // Get location from entryMode
-        guard let location = getLocationFromEntryMode() else {
-            errorMessage = "Could not determine location"
-            return
+    private func handleApproval(_ proposed: ProposedMeet) async throws
+    {
+        errorMessage = nil
+        
+        // PRIORITY 1: Use location from map tap (entryMode)
+        let finalLat: Double
+        let finalLon: Double
+        let finalRegLat: Double
+        let finalRegLon: Double
+        let finalRegRadius: Double
+        
+        if let mapLocation = locationFromEntryMode {
+            // User tapped on map - use that location
+            finalLat = mapLocation.latitude
+            finalLon = mapLocation.longitude
+            finalRegLat = mapLocation.regionLat
+            finalRegLon = mapLocation.regionLon
+            finalRegRadius = mapLocation.regionRadius
+        } else if let aiLat = proposed.latitude,
+                  let aiLon = proposed.longitude,
+                  let aiRadius = proposed.region_radius {
+            // AI provided coordinates - use those
+            finalLat = aiLat
+            finalLon = aiLon
+            finalRegLat = aiLat
+            finalRegLon = aiLon
+            finalRegRadius = aiRadius
+        } else {
+            // No location available - should not happen, but handle it
+            errorMessage = "Location is required to create a meet"
+            throw NSError(domain: "AiChat", code: 1, userInfo: [NSLocalizedDescriptionKey: "Missing location data"])
         }
         
-        // Parse dates
-        let iso8601Formatter = ISO8601DateFormatter()
-        iso8601Formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        
-        guard let startDate = iso8601Formatter.date(from: proposed.dttm_start_utc),
-              let endDate = iso8601Formatter.date(from: proposed.dttm_end_utc) else {
-            errorMessage = "Invalid date format"
-            return
-        }
+        // Convert ISO strings to Date objects
+        let startDate = dateFromISO(proposed.dttm_start_utc)
+        let endDate = dateFromISO(proposed.dttm_end_utc)
         
         // Check if we have invitees
-        if !resolvedInvitees.isEmpty {
-            // Create meet with invites
+        if let invitees = proposed.invitees, !invitees.isEmpty, !resolvedInvitees.isEmpty {
+            // Create with invites using MeetWithInvitesInsertBody
             let body = MeetWithInvitesInsertBody(
-               initial_invitee_uuids: resolvedInvitees.map { $0.user_uuid },  // Extract UUIDs
-               latitude: location.Coordinate.latitude,
-               longitude: location.Coordinate.longitude,
-               region_latitude: location.RegionCoordinate.latitude,
-               region_longitude: location.RegionCoordinate.longitude,
-               region_radius: location.RegionRadius,
-               name: proposed.name,
-               dttm_start_utc: startDate,
-               dttm_end_utc: endDate,
-               description: proposed.description,
-               meet_category_id: proposed.meet_category_id,
-               max_capacity: nil,
-               invitation_message: nil
-           )
-           
-           try await onCreateWithInvites(body)  // Single parameter
+                initial_invitee_uuids: resolvedInvitees.map { $0.user_uuid },
+                latitude: finalLat,
+                longitude: finalLon,
+                region_latitude: finalRegLat,
+                region_longitude: finalRegLon,
+                region_radius: finalRegRadius,
+                name: proposed.name,
+                dttm_start_utc: startDate,
+                dttm_end_utc: endDate,
+                description: proposed.description,
+                meet_category_id: proposed.meet_category_id,
+                max_capacity: nil,
+                invitation_message: nil
+            )
+            try await onCreateWithInvites(body)
         } else {
-            // Create meet without invites
+            // Create without invites using MeetInsertBody
             let body = MeetInsertBody(
-                latitude: location.Coordinate.latitude,
-                longitude: location.Coordinate.longitude,
-                region_latitude: location.RegionCoordinate.latitude,
-                region_longitude: location.RegionCoordinate.longitude,
-                region_radius: location.RegionRadius,
+                latitude: finalLat,
+                longitude: finalLon,
+                region_latitude: finalRegLat,
+                region_longitude: finalRegLon,
+                region_radius: finalRegRadius,
                 name: proposed.name,
                 dttm_start_utc: startDate,
                 dttm_end_utc: endDate,
@@ -491,12 +579,12 @@ struct AiChatInterfaceView: View
                 meet_category_id: proposed.meet_category_id,
                 max_capacity: nil
             )
-            
             try await onCreateMeet(body)
         }
     }
     
-    private func handleEditRequest() {
+    private func handleEditRequest()
+    {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
             showConfirmation = false
             proposedMeet = nil
@@ -510,18 +598,23 @@ struct AiChatInterfaceView: View
         }
     }
     
-    private func getLocationFromEntryMode() -> LocationInfo? {
+    private func getLocationFromEntryMode() -> LocationInfo?
+    {
         switch entryMode {
         case .tapOnMap(let location):
+            // User tapped on map - we have the exact location
             return location
-        case .createButton:
-            // Would need default location or error
+            
+        case .createButton, .createWithGroup:
+            // TODO: Need to determine location from AI's location suggestion
+            // For now, return nil - this will show "Could not determine location" error
+            // The AI needs to either:
+            // 1. Include coordinates in the response, OR
+            // 2. We need to geocode the location name/address the AI provides
             return nil
-        case .createWithGroup(_, _):
-            // Would need default location or error
-            return nil
+            
         case .update(let meet):
-            // FIX THIS PART - meet is ViewMeetsModel, need to check what properties it has
+            // Updating existing meet - use its location
             return LocationInfo(
                 Coordinate: .init(meet.latitude, meet.longitude),
                 RegionCoordinate: .init(meet.region_latitude, meet.region_longitude),
@@ -533,6 +626,38 @@ struct AiChatInterfaceView: View
             )
         }
     }
+    
+    // Extract location from entryMode if available
+    private var locationFromEntryMode: (latitude: Double, longitude: Double, regionLat: Double, regionLon: Double, regionRadius: Double, name: String?)?
+    {
+        if case .tapOnMap(let location) = entryMode {
+            return (
+                latitude: location.Coordinate.latitude,
+                longitude: location.Coordinate.longitude,
+                regionLat: location.RegionCoordinate.latitude,
+                regionLon: location.RegionCoordinate.longitude,
+                regionRadius: location.RegionRadius,
+                name: location.Name
+            )
+        }
+        return nil
+    }
+    
+    // Add this helper function in AiChatInterfaceView
+    private func dateFromISO(_ isoString: String) -> Date
+    {
+        let iso8601Formatter = ISO8601DateFormatter()
+        iso8601Formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        
+        if let date = iso8601Formatter.date(from: isoString) {
+            return date
+        }
+        
+        // Fallback without fractional seconds
+        iso8601Formatter.formatOptions = [.withInternetDateTime]
+        return iso8601Formatter.date(from: isoString) ?? Date()
+    }
+    
 }
 
 // MARK: - Chat Bubble View
