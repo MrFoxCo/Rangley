@@ -16,8 +16,10 @@ struct MeetCreationUnifiedOverlay: View
     @Binding var entryMode: MeetCreationEntryMode?
     let baseURL: URL
     let token: String
-    let onCreateMeet: (LocationInfo, String, Date, Date, [ViewUsersModel], String?, Int16?, Int32?) async throws -> Void
+    let onCreate: (MeetInsertBody) async throws -> Void
+    let onCreateWithInvites: (MeetWithInvitesInsertBody) async throws -> Void
     let onContentViolation: (ContentViolation) -> Void
+
     
     // MARK: State
     @State private var isAnimating = false
@@ -69,59 +71,18 @@ struct MeetCreationUnifiedOverlay: View
                     // AI Chat interface
                     if showAiChat {
                         AiChatInterfaceView(
-                            entryMode: mode,
-                            baseURL: baseURL,
-                            token: token,
-                            onClose: { softDismiss() },
-                            onCreateMeet: { body in
-                                // Convert body back to the parent's expected format
-                                let location = LocationInfo(
-                                    Coordinate: .init(body.latitude, body.longitude),
-                                    RegionCoordinate: .init(body.region_latitude, body.region_longitude),
-                                    RegionRadius: body.region_radius,
-                                    Name: body.name,
-                                    ThoroughFare: nil, SubThoroughFare: nil, Locality: nil, SubLocality: nil,
-                                    AdministrativeArea: nil, SubAdministrativeArea: nil, PostalCode: nil,
-                                    Country: nil, IsoCountryCode: nil, TimeZone: nil, InlandWater: nil, Ocean: nil
-                                )
-                                
-                                try await onCreateMeet(
-                                    location,
-                                    body.name,
-                                    body.dttm_start_utc,
-                                    body.dttm_end_utc,
-                                    [],
-                                    body.description,
-                                    body.meet_category_id,
-                                    body.max_capacity
-                                )
-                            },
-                            onCreateWithInvites: { body in
-                                let location = LocationInfo(
-                                    Coordinate: .init(body.latitude, body.longitude),
-                                    RegionCoordinate: .init(body.region_latitude, body.region_longitude),
-                                    RegionRadius: body.region_radius,
-                                    Name: body.name,
-                                    ThoroughFare: nil, SubThoroughFare: nil, Locality: nil, SubLocality: nil,
-                                    AdministrativeArea: nil, SubAdministrativeArea: nil, PostalCode: nil,
-                                    Country: nil, IsoCountryCode: nil, TimeZone: nil, InlandWater: nil, Ocean: nil
-                                )
-                                
-                                let invitedUsers = body.initial_invitee_uuids.map { uuid in
-                                    ViewUsersModel(user_uuid: uuid, username: "", display_name: "", matched_by: [], can_invite: false)
-                                }
-                                
-                                try await onCreateMeet(
-                                    location,
-                                    body.name,
-                                    body.dttm_start_utc,
-                                    body.dttm_end_utc,
-                                    invitedUsers,
-                                    body.description,
-                                    body.meet_category_id,
-                                    body.max_capacity
-                                )
-                            }
+                          entryMode: mode,
+                          baseURL: baseURL,
+                          token: token,
+                          onClose: { softDismiss() },
+                          onCreateMeet: { body in
+                              try await onCreate(body)                 // <-- exact same closure as manual
+                              await MainActor.run { explodeThenDismiss() }
+                          },
+                          onCreateWithInvites: { body in
+                              try await onCreateWithInvites(body)      // <-- exact same closure as manual
+                              await MainActor.run { explodeThenDismiss() }
+                          }
                         )
                         .allowsHitTesting(!isExploding)
                         .scaleEffect(isExploding ? 0.6 : (isSoftDismissing ? 0.95 : 1.0))
@@ -137,16 +98,28 @@ struct MeetCreationUnifiedOverlay: View
                     // Manual form (after confirmation)
                     if showCreateForm {
                         MeetCreationUnifiedFormView(
-                            entryMode: mode,
-                            baseURL: baseURL,
-                            token: token,
-                            onCreate: { body in
-                                try await handleCreateMeet(body: body, invites: [])
-                            },
-                            onCreateWithInvites: { body in
-                                try await handleCreateMeetWithInvites(body: body)
-                            },
-                            onClose: { softDismiss() }
+                          entryMode: mode,
+                          baseURL: baseURL,
+                          token: token,
+                          onCreate: { body in
+                              do {
+                                  try await onCreate(body)
+                                  await MainActor.run { explodeThenDismiss() }
+                              } catch {
+                                  if let v = parseContentViolation(from: error) { await MainActor.run { onContentViolation(v) } }
+                                  throw error
+                              }
+                          },
+                          onCreateWithInvites: { body in
+                              do {
+                                  try await onCreateWithInvites(body)
+                                  await MainActor.run { explodeThenDismiss() }
+                              } catch {
+                                  if let v = parseContentViolation(from: error) { await MainActor.run { onContentViolation(v) } }
+                                  throw error
+                              }
+                          },
+                          onClose: { softDismiss() }
                         )
                         .allowsHitTesting(!isExploding)
                         .scaleEffect(isExploding ? 0.6 : (isSoftDismissing ? 0.95 : 1.0))
@@ -175,83 +148,6 @@ struct MeetCreationUnifiedOverlay: View
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showOverlay)
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showCreateForm)
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showAiChat)
-    }
-    
-    // MARK: Handlers
-    private func handleCreateMeet(body: MeetInsertBody, invites: [ViewUsersModel]) async throws
-    {
-        let location = LocationInfo(
-            Coordinate: .init(body.latitude, body.longitude),
-            RegionCoordinate: .init(body.region_latitude, body.region_longitude),
-            RegionRadius: body.region_radius,
-            Name: body.name,
-            ThoroughFare: nil, SubThoroughFare: nil, Locality: nil, SubLocality: nil,
-            AdministrativeArea: nil, SubAdministrativeArea: nil, PostalCode: nil,
-            Country: nil, IsoCountryCode: nil, TimeZone: nil, InlandWater: nil, Ocean: nil
-        )
-        
-        do {
-            try await onCreateMeet(
-                location,
-                body.name,
-                body.dttm_start_utc,
-                body.dttm_end_utc,
-                invites,
-                body.description,
-                body.meet_category_id,
-                body.max_capacity
-            )
-            await MainActor.run { explodeThenDismiss() }
-        } catch {
-            if let violation = parseContentViolation(from: error) {
-                await MainActor.run {
-                    onContentViolation(violation)
-                }
-                throw error
-            } else {
-                throw error
-            }
-        }
-    }
-
-    private func handleCreateMeetWithInvites(body: MeetWithInvitesInsertBody) async throws
-    {
-        let location = LocationInfo(
-            Coordinate: .init(body.latitude, body.longitude),
-            RegionCoordinate: .init(body.region_latitude, body.region_longitude),
-            RegionRadius: body.region_radius,
-            Name: body.name,
-            ThoroughFare: nil, SubThoroughFare: nil, Locality: nil, SubLocality: nil,
-            AdministrativeArea: nil, SubAdministrativeArea: nil, PostalCode: nil,
-            Country: nil, IsoCountryCode: nil, TimeZone: nil, InlandWater: nil, Ocean: nil
-        )
-        
-        let invitedUsers = body.initial_invitee_uuids.map { uuid in
-            ViewUsersModel(user_uuid: uuid, username: "", display_name: "", matched_by: [], can_invite: false)
-        }
-        
-        do {
-            try await onCreateMeet(
-                location,
-                body.name,
-                body.dttm_start_utc,
-                body.dttm_end_utc,
-                invitedUsers,
-                body.description,
-                body.meet_category_id,
-                body.max_capacity
-            )
-            await MainActor.run { explodeThenDismiss() }
-        } catch {
-            if let violation = parseContentViolation(from: error) {
-                await MainActor.run {
-                    onContentViolation(violation)
-                }
-                throw error
-            } else {
-                throw error
-            }
-        }
     }
     
     // MARK: ^^ HELPER FUNCTION

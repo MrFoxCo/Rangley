@@ -843,23 +843,30 @@ struct OverlaysView: View
                 entryMode: $meetCreationMode,
                 baseURL: Env.apiBaseURL,
                 token: authToken,
-                onCreateMeet: { location, name, start, end, invitedUsers, description, categoryID, capacity in
-                    try await handleMeetCreation(
-                        location,
-                        name,
-                        start,
-                        end,
-                        invitedUsers,
-                        description: description,
-                        meetCategoryID: categoryID,
-                        maxCapacity: capacity,
-                        invitationMessage: nil
-                    )
+
+                // bodies go straight to your MapDataStore, same as manual
+                onCreate: { body in
+                    try await mapData.createMeet(body)
+                    // center on created meet
+                    locationData.centerOn(coordinate: CLLocationCoordinate2D(
+                        latitude: body.latitude,
+                        longitude: body.longitude
+                    ))
                 },
+                onCreateWithInvites: { body in
+                    try await mapData.createMeetWithInvites(body)
+                    // center on created meet
+                    locationData.centerOn(coordinate: CLLocationCoordinate2D(
+                        latitude: body.latitude,
+                        longitude: body.longitude
+                    ))
+                },
+
                 onContentViolation: { violation in
                     uiState.showContentViolation = violation
                 }
             )
+
          
             // MARK: In OverlaysView body, update the MeetCardOverlay call to:
             MeetCardOverlay(

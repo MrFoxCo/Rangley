@@ -511,77 +511,85 @@ struct AiChatInterfaceView: View
     private func handleApproval(_ proposed: ProposedMeet) async throws
     {
         errorMessage = nil
-        
-        // PRIORITY 1: Use location from map tap (entryMode)
+
+        // 1) Resolve location exactly like manual
         let finalLat: Double
         let finalLon: Double
         let finalRegLat: Double
         let finalRegLon: Double
         let finalRegRadius: Double
-        
+
         if let mapLocation = locationFromEntryMode {
-            // User tapped on map - use that location
-            finalLat = mapLocation.latitude
-            finalLon = mapLocation.longitude
-            finalRegLat = mapLocation.regionLat
-            finalRegLon = mapLocation.regionLon
+            finalLat       = mapLocation.latitude
+            finalLon       = mapLocation.longitude
+            finalRegLat    = mapLocation.regionLat
+            finalRegLon    = mapLocation.regionLon
             finalRegRadius = mapLocation.regionRadius
         } else if let aiLat = proposed.latitude,
                   let aiLon = proposed.longitude,
                   let aiRadius = proposed.region_radius {
-            // AI provided coordinates - use those
-            finalLat = aiLat
-            finalLon = aiLon
-            finalRegLat = aiLat
-            finalRegLon = aiLon
+            finalLat       = aiLat
+            finalLon       = aiLon
+            finalRegLat    = aiLat
+            finalRegLon    = aiLon
             finalRegRadius = aiRadius
         } else {
-            // No location available - should not happen, but handle it
             errorMessage = "Location is required to create a meet"
             throw NSError(domain: "AiChat", code: 1, userInfo: [NSLocalizedDescriptionKey: "Missing location data"])
         }
-        
-        // Convert ISO strings to Date objects
+
+        // 2) Parse dates and enforce end > start like the form logic does
         let startDate = dateFromISO(proposed.dttm_start_utc)
-        let endDate = dateFromISO(proposed.dttm_end_utc)
-        
-        // Check if we have invitees
+        var endDate   = dateFromISO(proposed.dttm_end_utc)
+        if endDate <= startDate {
+            endDate = startDate.addingTimeInterval(3600) // fallback: +1h
+        }
+
+        // 3) Normalize fields like manual
+        let safeName = String(proposed.name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(50))
+        let safeDescription: String? = {
+            let t = proposed.description?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return t.isEmpty ? nil : t
+        }()
+
+        // Build a LocationInfo so we can use the SAME builders the manual flow uses
+        let loc = LocationInfo(
+            Coordinate: Coordinate(finalLat, finalLon),
+            RegionCoordinate: Coordinate(finalRegLat, finalRegLon),
+            RegionRadius: finalRegRadius,
+            Name: proposed.location_name
+        )
+
+        // 4) Create the exact same bodies the manual path uses
         if let invitees = proposed.invitees, !invitees.isEmpty, !resolvedInvitees.isEmpty {
-            // Create with invites using MeetWithInvitesInsertBody
-            let body = MeetWithInvitesInsertBody(
-                initial_invitee_uuids: resolvedInvitees.map { $0.user_uuid },
-                latitude: finalLat,
-                longitude: finalLon,
-                region_latitude: finalRegLat,
-                region_longitude: finalRegLon,
-                region_radius: finalRegRadius,
-                name: proposed.name,
-                dttm_start_utc: startDate,
-                dttm_end_utc: endDate,
-                description: proposed.description,
-                meet_category_id: proposed.meet_category_id,
-                max_capacity: nil,
-                invitation_message: nil
+            // With invites
+            let body = MeetCreationService.buildMeetWithInvitesBody(
+                locationInfo: loc,
+                name: safeName,
+                startTime: startDate,
+                endTime: endDate,
+                invitedUsers: resolvedInvitees.map { $0.user_uuid },
+                description: safeDescription,
+                meetCategoryID: proposed.meet_category_id,
+                maxCapacity: -1,
+                invitationMessage: nil
             )
             try await onCreateWithInvites(body)
         } else {
-            // Create without invites using MeetInsertBody
-            let body = MeetInsertBody(
-                latitude: finalLat,
-                longitude: finalLon,
-                region_latitude: finalRegLat,
-                region_longitude: finalRegLon,
-                region_radius: finalRegRadius,
-                name: proposed.name,
-                dttm_start_utc: startDate,
-                dttm_end_utc: endDate,
-                description: proposed.description,
-                meet_category_id: proposed.meet_category_id,
-                max_capacity: nil
+            // No invites
+            let body = MeetCreationService.buildMeetBody(
+                locationInfo: loc,
+                name: safeName,
+                startTime: startDate,
+                endTime: endDate,
+                description: safeDescription,
+                meetCategoryID: proposed.meet_category_id,
+                maxCapacity: nil
             )
             try await onCreateMeet(body)
         }
     }
+
     
     private func handleEditRequest()
     {
