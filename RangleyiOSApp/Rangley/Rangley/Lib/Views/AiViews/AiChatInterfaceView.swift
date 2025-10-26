@@ -14,7 +14,7 @@ struct AiChatInterfaceView: View
     let token: String
     let onClose: () -> Void
     let onCreateMeet: (MeetInsertBody) async throws -> Void
-    let onCreateWithInvites: ([ViewUsersModel], MeetInsertBody) async throws -> Void
+    let onCreateWithInvites: (MeetWithInvitesInsertBody) async throws -> Void
     
     @State private var messageText: String = ""
     @State private var chatHistory: [ClaudeModel.ChatMessage] = []
@@ -336,34 +336,29 @@ struct AiChatInterfaceView: View
                 await MainActor.run {
                     // Try to parse as JSON first
                     if let proposed = tryParseProposedMeet(from: response) {
-                        if proposed.ready {
-                            // Show full confirmation overlay
-                            proposedMeet = proposed
-                            showConfirmation = true
-                            
-                            // Resolve invitees in the background
-                            Task {
-                                await resolveInvitees(from: proposed.invitees)
-                            }
-                        } else {
-                            // Show preview in chat with create button
-                            let assistantMessage = ClaudeModel.ChatMessage(
-                                role: "assistant",
-                                content: extractTextBeforeJSON(from: response)
-                            )
-                            chatHistory.append(assistantMessage)
-                            
-                            // Store the proposed meet for this message
-                            proposedMeet = proposed
-                            
-                            // Resolve invitees in the background
-                            Task {
-                                await resolveInvitees(from: proposed.invitees)
-                            }
+                        // Extract the natural language text BEFORE the JSON
+                        let naturalText = extractTextBeforeJSON(from: response)
+                        
+                        // Always add the AI's natural language response to chat
+                        let assistantMessage = ClaudeModel.ChatMessage(
+                            role: "assistant",
+                            content: naturalText.isEmpty ? "Here's what I've put together for you:" : naturalText
+                        )
+                        chatHistory.append(assistantMessage)
+                        
+                        // Store the proposed meet for the preview card
+                        proposedMeet = proposed
+                        
+                        // Resolve invitees in the background
+                        Task {
+                            await resolveInvitees(from: proposed.invitees)
                         }
+                        
+                        // If ready, we'll show the button in the chat
+                        // No need for separate confirmation overlay
                         isLoading = false
                     } else {
-                        // Regular chat message
+                        // Regular chat message (no JSON found)
                         let assistantMessage = ClaudeModel.ChatMessage(role: "assistant", content: response)
                         chatHistory.append(assistantMessage)
                         isLoading = false
@@ -464,21 +459,23 @@ struct AiChatInterfaceView: View
         // Check if we have invitees
         if !resolvedInvitees.isEmpty {
             // Create meet with invites
-            let body = MeetInsertBody(
-                latitude: location.Coordinate.latitude,
-                longitude: location.Coordinate.longitude,
-                region_latitude: location.RegionCoordinate.latitude,
-                region_longitude: location.RegionCoordinate.longitude,
-                region_radius: location.RegionRadius,
-                name: proposed.name,
-                dttm_start_utc: startDate,
-                dttm_end_utc: endDate,
-                description: proposed.description,
-                meet_category_id: proposed.meet_category_id,
-                max_capacity: nil
-            )
-
-            try await onCreateWithInvites(resolvedInvitees, body)
+            let body = MeetWithInvitesInsertBody(
+               initial_invitee_uuids: resolvedInvitees.map { $0.user_uuid },  // Extract UUIDs
+               latitude: location.Coordinate.latitude,
+               longitude: location.Coordinate.longitude,
+               region_latitude: location.RegionCoordinate.latitude,
+               region_longitude: location.RegionCoordinate.longitude,
+               region_radius: location.RegionRadius,
+               name: proposed.name,
+               dttm_start_utc: startDate,
+               dttm_end_utc: endDate,
+               description: proposed.description,
+               meet_category_id: proposed.meet_category_id,
+               max_capacity: nil,
+               invitation_message: nil
+           )
+           
+           try await onCreateWithInvites(body)  // Single parameter
         } else {
             // Create meet without invites
             let body = MeetInsertBody(
@@ -856,22 +853,25 @@ struct MeetPreviewCard: View
                 }
             }
             
-            // Create button
+            // Create button - BIG AND OBVIOUS
             Button(action: onCreateMeet) {
-                HStack(spacing: 6) {
+                HStack(spacing: 8) {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 14))
-                    Text("Create This Meet")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: 16, weight: .bold))
+                    Text("YES - CREATE THIS MEET")
+                        .font(.system(size: 16, weight: .bold))
+                        .tracking(0.5)
                 }
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
+                .padding(.vertical, 16)
                 .background(
-                    RoundedRectangle(cornerRadius: 10)
+                    RoundedRectangle(cornerRadius: 12)
                         .fill(AppPalette.Brand.neonPink)
+                        .shadow(color: AppPalette.Brand.neonPink.opacity(0.4), radius: 8, x: 0, y: 4)
                 )
             }
+            .padding(.top, 4)
         }
         .padding(12)
         .background(

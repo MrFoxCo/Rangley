@@ -76,8 +76,9 @@ struct MeetCreationUnifiedOverlay: View
                             onCreateMeet: { body in
                                 try await handleCreateMeet(body: body, invites: [])
                             },
-                            onCreateWithInvites: { invitees, body in
-                                try await handleCreateMeet(body: body, invites: invitees)
+                            onCreateWithInvites: { body in
+                                // Extract invitee UUIDs from the body
+                                try await handleCreateMeetWithInvites(body: body)
                             }
                         )
                         .allowsHitTesting(!isExploding)
