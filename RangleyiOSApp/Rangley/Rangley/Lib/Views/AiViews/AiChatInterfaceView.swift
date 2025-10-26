@@ -16,12 +16,51 @@ struct AiChatInterfaceView: View
     let onCreateMeet: (MeetInsertBody) async throws -> Void
     
     @State private var messageText: String = ""
-    @State private var chatHistory: [ClaudeModel.ChatMessage] = []  // CHANGED
+    @State private var chatHistory: [ClaudeModel.ChatMessage] = []
     @State private var isLoading: Bool = false
     @State private var errorMessage: String?
+    @State private var showConfirmation: Bool = false
+    @State private var proposedMeet: ProposedMeet?
     @FocusState private var isTextFieldFocused: Bool
     
+    // Struct to hold the AI's proposed meet data
+    struct ProposedMeet: Codable {
+        let ready: Bool
+        let name: String
+        let dttm_start_utc: String
+        let dttm_end_utc: String
+        let description: String?
+        let meet_category_id: Int16?
+        let max_capacity: Int32?
+    }
+    
     var body: some View
+    {
+        ZStack {
+            // Main chat interface
+            if !showConfirmation {
+                chatInterfaceView
+            }
+            
+            // Confirmation overlay
+            if showConfirmation, let proposed = proposedMeet {
+                MeetConfirmationView(
+                    proposedMeet: proposed,
+                    entryMode: entryMode,
+                    onApprove: { try await handleApproval(proposed) },
+                    onEdit: { handleEditRequest() }
+                )
+                .transition(.asymmetric(
+                    insertion: .move(edge: .trailing).combined(with: .opacity),
+                    removal: .move(edge: .leading).combined(with: .opacity)
+                ))
+            }
+        }
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showConfirmation)
+    }
+    
+    // MARK: - Chat Interface
+    private var chatInterfaceView: some View
     {
         VStack(spacing: 0) {
             // Header
@@ -53,9 +92,9 @@ struct AiChatInterfaceView: View
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
                 }
-                .onChange(of: chatHistory.count) { oldValue, newValue in
+                .onChange(of: chatHistory.count) { _ in
                     withAnimation {
-                        proxy.scrollTo(newValue - 1, anchor: .bottom)
+                        proxy.scrollTo(chatHistory.count - 1, anchor: .bottom)
                     }
                 }
             }
@@ -251,43 +290,23 @@ struct AiChatInterfaceView: View
     }
     
     // MARK: - Actions
-    // MARK: - Actions
     private func sendMessage()
     {
-        print("DEBUG: sendMessage() called")
-        
         let trimmedMessage = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        print("DEBUG: trimmedMessage = '\(trimmedMessage)'")
-        print("DEBUG: isEmpty check = \(trimmedMessage.isEmpty)")
-        
-        guard !trimmedMessage.isEmpty else {
-            print("DEBUG: Message was empty, returning")
-            return
-        }
-        
-        print("DEBUG: Creating user message")
+        guard !trimmedMessage.isEmpty else { return }
         
         // Add user message to history
         let userMessage = ClaudeModel.ChatMessage(role: "user", content: trimmedMessage)
         chatHistory.append(userMessage)
-        
-        print("DEBUG: User message added to history. Total messages: \(chatHistory.count)")
         
         // Clear input
         messageText = ""
         errorMessage = nil
         isLoading = true
         
-        print("DEBUG: Starting API call")
-        print("DEBUG: baseURL = \(baseURL)")
-        print("DEBUG: token exists = \(!token.isEmpty)")
-        
         // Call API
         Task {
             do {
-                print("DEBUG: About to call AuthAPI.postChatBot")
-                
                 let response = try await AuthAPI.postChatBot(
                     baseURL: baseURL,
                     token: token,
@@ -295,18 +314,21 @@ struct AiChatInterfaceView: View
                     history: Array(chatHistory.dropLast())
                 )
                 
-                print("DEBUG: Got response: \(response)")
-                
                 await MainActor.run {
-                    // Add assistant response
-                    let assistantMessage = ClaudeModel.ChatMessage(role: "assistant", content: response)
-                    chatHistory.append(assistantMessage)
-                    isLoading = false
-                    print("DEBUG: Assistant message added")
+                    // Try to parse as JSON first
+                    if let proposed = tryParseProposedMeet(from: response) {
+                        proposedMeet = proposed
+                        showConfirmation = true
+                        isLoading = false
+                    } else {
+                        // Regular chat message
+                        let assistantMessage = ClaudeModel.ChatMessage(role: "assistant", content: response)
+                        chatHistory.append(assistantMessage)
+                        isLoading = false
+                    }
                 }
                 
             } catch {
-                print("DEBUG: Error occurred: \(error)")
                 await MainActor.run {
                     errorMessage = "Failed to send message. Please try again."
                     isLoading = false
@@ -314,12 +336,103 @@ struct AiChatInterfaceView: View
             }
         }
     }
+    
+    private func tryParseProposedMeet(from response: String) -> ProposedMeet? {
+        // Try to extract JSON from response (in case Claude wraps it)
+        let cleaned = response
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "```json", with: "")
+            .replacingOccurrences(of: "```", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        guard let data = cleaned.data(using: .utf8) else { return nil }
+        
+        do {
+            let proposed = try JSONDecoder().decode(ProposedMeet.self, from: data)
+            return proposed.ready ? proposed : nil
+        } catch {
+            return nil
+        }
+    }
+    
+    private func handleApproval(_ proposed: ProposedMeet) async throws {
+        // Get location from entryMode
+        guard let location = getLocationFromEntryMode() else {
+            errorMessage = "Could not determine location"
+            return
+        }
+        
+        // Parse dates
+        let iso8601Formatter = ISO8601DateFormatter()
+        iso8601Formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        
+        guard let startDate = iso8601Formatter.date(from: proposed.dttm_start_utc),
+              let endDate = iso8601Formatter.date(from: proposed.dttm_end_utc) else {
+            errorMessage = "Invalid date format"
+            return
+        }
+        
+        // Create MeetInsertBody
+        let body = MeetInsertBody(
+            latitude: location.Coordinate.latitude,
+            longitude: location.Coordinate.longitude,
+            region_latitude: location.RegionCoordinate.latitude,
+            region_longitude: location.RegionCoordinate.longitude,
+            region_radius: location.RegionRadius,
+            name: proposed.name,
+            dttm_start_utc: startDate,
+            dttm_end_utc: endDate,
+            description: proposed.description,
+            meet_category_id: proposed.meet_category_id,
+            max_capacity: proposed.max_capacity
+        )
+        
+        // Call the create meet handler
+        try await onCreateMeet(body)
+    }
+    
+    private func handleEditRequest() {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            showConfirmation = false
+            proposedMeet = nil
+            
+            // Add a message to chat history asking what to change
+            let assistantMessage = ClaudeModel.ChatMessage(
+                role: "assistant",
+                content: "No problem! What would you like to change about the meet?"
+            )
+            chatHistory.append(assistantMessage)
+        }
+    }
+    
+    private func getLocationFromEntryMode() -> LocationInfo? {
+        switch entryMode {
+        case .tapOnMap(let location):
+            return location
+        case .createButton:
+            // Would need default location or error
+            return nil
+        case .createWithGroup(_, _):
+            // Would need default location or error
+            return nil
+        case .update(let meet):
+            return LocationInfo(
+                Coordinate: meet.coordinate,
+                RegionCoordinate: meet.region_coordinate,
+                RegionRadius: meet.region_radius,
+                Name: meet.name,
+                ThoroughFare: nil, SubThoroughFare: nil, Locality: nil, SubLocality: nil,
+                AdministrativeArea: nil, SubAdministrativeArea: nil, PostalCode: nil,
+                Country: nil, IsoCountryCode: nil, TimeZone: nil, InlandWater: nil, Ocean: nil
+            )
+        }
+    }
 }
 
 // MARK: - Chat Bubble View
 struct ChatBubbleView: View
 {
-    let message: ClaudeModel.ChatMessage  // CHANGED
+    let message: ClaudeModel.ChatMessage
     
     private var isUser: Bool {
         message.role == "user"
@@ -368,5 +481,175 @@ struct ChatBubbleView: View
             }
         }
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
+    }
+}
+
+// MARK: - Meet Confirmation View
+struct MeetConfirmationView: View
+{
+    let proposedMeet: AiChatInterfaceView.ProposedMeet
+    let entryMode: MeetCreationEntryMode
+    let onApprove: () async throws -> Void
+    let onEdit: () -> Void
+    
+    @State private var isSubmitting = false
+    @State private var errorMessage: String?
+    
+    var body: some View
+    {
+        VStack(spacing: 20) {
+            // Header
+            VStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 48))
+                    .foregroundColor(AppPalette.Brand.neonPink)
+                
+                Text("Ready to Create?")
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundColor(AppPalette.Text.primary)
+                
+                Text("Review the details below")
+                    .font(.system(size: 14, weight: .regular))
+                    .foregroundColor(AppPalette.Text.secondary)
+            }
+            .padding(.top, 20)
+            
+            // Meet details
+            VStack(spacing: 16) {
+                detailRow(icon: "calendar", label: "Event", value: proposedMeet.name)
+                detailRow(icon: "clock", label: "Starts", value: formatDate(proposedMeet.dttm_start_utc))
+                detailRow(icon: "clock.fill", label: "Ends", value: formatDate(proposedMeet.dttm_end_utc))
+                
+                if let description = proposedMeet.description {
+                    detailRow(icon: "text.alignleft", label: "Description", value: description)
+                }
+                
+                if let categoryId = proposedMeet.meet_category_id {
+                    detailRow(icon: "tag", label: "Category", value: categoryName(for: categoryId))
+                }
+                
+                if let capacity = proposedMeet.max_capacity {
+                    detailRow(icon: "person.3", label: "Max Capacity", value: "\(capacity) people")
+                }
+            }
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.white.opacity(0.05))
+            )
+            
+            // Error message
+            if let error = errorMessage {
+                Text(error)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.red)
+                    .padding(.horizontal)
+            }
+            
+            Spacer()
+            
+            // Action buttons
+            VStack(spacing: 12) {
+                Button(action: { Task { await approveAndCreate() } }) {
+                    HStack(spacing: 8) {
+                        if isSubmitting {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .scaleEffect(0.8)
+                        } else {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 16))
+                        }
+                        Text(isSubmitting ? "Creating..." : "Create Meet")
+                            .font(.system(size: 16, weight: .bold))
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(AppPalette.Brand.neonPink)
+                    )
+                }
+                .disabled(isSubmitting)
+                
+                Button(action: onEdit) {
+                    Text("Make Changes")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundColor(AppPalette.Text.primary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.white.opacity(0.1))
+                        )
+                }
+                .disabled(isSubmitting)
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 20)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(AppPalette.Brand.japDarkerPurple)
+        .cornerRadius(16)
+        .padding(.horizontal, 20)
+    }
+    
+    private func detailRow(icon: String, label: String, value: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 16))
+                .foregroundColor(AppPalette.Brand.neonPink)
+                .frame(width: 24)
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(AppPalette.Text.secondary)
+                
+                Text(value)
+                    .font(.system(size: 15, weight: .regular))
+                    .foregroundColor(AppPalette.Text.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            
+            Spacer()
+        }
+    }
+    
+    private func formatDate(_ isoString: String) -> String {
+        let iso8601Formatter = ISO8601DateFormatter()
+        iso8601Formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        
+        guard let date = iso8601Formatter.date(from: isoString) else {
+            return isoString
+        }
+        
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+    
+    private func categoryName(for id: Int16) -> String {
+        let categories = [
+            1: "Social", 2: "Sports", 3: "Food & Drink", 4: "Arts",
+            5: "Music", 6: "Outdoors", 7: "Gaming", 8: "Study",
+            9: "Business", 10: "Other"
+        ]
+        return categories[Int(id)] ?? "Other"
+    }
+    
+    private func approveAndCreate() async {
+        guard !isSubmitting else { return }
+        isSubmitting = true
+        errorMessage = nil
+        
+        do {
+            try await onApprove()
+        } catch {
+            errorMessage = "Failed to create meet. Please try again."
+            isSubmitting = false
+        }
     }
 }
