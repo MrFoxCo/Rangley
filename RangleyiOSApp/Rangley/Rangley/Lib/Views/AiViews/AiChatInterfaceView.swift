@@ -6,44 +6,51 @@
 //
 
 import SwiftUI
+import MapKit
+import CoreLocation
 
 struct AiChatInterfaceView: View
 {
-    let entryMode: MeetCreationEntryMode
-    let baseURL: URL
-    let token: String
-    let onClose: () -> Void
-    let onCreateMeet: (MeetInsertBody) async throws -> Void
-    let onCreateWithInvites: (MeetWithInvitesInsertBody) async throws -> Void
+    //entry mode contains the meet location if entry mode is by onTap
+    let entryMode           : MeetCreationEntryMode
+    let baseURL             : URL
+    let token               : String
+    let onClose             : () -> Void
+    let onCreateMeet        : (MeetInsertBody) async throws -> Void
+    let onCreateWithInvites : (MeetWithInvitesInsertBody) async throws -> Void
     
-    @State private var messageText: String = ""
-    @State private var chatHistory: [ClaudeModel.ChatMessage] = []
-    @State private var isLoading: Bool = false
-    @State private var errorMessage: String?
-    @State private var showConfirmation: Bool = false
-    @State private var proposedMeet: ProposedMeet?
-    @State private var resolvedInvitees: [ViewUsersModel] = []
-    @State private var showLocationPicker: Bool = false
-    @State private var selectedLocation: LocationInfo?
+    @State private var messageText            : String = ""
+    @State private var chatHistory            : [ClaudeModel.ChatMessage] = []
+    @State private var isLoading              : Bool = false
+    @State private var errorMessage           : String?
+    @State private var showConfirmation       : Bool = false
+    @State private var proposedMeet           : ProposedMeet?
+    @State private var resolvedInvitees       : [ViewUsersModel] = []
+    @State private var showLocationPicker     : Bool = false
+    @State private var selectedLocation       : LocationInfo?
+    @State private var locationName           : String = "Loading location..."
     @FocusState private var isTextFieldFocused: Bool
     
     // Struct to hold the AI's proposed meet data
-    struct ProposedMeet: Codable {
-        let ready: Bool
-        let name: String
-        let dttm_start_utc: String
-        let dttm_end_utc: String
-        let description: String?
+    struct ProposedMeet: Codable
+    {
+        let ready           : Bool
+        let name            : String
+        let dttm_start_utc  : String
+        let dttm_end_utc    : String
+        let description     : String?
         let meet_category_id: Int16?
-        let invitees: [String]?  // Raw usernames (without @)
-        let assumptions: [String]?  // AI's assumptions about the meet
-        let confidence: Double?  // AI's confidence level (0.0-1.0)
+        let invitees        : [String]?  // Raw usernames (without @)
+        let assumptions     : [String]?  // AI's assumptions about the meet
+        let confidence      : Double?  // AI's confidence level (0.0-1.0)
         
         // Location fields - AI can provide these when location isn't from map tap
-        let location_name: String?  // Human-readable location name
-        let latitude: Double?
-        let longitude: Double?
-        let region_radius: Double?
+        let location_name   : String?  // Human-readable location name
+        let latitude        : Double?
+        let longitude       : Double?
+        let region_latitude : Double?
+        let region_longitude: Double?
+        let region_radius   : Double?
     }
     
     var body: some View
@@ -57,11 +64,11 @@ struct AiChatInterfaceView: View
             // Confirmation overlay
             if showConfirmation, let proposed = proposedMeet {
                 MeetConfirmationView(
-                    proposedMeet: proposed,
-                    entryMode: entryMode,
+                    proposedMeet    : proposed,
+                    entryMode       : entryMode,
                     resolvedInvitees: resolvedInvitees,
-                    onApprove: { try await handleApproval(proposed) },
-                    onEdit: { handleEditRequest() }
+                    onApprove       : { try await handleApproval(proposed) },
+                    onEdit          : { handleEditRequest() }
                 )
                 .transition(.asymmetric(
                     insertion: .move(edge: .trailing).combined(with: .opacity),
@@ -70,6 +77,9 @@ struct AiChatInterfaceView: View
             }
         }
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showConfirmation)
+        .onAppear {
+            loadLocationNameIfExists()
+        }
     }
     
     // MARK: - Chat Interface
@@ -151,7 +161,7 @@ struct AiChatInterfaceView: View
                 Text("AI Assistant")
                     .font(.system(size: 16, weight: .bold))
                     .foregroundColor(AppPalette.Text.primary)
-                
+                // TODO: - if it's by onTap the text needs
                 Text("Let's create your meet together")
                     .font(.system(size: 12, weight: .regular))
                     .foregroundColor(AppPalette.Text.secondary)
@@ -208,10 +218,14 @@ struct AiChatInterfaceView: View
         )
     }
     
-    private var welcomeMessageText: String {
+    // TODO: we need to insert the locationName in the same way
+    private var welcomeMessageText: String
+    {
         switch entryMode {
-        case .tapOnMap:
-            return "I'll help you create a meet at this location. Tell me about your event - what are you planning?"
+        case .tapOnMap(let location):
+            
+            // if there is location.name use location.address
+            return "I'll help you create a meet at \(location.Coordinate.latitude). Tell me about your event - what are you planning?"
         case .createButton:
             return "I'll help you create your meet. Tell me what kind of event you're planning!"
         case .createWithGroup(let group, _):
@@ -382,7 +396,8 @@ struct AiChatInterfaceView: View
         }
     }
     
-    private func extractTextBeforeJSON(from response: String) -> String {
+    private func extractTextBeforeJSON(from response: String) -> String
+    {
         // Look for all possible JSON start patterns
         var earliestJsonStart: String.Index? = nil
         
@@ -510,34 +525,6 @@ struct AiChatInterfaceView: View
     
     private func handleApproval(_ proposed: ProposedMeet) async throws
     {
-        errorMessage = nil
-
-        // 1) Resolve location exactly like manual
-        let finalLat: Double
-        let finalLon: Double
-        let finalRegLat: Double
-        let finalRegLon: Double
-        let finalRegRadius: Double
-
-        if let mapLocation = locationFromEntryMode {
-            finalLat       = mapLocation.latitude
-            finalLon       = mapLocation.longitude
-            finalRegLat    = mapLocation.regionLat
-            finalRegLon    = mapLocation.regionLon
-            finalRegRadius = mapLocation.regionRadius
-        } else if let aiLat = proposed.latitude,
-                  let aiLon = proposed.longitude,
-                  let aiRadius = proposed.region_radius {
-            finalLat       = aiLat
-            finalLon       = aiLon
-            finalRegLat    = aiLat
-            finalRegLon    = aiLon
-            finalRegRadius = aiRadius
-        } else {
-            errorMessage = "Location is required to create a meet"
-            throw NSError(domain: "AiChat", code: 1, userInfo: [NSLocalizedDescriptionKey: "Missing location data"])
-        }
-
         // 2) Parse dates and enforce end > start like the form logic does
         let startDate = dateFromISO(proposed.dttm_start_utc)
         var endDate   = dateFromISO(proposed.dttm_end_utc)
@@ -564,27 +551,27 @@ struct AiChatInterfaceView: View
         if let invitees = proposed.invitees, !invitees.isEmpty, !resolvedInvitees.isEmpty {
             // With invites
             let body = MeetCreationService.buildMeetWithInvitesBody(
-                locationInfo: loc,
-                name: safeName,
-                startTime: startDate,
-                endTime: endDate,
-                invitedUsers: resolvedInvitees.map { $0.user_uuid },
-                description: safeDescription,
-                meetCategoryID: proposed.meet_category_id,
-                maxCapacity: -1,
-                invitationMessage: nil
+                locationInfo        : loc,
+                name                : safeName,
+                startTime           : startDate,
+                endTime             : endDate,
+                invitedUsers        : resolvedInvitees.map { $0.user_uuid },
+                description         : safeDescription,
+                meetCategoryID      : proposed.meet_category_id,
+                maxCapacity         : -1,
+                invitationMessage   : ""
             )
             try await onCreateWithInvites(body)
         } else {
             // No invites
             let body = MeetCreationService.buildMeetBody(
-                locationInfo: loc,
-                name: safeName,
-                startTime: startDate,
-                endTime: endDate,
-                description: safeDescription,
-                meetCategoryID: proposed.meet_category_id,
-                maxCapacity: nil
+                locationInfo    : loc,
+                name            : safeName,
+                startTime       : startDate,
+                endTime         : endDate,
+                description     : safeDescription,
+                meetCategoryID  : proposed.meet_category_id,
+                maxCapacity     : -1
             )
             try await onCreateMeet(body)
         }
@@ -636,19 +623,47 @@ struct AiChatInterfaceView: View
     }
     
     // Extract location from entryMode if available
-    private var locationFromEntryMode: (latitude: Double, longitude: Double, regionLat: Double, regionLon: Double, regionRadius: Double, name: String?)?
+    private func loadLocationNameIfExists()
     {
-        if case .tapOnMap(let location) = entryMode {
-            return (
-                latitude: location.Coordinate.latitude,
-                longitude: location.Coordinate.longitude,
-                regionLat: location.RegionCoordinate.latitude,
-                regionLon: location.RegionCoordinate.longitude,
-                regionRadius: location.RegionRadius,
-                name: location.Name
-            )
+        guard case .tapOnMap(let location) = entryMode else { return }
+        
+        let clLocation = CLLocation(
+            latitude    : location.Coordinate.latitude,
+            longitude   : location.Coordinate.longitude
+        )
+        
+        CLGeocoder().reverseGeocodeLocation(clLocation) { placemarks, error in
+            DispatchQueue.main.async {
+                if error != nil {
+                    locationName = "Selected location"
+                    return
+                }
+                
+                guard let placemark = placemarks?.first else {
+                    locationName = "Selected location"
+                    return
+                }
+                
+                // Build location name similar to other components
+                var components: [String] = []
+                
+                if let name = placemark.name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
+                    components.append(name)
+                } else if let street = placemark.thoroughfare?.trimmingCharacters(in: .whitespacesAndNewlines), !street.isEmpty {
+                    if let number = placemark.subThoroughfare?.trimmingCharacters(in: .whitespacesAndNewlines), !number.isEmpty {
+                        components.append("\(number) \(street)")
+                    } else {
+                        components.append(street)
+                    }
+                }
+                
+                if let city = placemark.locality?.trimmingCharacters(in: .whitespacesAndNewlines), !city.isEmpty {
+                    components.append(city)
+                }
+                
+                locationName = components.isEmpty ? "Selected location" : components.joined(separator: ", ")
+            }
         }
-        return nil
     }
     
     // Add this helper function in AiChatInterfaceView

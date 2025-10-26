@@ -13,20 +13,20 @@ struct MeetCreationUnifiedOverlay: View
 {
     // MARK: Configuration
     @Binding var showOverlay: Bool
-    @Binding var entryMode: MeetCreationEntryMode?
-    let baseURL: URL
-    let token: String
-    let onCreate: (MeetInsertBody) async throws -> Void
-    let onCreateWithInvites: (MeetWithInvitesInsertBody) async throws -> Void
-    let onContentViolation: (ContentViolation) -> Void
+    @Binding var entryMode  : MeetCreationEntryMode?
+    let baseURL             : URL
+    let token               : String
+    let onCreate            : (MeetInsertBody) async throws -> Void
+    let onCreateWithInvites : (MeetWithInvitesInsertBody) async throws -> Void
+    let onContentViolation  : (ContentViolation) -> Void
 
     
     // MARK: State
-    @State private var isAnimating = false
-    @State private var isExploding = false
-    @State private var showConfetti = false
-    @State private var showCreateForm = false
-    @State private var showAiChat = false  // NEW
+    @State private var isAnimating      = false
+    @State private var isExploding      = false
+    @State private var showConfetti     = false
+    @State private var showCreateForm   = false
+    @State private var showAiChat       = false  // NEW
     @State private var isSoftDismissing = false
     
     // MARK: Body
@@ -71,16 +71,16 @@ struct MeetCreationUnifiedOverlay: View
                     // AI Chat interface
                     if showAiChat {
                         AiChatInterfaceView(
-                          entryMode: mode,
-                          baseURL: baseURL,
-                          token: token,
-                          onClose: { softDismiss() },
-                          onCreateMeet: { body in
-                              try await onCreate(body)                 // <-- exact same closure as manual
+                          entryMode     : mode,
+                          baseURL       : baseURL,
+                          token         : token,
+                          onClose       : { softDismiss() },
+                          onCreateMeet  : { body in
+                              try await onCreate(body)
                               await MainActor.run { explodeThenDismiss() }
                           },
                           onCreateWithInvites: { body in
-                              try await onCreateWithInvites(body)      // <-- exact same closure as manual
+                              try await onCreateWithInvites(body)
                               await MainActor.run { explodeThenDismiss() }
                           }
                         )
@@ -151,7 +151,8 @@ struct MeetCreationUnifiedOverlay: View
     }
     
     // MARK: ^^ HELPER FUNCTION
-    private func parseContentViolation(from error: Error) -> ContentViolation? {
+    private func parseContentViolation(from error: Error) -> ContentViolation?
+    {
         if let contentError = error as? ContentViolationError {
             return contentError.violation
         }
@@ -208,17 +209,18 @@ struct MeetCreationUnifiedOverlay: View
 // MARK: - form to ask if users actually want to create a meet
 struct CreateMeetConfirmationPopup: View
 {
-    let entryMode: MeetCreationEntryMode
-    let onConfirm: () -> Void
-    let onConfirmWithAI: () -> Void  // NEW
-    let onCancel: () -> Void
+    let entryMode       : MeetCreationEntryMode
+    let onConfirm       : () -> Void
+    let onConfirmWithAI : () -> Void
+    let onCancel        : () -> Void
     
     @State private var isAnimating = false
     @State private var locationName: String = "Loading location..."
     
     private var title: String {
         switch entryMode {
-        case .tapOnMap: return "Create Meet Here?"
+        // TBD if i use location here
+        case .tapOnMap(let location): return "Create Meet Here?"
         case .createButton: return "Create New Meet?"
         case .createWithGroup(let group, _): return "Create Meet with \(group.name)?"
         case .update: return "Update This Meet?"
@@ -258,9 +260,11 @@ struct CreateMeetConfirmationPopup: View
                 .minimumScaleFactor(0.9)
 
             // Buttons
-            VStack(spacing: 10) {
+            VStack(spacing: 10)
+            {
                 // AI Assistant Button
-                Button(action: onConfirmWithAI) {
+                Button(action: onConfirmWithAI)
+                {
                     HStack(spacing: 8) {
                         Image(systemName: "sparkles")
                             .font(.system(size: 14, weight: .semibold))
@@ -286,7 +290,8 @@ struct CreateMeetConfirmationPopup: View
                 }
                 
                 // Manual Entry Button
-                Button(action: onConfirm) {
+                Button(action: onConfirm)
+                {
                     Text("Manual Entry")
                         .font(.system(size: 14, weight: .medium))
                         .foregroundColor(AppPalette.Text.primary)
@@ -300,7 +305,8 @@ struct CreateMeetConfirmationPopup: View
                 }
                 
                 // Cancel Button
-                Button(action: onCancel) {
+                Button(action: onCancel)
+                {
                     Text("Cancel")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(AppPalette.Text.secondary)
@@ -325,17 +331,17 @@ struct CreateMeetConfirmationPopup: View
             withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
                 isAnimating = true
             }
-            loadLocationNameIfNeeded()
+            loadLocationNameIfExists()
         }
     }
     
-    private func loadLocationNameIfNeeded()
+    private func loadLocationNameIfExists()
     {
         guard case .tapOnMap(let location) = entryMode else { return }
         
         let clLocation = CLLocation(
-            latitude: location.Coordinate.latitude,
-            longitude: location.Coordinate.longitude
+            latitude    : location.Coordinate.latitude,
+            longitude   : location.Coordinate.longitude
         )
         
         CLGeocoder().reverseGeocodeLocation(clLocation) { placemarks, error in

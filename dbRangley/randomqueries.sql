@@ -79,10 +79,9 @@ WHERE user_id = 25;
 
 select 
 	 user_id
-	,display_name
-	,username
+	,display_name, username
 	,dttm_created_utc AT TIME ZONE 'America/Chicago'
-	,dob, cellphone 
+	,dob, cellphone
 from rangley.vw_users
 where user_id > 15 
 order by dttm_created_utc desc;

@@ -13,6 +13,8 @@ final class AddressSearchVM: NSObject, ObservableObject, MKLocalSearchCompleterD
 {
     @Published var query = "" { didSet { completer.queryFragment = query } }
     @Published var suggestions: [MKLocalSearchCompletion] = []
+    
+    //MKLocalSearchCompleter updates live as the query changes
     let completer = MKLocalSearchCompleter()
     private var searchTask: Task<MKMapItem?, Never>?
 
@@ -31,7 +33,9 @@ final class AddressSearchVM: NSObject, ObservableObject, MKLocalSearchCompleterD
         suggestions = completer.results
     }
     
-    func selectCompletion(_ completion: MKLocalSearchCompletion) async -> MKMapItem? {
+    //User types "Starb..." → shows list of Starbucks locations
+    func selectCompletion(_ completion: MKLocalSearchCompletion) async -> MKMapItem?
+    {
         searchTask?.cancel()
         
         searchTask = Task {
@@ -48,7 +52,7 @@ final class AddressSearchVM: NSObject, ObservableObject, MKLocalSearchCompleterD
 
 struct AddressSearchPicker: View
 {
-    var onPick: (LocationInfo) -> Void
+    var onPick  : (LocationInfo) -> Void
     var onCancel: () -> Void
 
     @StateObject private var vm = AddressSearchVM()
@@ -86,7 +90,8 @@ struct AddressSearchPicker: View
     }
     
     // MARK: - Search Section
-    private var searchSection: some View {
+    private var searchSection: some View
+    {
         VStack(alignment: .leading, spacing: 12) {
             Text("Search for a location")
                 .font(.system(size: 16))
@@ -137,7 +142,8 @@ struct AddressSearchPicker: View
     }
     
     // MARK: - Empty State
-    private var emptyStateView: some View {
+    private var emptyStateView: some View
+    {
         VStack(spacing: 16) {
             Image(systemName: "location.magnifyingglass")
                 .font(.system(size: 48))
@@ -159,7 +165,8 @@ struct AddressSearchPicker: View
     }
     
     // MARK: - Loading View
-    private var loadingView: some View {
+    private var loadingView: some View
+    {
         VStack(spacing: 16) {
             ProgressView()
                 .tint(AppPalette.Brand.neonPink)
@@ -173,7 +180,8 @@ struct AddressSearchPicker: View
     }
     
     // MARK: - Suggestions View
-    private var suggestionsView: some View {
+    private var suggestionsView: some View
+    {
         VStack(alignment: .leading, spacing: 16) {
             Text("Suggestions")
                 .font(.system(size: 16, weight: .semibold))
@@ -191,7 +199,8 @@ struct AddressSearchPicker: View
         }
     }
     
-    private func suggestionRow(_ suggestion: MKLocalSearchCompletion) -> some View {
+    private func suggestionRow(_ suggestion: MKLocalSearchCompletion) -> some View
+    {
         Button(action: {
             Task { await selectSuggestion(suggestion) }
         }) {
@@ -233,7 +242,8 @@ struct AddressSearchPicker: View
     }
     
     // MARK: - Selected Location View
-    private func selectedLocationView(_ item: MKMapItem) -> some View {
+    private func selectedLocationView(_ item: MKMapItem) -> some View
+    {
         VStack(alignment: .leading, spacing: 16) {
             Text("Selected Location")
                 .font(.system(size: 16, weight: .semibold))
@@ -291,7 +301,8 @@ struct AddressSearchPicker: View
     }
     
     // MARK: - Action Button
-    private var actionButton: some View {
+    private var actionButton: some View
+    {
         Button(action: {
             guard let item = selectedItem else { return }
             onPick(makeLocationInfo(from: item))
@@ -311,7 +322,8 @@ struct AddressSearchPicker: View
     }
     
     // MARK: - Helper Methods
-    private func selectSuggestion(_ suggestion: MKLocalSearchCompletion) async {
+    private func selectSuggestion(_ suggestion: MKLocalSearchCompletion) async
+    {
         isSearching = true
         if let item = await vm.selectCompletion(suggestion) {
             selectedItem = item
@@ -321,7 +333,8 @@ struct AddressSearchPicker: View
         isSearching = false
     }
     
-    private func formatAddress(_ placemark: MKPlacemark) -> String? {
+    private func formatAddress(_ placemark: MKPlacemark) -> String?
+    {
         var components: [String] = []
         
         if let number = placemark.subThoroughfare,
@@ -342,7 +355,8 @@ struct AddressSearchPicker: View
         return components.isEmpty ? nil : components.joined(separator: ", ")
     }
     
-    private func makeLocationInfo(from item: MKMapItem) -> LocationInfo {
+    private func makeLocationInfo(from item: MKMapItem) -> LocationInfo
+    {
         let p = item.placemark
         let c = p.coordinate
         
@@ -358,22 +372,22 @@ struct AddressSearchPicker: View
         }()
         
         return LocationInfo(
-            Coordinate: .init(c.latitude, c.longitude),
-            RegionCoordinate: .init(c.latitude, c.longitude),
-            RegionRadius: defaultRadius,
-            Name: p.name,
-            ThoroughFare: p.thoroughfare,
-            SubThoroughFare: p.subThoroughfare,
-            Locality: p.locality,
-            SubLocality: p.subLocality,
-            AdministrativeArea: p.administrativeArea,
+            Coordinate           : .init(c.latitude, c.longitude),
+            RegionCoordinate     : .init(c.latitude, c.longitude),
+            RegionRadius         : defaultRadius,
+            Name                 : p.name,
+            ThoroughFare         : p.thoroughfare,
+            SubThoroughFare      : p.subThoroughfare,
+            Locality             : p.locality,
+            SubLocality          : p.subLocality,
+            AdministrativeArea   : p.administrativeArea,
             SubAdministrativeArea: p.subAdministrativeArea,
-            PostalCode: p.postalCode,
-            Country: p.country,
-            IsoCountryCode: p.isoCountryCode,
-            TimeZone: nil,
-            InlandWater: nil,
-            Ocean: nil
+            PostalCode           : p.postalCode,
+            Country              : p.country,
+            IsoCountryCode       : p.isoCountryCode,
+            TimeZone             : nil,
+            InlandWater          : nil,
+            Ocean                : nil
         )
     }
 }

@@ -821,11 +821,11 @@ struct OverlaysView: View
 {
     @EnvironmentObject var inbox: InboxStore
     
-    @ObservedObject var mapData: MapDataStore
-    @ObservedObject var locationData: LocationDataStore
-    @ObservedObject var uiState: UIStateStore
-    @ObservedObject var authState: AuthStateStore
-    @ObservedObject var tutorialStore: TutorialStore
+    @ObservedObject var mapData         : MapDataStore
+    @ObservedObject var locationData    : LocationDataStore
+    @ObservedObject var uiState         : UIStateStore
+    @ObservedObject var authState       : AuthStateStore
+    @ObservedObject var tutorialStore   : TutorialStore
     
     let meetNS: Namespace.ID
     let authToken: String
