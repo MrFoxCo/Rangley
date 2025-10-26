@@ -9,14 +9,24 @@ import SwiftUI
 import MapKit
 import CoreLocation
 
+enum MeetCreationError: Error {
+    case noLocationAvailable
+    case geocodingFailed
+    case geocodingWLocationNameFailed(locationName: String)
+    case invalidDateRange
+    // add more cases as needed
+}
+
 struct AiChatInterfaceView: View
 {
+    @StateObject private var vm = AddressSearchVM()
+    
     //entry mode contains the meet location if entry mode is by onTap
     let entryMode           : MeetCreationEntryMode
     let baseURL             : URL
     let token               : String
     let onClose             : () -> Void
-    let onCreateMeet        : (MeetInsertBody) async throws -> Void
+    let onCreate            : (MeetInsertBody) async throws -> Void
     let onCreateWithInvites : (MeetWithInvitesInsertBody) async throws -> Void
     
     @State private var messageText            : String = ""
@@ -29,7 +39,13 @@ struct AiChatInterfaceView: View
     @State private var showLocationPicker     : Bool = false
     @State private var selectedLocation       : LocationInfo?
     @State private var locationName           : String = "Loading location..."
+    @State private var selectedItem           : MKMapItem?
+    @State private var isSearching            : Bool = false
     @FocusState private var isTextFieldFocused: Bool
+    
+
+
+    
     
     // Struct to hold the AI's proposed meet data
     struct ProposedMeet: Codable
@@ -102,7 +118,7 @@ struct AiChatInterfaceView: View
                                 message: message,
                                 proposedMeet: (message.role == "assistant" && index == chatHistory.count - 1) ? proposedMeet : nil,
                                 resolvedInvitees: (message.role == "assistant" && index == chatHistory.count - 1) ? resolvedInvitees : [],
-                                onCreateMeet: (message.role == "assistant" && index == chatHistory.count - 1 && proposedMeet != nil) ? {
+                                onCreate: (message.role == "assistant" && index == chatHistory.count - 1 && proposedMeet != nil) ? {
                                     Task {
                                         guard let meet = proposedMeet else { return }
                                         do {
@@ -222,10 +238,9 @@ struct AiChatInterfaceView: View
     private var welcomeMessageText: String
     {
         switch entryMode {
-        case .tapOnMap(let location):
-            
+        case .tapOnMap:
             // if there is location.name use location.address
-            return "I'll help you create a meet at \(location.Coordinate.latitude). Tell me about your event - what are you planning?"
+            return "I'll help you create a meet at \(locationName). Tell me about your event - what are you planning?"
         case .createButton:
             return "I'll help you create your meet. Tell me what kind of event you're planning!"
         case .createWithGroup(let group, _):
@@ -522,9 +537,73 @@ struct AiChatInterfaceView: View
             resolvedInvitees = resolved
         }
     }
+        
+    
+    private func geocodeLocationName(_ query: String) async -> MKMapItem?
+    {
+        let request = MKLocalSearch.Request(naturalLanguageQuery: query)
+        let search = MKLocalSearch(request: request)
+        if let response = try? await search.start(), let first = response.mapItems.first {
+            return first
+        }
+        return nil
+    }
+    
+    private func makeLocationInfo(from item: MKMapItem) -> LocationInfo
+    {
+        let p = item.placemark
+        let c = p.coordinate
+        
+        // Use a reasonable default radius based on placemark type
+        let defaultRadius: Double = {
+            if p.thoroughfare != nil {
+                return 500.0  // Street address - smaller radius
+            } else if p.locality != nil {
+                return 1000.0 // City/locality - medium radius
+            } else {
+                return 2000.0 // Larger area - bigger radius
+            }
+        }()
+        
+        return LocationInfo(
+            Coordinate           : .init(c.latitude, c.longitude),
+            RegionCoordinate     : .init(c.latitude, c.longitude),
+            RegionRadius         : defaultRadius,
+            Name                 : p.name,
+            ThoroughFare         : p.thoroughfare,
+            SubThoroughFare      : p.subThoroughfare,
+            Locality             : p.locality,
+            SubLocality          : p.subLocality,
+            AdministrativeArea   : p.administrativeArea,
+            SubAdministrativeArea: p.subAdministrativeArea,
+            PostalCode           : p.postalCode,
+            Country              : p.country,
+            IsoCountryCode       : p.isoCountryCode,
+            TimeZone             : nil,
+            InlandWater          : nil,
+            Ocean                : nil
+        )
+    }
     
     private func handleApproval(_ proposed: ProposedMeet) async throws
     {
+        
+        let locationInfo: LocationInfo
+
+        if let locationName = proposed.location_name {
+            if let mkItem = await geocodeLocationName(locationName) {
+                locationInfo = makeLocationInfo(from: mkItem)
+            } else if case .tapOnMap(let location) = entryMode {
+                locationInfo = location
+            } else {
+                throw MeetCreationError.noLocationAvailable
+            }
+        } else if case .tapOnMap(let location) = entryMode {
+            locationInfo = location
+        } else {
+            throw MeetCreationError.noLocationAvailable
+        }
+
         // 2) Parse dates and enforce end > start like the form logic does
         let startDate = dateFromISO(proposed.dttm_start_utc)
         var endDate   = dateFromISO(proposed.dttm_end_utc)
@@ -539,19 +618,12 @@ struct AiChatInterfaceView: View
             return t.isEmpty ? nil : t
         }()
 
-        // Build a LocationInfo so we can use the SAME builders the manual flow uses
-        let loc = LocationInfo(
-            Coordinate: Coordinate(finalLat, finalLon),
-            RegionCoordinate: Coordinate(finalRegLat, finalRegLon),
-            RegionRadius: finalRegRadius,
-            Name: proposed.location_name
-        )
 
         // 4) Create the exact same bodies the manual path uses
         if let invitees = proposed.invitees, !invitees.isEmpty, !resolvedInvitees.isEmpty {
             // With invites
             let body = MeetCreationService.buildMeetWithInvitesBody(
-                locationInfo        : loc,
+                locationInfo        : locationInfo,
                 name                : safeName,
                 startTime           : startDate,
                 endTime             : endDate,
@@ -565,7 +637,7 @@ struct AiChatInterfaceView: View
         } else {
             // No invites
             let body = MeetCreationService.buildMeetBody(
-                locationInfo    : loc,
+                locationInfo    : locationInfo,
                 name            : safeName,
                 startTime       : startDate,
                 endTime         : endDate,
@@ -573,7 +645,7 @@ struct AiChatInterfaceView: View
                 meetCategoryID  : proposed.meet_category_id,
                 maxCapacity     : -1
             )
-            try await onCreateMeet(body)
+            try await onCreate(body)
         }
     }
 
@@ -590,35 +662,6 @@ struct AiChatInterfaceView: View
                 content: "No problem! What would you like to change about the meet?"
             )
             chatHistory.append(assistantMessage)
-        }
-    }
-    
-    private func getLocationFromEntryMode() -> LocationInfo?
-    {
-        switch entryMode {
-        case .tapOnMap(let location):
-            // User tapped on map - we have the exact location
-            return location
-            
-        case .createButton, .createWithGroup:
-            // TODO: Need to determine location from AI's location suggestion
-            // For now, return nil - this will show "Could not determine location" error
-            // The AI needs to either:
-            // 1. Include coordinates in the response, OR
-            // 2. We need to geocode the location name/address the AI provides
-            return nil
-            
-        case .update(let meet):
-            // Updating existing meet - use its location
-            return LocationInfo(
-                Coordinate: .init(meet.latitude, meet.longitude),
-                RegionCoordinate: .init(meet.region_latitude, meet.region_longitude),
-                RegionRadius: meet.region_radius,
-                Name: meet.name,
-                ThoroughFare: nil, SubThoroughFare: nil, Locality: nil, SubLocality: nil,
-                AdministrativeArea: nil, SubAdministrativeArea: nil, PostalCode: nil,
-                Country: nil, IsoCountryCode: nil, TimeZone: nil, InlandWater: nil, Ocean: nil
-            )
         }
     }
     
@@ -686,10 +729,10 @@ struct AiChatInterfaceView: View
 // MARK: - Chat Bubble View
 struct ChatBubbleView: View
 {
-    let message: ClaudeModel.ChatMessage
-    var proposedMeet: AiChatInterfaceView.ProposedMeet? = nil
-    var resolvedInvitees: [ViewUsersModel] = []
-    var onCreateMeet: (() -> Void)? = nil
+    let message             : ClaudeModel.ChatMessage
+    var proposedMeet        : AiChatInterfaceView.ProposedMeet? = nil
+    var resolvedInvitees    : [ViewUsersModel] = []
+    var onCreate            : (() -> Void)? = nil
     
     private var isUser: Bool {
         message.role == "user"
@@ -731,9 +774,9 @@ struct ChatBubbleView: View
                 // Meet preview card (if proposed meet exists)
                 if let meet = proposedMeet {
                     MeetPreviewCard(
-                        proposedMeet: meet,
+                        proposedMeet    : meet,
                         resolvedInvitees: resolvedInvitees,
-                        onCreateMeet: onCreateMeet ?? {}
+                        onCreate        : onCreate ?? {}
                     )
                 }
             }
@@ -966,7 +1009,7 @@ struct MeetPreviewCard: View
 {
     let proposedMeet: AiChatInterfaceView.ProposedMeet
     let resolvedInvitees: [ViewUsersModel]
-    let onCreateMeet: () -> Void
+    let onCreate    : () -> Void
     
     var body: some View
     {
@@ -1002,7 +1045,7 @@ struct MeetPreviewCard: View
             }
             
             // Create button - BIG AND OBVIOUS
-            Button(action: onCreateMeet) {
+            Button(action: onCreate) {
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 16, weight: .bold))

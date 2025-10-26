@@ -87,7 +87,25 @@ where user_id > 15
 order by dttm_created_utc desc;
 
 
+/*
+ 
+ I'll help you create this movie meet! Since
 
+you've given me flexibility on the theater and
+
+time, I'll set it for a typical evening showtime at
+
+7:00 PM local time (which converts to UTC).
+
+The movie runtime is approximately 2 hours.
+ 
+ * */
 select * from rangley.tb_content_violations;
 select * from rangley.td_violation_categories;
 
+
+select * from rangley.vw_up_to_date_meets;
+
+select * from rangley.vw_meet_ids where meet_id = 426;
+select * from rangley.vw_meets where meet_id = 426;
+select * from rangley.vw_meet_coordinates where meet_coordinate_id = 440;

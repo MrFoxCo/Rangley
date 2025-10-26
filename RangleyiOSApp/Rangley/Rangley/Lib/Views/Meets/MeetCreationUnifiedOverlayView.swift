@@ -75,14 +75,24 @@ struct MeetCreationUnifiedOverlay: View
                           baseURL       : baseURL,
                           token         : token,
                           onClose       : { softDismiss() },
-                          onCreateMeet  : { body in
-                              try await onCreate(body)
-                              await MainActor.run { explodeThenDismiss() }
+                          onCreate: { body in
+                              do {
+                                  try await onCreate(body)
+                                  await MainActor.run { explodeThenDismiss() }
+                              } catch {
+                                  if let v = parseContentViolation(from: error) { await MainActor.run { onContentViolation(v) } }
+                                  throw error
+                              }
                           },
                           onCreateWithInvites: { body in
-                              try await onCreateWithInvites(body)
-                              await MainActor.run { explodeThenDismiss() }
-                          }
+                              do {
+                                  try await onCreateWithInvites(body)
+                                  await MainActor.run { explodeThenDismiss() }
+                              } catch {
+                                  if let v = parseContentViolation(from: error) { await MainActor.run { onContentViolation(v) } }
+                                  throw error
+                              }
+                          },
                         )
                         .allowsHitTesting(!isExploding)
                         .scaleEffect(isExploding ? 0.6 : (isSoftDismissing ? 0.95 : 1.0))

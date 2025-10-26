@@ -759,7 +759,18 @@ struct AuthAPI
         // Handle success responses (200) - may contain validation failures
         if (200..<300).contains(http.statusCode) {
             do {
-                return try isoDecoder.decode(MeetInsertResponse.self, from: data)
+                let response = try isoDecoder.decode(MeetInsertResponse.self, from: data)
+                        
+                        #if DEBUG
+                        print("=== Meet Creation Success ===")
+
+                        print("Validation Failed: \(response.validation_failed)")
+                        if let reason = response.validation_reason {
+                            print("Validation Reason: \(reason)")
+                        }
+                        #endif
+                        
+                        return response
             } catch {
                 #if DEBUG
                 print("=== Decode Error in createMeet ===")
