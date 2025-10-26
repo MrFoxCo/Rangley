@@ -14,6 +14,7 @@ struct AiChatInterfaceView: View
     let token: String
     let onClose: () -> Void
     let onCreateMeet: (MeetInsertBody) async throws -> Void
+    let onCreateWithInvites: ([ViewUsersModel], MeetInsertBody) async throws -> Void
     
     @State private var messageText: String = ""
     @State private var chatHistory: [ClaudeModel.ChatMessage] = []
@@ -21,6 +22,7 @@ struct AiChatInterfaceView: View
     @State private var errorMessage: String?
     @State private var showConfirmation: Bool = false
     @State private var proposedMeet: ProposedMeet?
+    @State private var resolvedInvitees: [ViewUsersModel] = []
     @FocusState private var isTextFieldFocused: Bool
     
     // Struct to hold the AI's proposed meet data
@@ -31,7 +33,9 @@ struct AiChatInterfaceView: View
         let dttm_end_utc: String
         let description: String?
         let meet_category_id: Int16?
-        let max_capacity: Int32?
+        let invitees: [String]?  // Raw usernames (without @)
+        let assumptions: [String]?  // AI's assumptions about the meet
+        let confidence: Double?  // AI's confidence level (0.0-1.0)
     }
     
     var body: some View
@@ -47,6 +51,7 @@ struct AiChatInterfaceView: View
                 MeetConfirmationView(
                     proposedMeet: proposed,
                     entryMode: entryMode,
+                    resolvedInvitees: resolvedInvitees,
                     onApprove: { try await handleApproval(proposed) },
                     onEdit: { handleEditRequest() }
                 )
@@ -75,8 +80,22 @@ struct AiChatInterfaceView: View
                         
                         // Chat history
                         ForEach(Array(chatHistory.enumerated()), id: \.offset) { index, message in
-                            ChatBubbleView(message: message)
-                                .id(index)
+                            ChatBubbleView(
+                                message: message,
+                                proposedMeet: (message.role == "assistant" && index == chatHistory.count - 1) ? proposedMeet : nil,
+                                resolvedInvitees: (message.role == "assistant" && index == chatHistory.count - 1) ? resolvedInvitees : [],
+                                onCreateMeet: (message.role == "assistant" && index == chatHistory.count - 1 && proposedMeet != nil) ? {
+                                    Task {
+                                        guard let meet = proposedMeet else { return }
+                                        do {
+                                            try await handleApproval(meet)
+                                        } catch {
+                                            errorMessage = "Failed to create meet. Please try again."
+                                        }
+                                    }
+                                } : nil
+                            )
+                            .id(index)
                         }
                         
                         // Loading indicator
@@ -92,7 +111,7 @@ struct AiChatInterfaceView: View
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
                 }
-                .onChange(of: chatHistory.count) { _ in
+                .onChange(of: chatHistory.count) { oldValue, newValue in
                     withAnimation {
                         proxy.scrollTo(chatHistory.count - 1, anchor: .bottom)
                     }
@@ -317,8 +336,31 @@ struct AiChatInterfaceView: View
                 await MainActor.run {
                     // Try to parse as JSON first
                     if let proposed = tryParseProposedMeet(from: response) {
-                        proposedMeet = proposed
-                        showConfirmation = true
+                        if proposed.ready {
+                            // Show full confirmation overlay
+                            proposedMeet = proposed
+                            showConfirmation = true
+                            
+                            // Resolve invitees in the background
+                            Task {
+                                await resolveInvitees(from: proposed.invitees)
+                            }
+                        } else {
+                            // Show preview in chat with create button
+                            let assistantMessage = ClaudeModel.ChatMessage(
+                                role: "assistant",
+                                content: extractTextBeforeJSON(from: response)
+                            )
+                            chatHistory.append(assistantMessage)
+                            
+                            // Store the proposed meet for this message
+                            proposedMeet = proposed
+                            
+                            // Resolve invitees in the background
+                            Task {
+                                await resolveInvitees(from: proposed.invitees)
+                            }
+                        }
                         isLoading = false
                     } else {
                         // Regular chat message
@@ -337,6 +379,15 @@ struct AiChatInterfaceView: View
         }
     }
     
+    private func extractTextBeforeJSON(from response: String) -> String {
+        // Extract any text that appears before the JSON block
+        if let jsonStart = response.range(of: "```json") ?? response.range(of: "{") {
+            let textBefore = String(response[..<jsonStart.lowerBound])
+            return textBefore.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return ""
+    }
+    
     private func tryParseProposedMeet(from response: String) -> ProposedMeet? {
         // Try to extract JSON from response (in case Claude wraps it)
         let cleaned = response
@@ -349,9 +400,47 @@ struct AiChatInterfaceView: View
         
         do {
             let proposed = try JSONDecoder().decode(ProposedMeet.self, from: data)
-            return proposed.ready ? proposed : nil
+            return proposed
         } catch {
             return nil
+        }
+    }
+    
+    private func resolveInvitees(from usernames: [String]?) async {
+        guard let usernames = usernames, !usernames.isEmpty else {
+            await MainActor.run { resolvedInvitees = [] }
+            return
+        }
+        
+        // Search for each username in the user's friends
+        var resolved: [ViewUsersModel] = []
+        
+        for username in usernames {
+            do {
+                // Use the search endpoint to find matching users
+                let results = try await AuthAPI.searchUsers(
+                    baseURL: baseURL,
+                    token: token,
+                    usernames: [username]
+                )
+                
+                // Find exact or close matches
+                if let match = results.first(where: { user in
+                    user.username.lowercased() == username.lowercased() ||
+                    user.display_name.lowercased() == username.lowercased()
+                }) {
+                    resolved.append(match)
+                } else if let firstResult = results.first {
+                    // If no exact match, take the first result (best guess)
+                    resolved.append(firstResult)
+                }
+            } catch {
+                print("Failed to resolve username: \(username)")
+            }
+        }
+        
+        await MainActor.run {
+            resolvedInvitees = resolved
         }
     }
     
@@ -372,23 +461,42 @@ struct AiChatInterfaceView: View
             return
         }
         
-        // Create MeetInsertBody
-        let body = MeetInsertBody(
-            latitude: location.Coordinate.latitude,
-            longitude: location.Coordinate.longitude,
-            region_latitude: location.RegionCoordinate.latitude,
-            region_longitude: location.RegionCoordinate.longitude,
-            region_radius: location.RegionRadius,
-            name: proposed.name,
-            dttm_start_utc: startDate,
-            dttm_end_utc: endDate,
-            description: proposed.description,
-            meet_category_id: proposed.meet_category_id,
-            max_capacity: proposed.max_capacity
-        )
-        
-        // Call the create meet handler
-        try await onCreateMeet(body)
+        // Check if we have invitees
+        if !resolvedInvitees.isEmpty {
+            // Create meet with invites
+            let body = MeetInsertBody(
+                latitude: location.Coordinate.latitude,
+                longitude: location.Coordinate.longitude,
+                region_latitude: location.RegionCoordinate.latitude,
+                region_longitude: location.RegionCoordinate.longitude,
+                region_radius: location.RegionRadius,
+                name: proposed.name,
+                dttm_start_utc: startDate,
+                dttm_end_utc: endDate,
+                description: proposed.description,
+                meet_category_id: proposed.meet_category_id,
+                max_capacity: nil
+            )
+
+            try await onCreateWithInvites(resolvedInvitees, body)
+        } else {
+            // Create meet without invites
+            let body = MeetInsertBody(
+                latitude: location.Coordinate.latitude,
+                longitude: location.Coordinate.longitude,
+                region_latitude: location.RegionCoordinate.latitude,
+                region_longitude: location.RegionCoordinate.longitude,
+                region_radius: location.RegionRadius,
+                name: proposed.name,
+                dttm_start_utc: startDate,
+                dttm_end_utc: endDate,
+                description: proposed.description,
+                meet_category_id: proposed.meet_category_id,
+                max_capacity: nil
+            )
+            
+            try await onCreateMeet(body)
+        }
     }
     
     private func handleEditRequest() {
@@ -416,9 +524,10 @@ struct AiChatInterfaceView: View
             // Would need default location or error
             return nil
         case .update(let meet):
+            // FIX THIS PART - meet is ViewMeetsModel, need to check what properties it has
             return LocationInfo(
-                Coordinate: meet.coordinate,
-                RegionCoordinate: meet.region_coordinate,
+                Coordinate: .init(meet.latitude, meet.longitude),
+                RegionCoordinate: .init(meet.region_latitude, meet.region_longitude),
                 RegionRadius: meet.region_radius,
                 Name: meet.name,
                 ThoroughFare: nil, SubThoroughFare: nil, Locality: nil, SubLocality: nil,
@@ -433,6 +542,9 @@ struct AiChatInterfaceView: View
 struct ChatBubbleView: View
 {
     let message: ClaudeModel.ChatMessage
+    var proposedMeet: AiChatInterfaceView.ProposedMeet? = nil
+    var resolvedInvitees: [ViewUsersModel] = []
+    var onCreateMeet: (() -> Void)? = nil
     
     private var isUser: Bool {
         message.role == "user"
@@ -453,20 +565,33 @@ struct ChatBubbleView: View
                     )
             }
             
-            // Message bubble
-            Text(message.content)
-                .font(.system(size: 14, weight: .regular))
-                .foregroundColor(isUser ? .white : AppPalette.Text.primary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(isUser
-                            ? AppPalette.Brand.neonPink
-                            : Color.white.opacity(0.08)
+            VStack(alignment: isUser ? .trailing : .leading, spacing: 8) {
+                // Regular message bubble
+                if !message.content.isEmpty {
+                    Text(cleanMarkdown(message.content))
+                        .font(.system(size: 14, weight: .regular))
+                        .foregroundColor(isUser ? .white : AppPalette.Text.primary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(isUser
+                                    ? AppPalette.Brand.neonPink
+                                    : Color.white.opacity(0.08)
+                                )
                         )
-                )
-                .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
+                        .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
+                }
+                
+                // Meet preview card (if proposed meet exists)
+                if let meet = proposedMeet {
+                    MeetPreviewCard(
+                        proposedMeet: meet,
+                        resolvedInvitees: resolvedInvitees,
+                        onCreateMeet: onCreateMeet ?? {}
+                    )
+                }
+            }
             
             if isUser {
                 // User avatar placeholder
@@ -482,6 +607,11 @@ struct ChatBubbleView: View
         }
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
     }
+    
+    private func cleanMarkdown(_ text: String) -> String {
+        // Remove ** markdown formatting
+        return text.replacingOccurrences(of: "**", with: "")
+    }
 }
 
 // MARK: - Meet Confirmation View
@@ -489,6 +619,7 @@ struct MeetConfirmationView: View
 {
     let proposedMeet: AiChatInterfaceView.ProposedMeet
     let entryMode: MeetCreationEntryMode
+    let resolvedInvitees: [ViewUsersModel]
     let onApprove: () async throws -> Void
     let onEdit: () -> Void
     
@@ -528,8 +659,8 @@ struct MeetConfirmationView: View
                     detailRow(icon: "tag", label: "Category", value: categoryName(for: categoryId))
                 }
                 
-                if let capacity = proposedMeet.max_capacity {
-                    detailRow(icon: "person.3", label: "Max Capacity", value: "\(capacity) people")
+                if !resolvedInvitees.isEmpty {
+                    inviteesRow()
                 }
             }
             .padding(16)
@@ -595,7 +726,8 @@ struct MeetConfirmationView: View
         .padding(.horizontal, 20)
     }
     
-    private func detailRow(icon: String, label: String, value: String) -> some View {
+    private func detailRow(icon: String, label: String, value: String) -> some View
+    {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: icon)
                 .font(.system(size: 16))
@@ -617,7 +749,34 @@ struct MeetConfirmationView: View
         }
     }
     
-    private func formatDate(_ isoString: String) -> String {
+    private func inviteesRow() -> some View
+    {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "person.2.fill")
+                .font(.system(size: 16))
+                .foregroundColor(AppPalette.Brand.neonPink)
+                .frame(width: 24)
+            
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Inviting")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(AppPalette.Text.secondary)
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(resolvedInvitees) { user in
+                        Text("@\(user.username)")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(AppPalette.Brand.spearmintGreen)
+                    }
+                }
+            }
+            
+            Spacer()
+        }
+    }
+    
+    private func formatDate(_ isoString: String) -> String
+    {
         let iso8601Formatter = ISO8601DateFormatter()
         iso8601Formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         
@@ -626,21 +785,24 @@ struct MeetConfirmationView: View
         }
         
         let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
+        formatter.dateFormat = "EEEE, MMM d 'at' h:mm a"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone.current
         return formatter.string(from: date)
     }
     
-    private func categoryName(for id: Int16) -> String {
+    private func categoryName(for id: Int16) -> String
+    {
         let categories = [
-            1: "Social", 2: "Sports", 3: "Food & Drink", 4: "Arts",
-            5: "Music", 6: "Outdoors", 7: "Gaming", 8: "Study",
-            9: "Business", 10: "Other"
+            1: "Activiy", 2: "Sports", 3: "Outdoors", 4: "Social",
+            5: "Music", 6: "Food", 7: "Planned Trip", 8: "Spontaneous",
+            9: "Custom"
         ]
         return categories[Int(id)] ?? "Other"
     }
     
-    private func approveAndCreate() async {
+    private func approveAndCreate() async
+    {
         guard !isSubmitting else { return }
         isSubmitting = true
         errorMessage = nil
@@ -651,5 +813,155 @@ struct MeetConfirmationView: View
             errorMessage = "Failed to create meet. Please try again."
             isSubmitting = false
         }
+    }
+}
+
+// MARK: - Meet Preview Card (for inline chat previews)
+struct MeetPreviewCard: View
+{
+    let proposedMeet: AiChatInterfaceView.ProposedMeet
+    let resolvedInvitees: [ViewUsersModel]
+    let onCreateMeet: () -> Void
+    
+    var body: some View
+    {
+        VStack(alignment: .leading, spacing: 12) {
+            // Header
+            HStack(spacing: 8) {
+                Image(systemName: "doc.text.fill")
+                    .font(.system(size: 14))
+                    .foregroundColor(AppPalette.Brand.neonPink)
+                
+                Text("Meet Preview")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(AppPalette.Text.secondary)
+            }
+            
+            // Meet details
+            VStack(spacing: 10) {
+                previewRow(icon: "calendar", label: "Event", value: proposedMeet.name)
+                previewRow(icon: "clock", label: "Starts", value: formatDate(proposedMeet.dttm_start_utc))
+                previewRow(icon: "clock.fill", label: "Ends", value: formatDate(proposedMeet.dttm_end_utc))
+                
+                if let description = proposedMeet.description, !description.isEmpty {
+                    previewRow(icon: "text.alignleft", label: "Description", value: description)
+                }
+                
+                if let categoryId = proposedMeet.meet_category_id {
+                    previewRow(icon: "tag", label: "Category", value: categoryName(for: categoryId))
+                }
+                
+                if !resolvedInvitees.isEmpty {
+                    inviteesPreviewRow()
+                }
+            }
+            
+            // Create button
+            Button(action: onCreateMeet) {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 14))
+                    Text("Create This Meet")
+                        .font(.system(size: 14, weight: .semibold))
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(AppPalette.Brand.neonPink)
+                )
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.white.opacity(0.05))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(AppPalette.Brand.neonPink.opacity(0.3), lineWidth: 1)
+                )
+        )
+    }
+    
+    private func previewRow(icon: String, label: String, value: String) -> some View
+    {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 12))
+                .foregroundColor(AppPalette.Brand.neonPink.opacity(0.8))
+                .frame(width: 20)
+            
+            VStack(alignment: .leading, spacing: 1) {
+                Text(label)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(AppPalette.Text.secondary)
+                
+                Text(value)
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundColor(AppPalette.Text.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            
+            Spacer()
+        }
+    }
+    
+    private func inviteesPreviewRow() -> some View
+    {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "person.2.fill")
+                .font(.system(size: 12))
+                .foregroundColor(AppPalette.Brand.neonPink.opacity(0.8))
+                .frame(width: 20)
+            
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Inviting")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(AppPalette.Text.secondary)
+                
+                HStack(spacing: 6) {
+                    ForEach(resolvedInvitees.prefix(3)) { user in
+                        Text("@\(user.username)")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(AppPalette.Brand.spearmintGreen)
+                    }
+                    
+                    if resolvedInvitees.count > 3 {
+                        Text("+\(resolvedInvitees.count - 3)")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(AppPalette.Text.secondary)
+                    }
+                }
+            }
+            
+            Spacer()
+        }
+    }
+    
+    private func formatDate(_ isoString: String) -> String
+    {
+        let iso8601Formatter = ISO8601DateFormatter()
+        iso8601Formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        
+        guard let date = iso8601Formatter.date(from: isoString) else {
+            return isoString
+        }
+        
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE, MMM d 'at' h:mm a"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone.current
+        return formatter.string(from: date)
+    }
+    
+    private func categoryName(for id: Int16) -> String
+    {
+        let categories = [
+            1: "Activiy", 2: "Sports", 3: "Outdoors", 4: "Social",
+            5: "Music", 6: "Food", 7: "Planned Trip", 8: "Spontaneous",
+            9: "Custom"
+        ]
+        return categories[Int(id)] ?? "Other"
     }
 }

@@ -75,6 +75,9 @@ struct MeetCreationUnifiedOverlay: View
                             onClose: { softDismiss() },
                             onCreateMeet: { body in
                                 try await handleCreateMeet(body: body, invites: [])
+                            },
+                            onCreateWithInvites: { invitees, body in
+                                try await handleCreateMeet(body: body, invites: invitees)
                             }
                         )
                         .allowsHitTesting(!isExploding)

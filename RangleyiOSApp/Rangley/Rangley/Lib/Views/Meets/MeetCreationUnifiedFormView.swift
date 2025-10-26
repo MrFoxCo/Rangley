@@ -1466,7 +1466,8 @@ final class MeetFormUnifiedModel: ObservableObject
         return nil
     }
     
-    func makeCreateBody() -> MeetInsertBody? {
+    func makeCreateBody() -> MeetInsertBody?
+    {
         guard meetIDUUID == nil else { return nil } // Only for create mode
         guard let lat = latitude, let lon = longitude,
               let rLat = regionLatitude, let rLon = regionLongitude,
@@ -1492,7 +1493,8 @@ final class MeetFormUnifiedModel: ObservableObject
         )
     }
     
-    func makeCreateBodyWithInvites(invitedUserUUIDs: [UUID]) -> MeetWithInvitesInsertBody? {
+    func makeCreateBodyWithInvites(invitedUserUUIDs: [UUID]) -> MeetWithInvitesInsertBody?
+    {
         guard meetIDUUID == nil else { return nil } // Only for create mode
         guard let lat = latitude, let lon = longitude,
               let rLat = regionLatitude, let rLon = regionLongitude,
@@ -1520,7 +1522,8 @@ final class MeetFormUnifiedModel: ObservableObject
         )
     }
     
-    func makeUpdateBody() -> UpdatedMeetInsertBody? {
+    func makeUpdateBody() -> UpdatedMeetInsertBody?
+    {
         guard let id = meetIDUUID else { return nil } // Only for update mode
         
         // Build diffs
