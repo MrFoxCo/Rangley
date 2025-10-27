@@ -1960,13 +1960,13 @@ enum Claude
     
     struct ChatbotRequest: Content
     {
-        let message         : String
-        let history         : [ChatMessage]?
-        let userTimezone    : String?
-        let currentTimeISO  : String?
-        let userLocation    : String?
-        let userDisplayName : String?
-        let tapLocation     : TapLocationContext?
+        let message             : String
+        let history             : [ChatMessage]?
+        let currentTimeNatural  : String?  // "Monday, October 27, 2025 at 10:41 AM"
+        let userTimezone        : String?  // "America/Chicago"
+        let userLocation        : String?
+        let userDisplayName     : String?
+        let tapLocation         : TapLocationContext?
     }
 
     struct TapLocationContext: Content

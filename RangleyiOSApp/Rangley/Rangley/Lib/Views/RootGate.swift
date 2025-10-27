@@ -13,6 +13,7 @@ struct RootGate: View
     @Environment(\.scenePhase) private var scenePhase
     
     @State private var versionStatus: VersionStatus = .checking
+    @State private var isCheckingVersion = true
     
     enum VersionStatus {
         case checking
@@ -41,18 +42,36 @@ struct RootGate: View
     {
         switch versionStatus {
         case .updateRequired(let current, let latest):
-            // Block all app functionality - show only update screen
             UpdateRequiredView(currentVersion: current, latestVersion: latest)
         case .checking:
-            // Show loading while checking version
             ZStack {
                 AppPalette.Brand.japDarkerPurple.ignoresSafeArea()
+                
                 VStack {
-                    ProgressView()
-                    Text("Checking app version...")
-                        .foregroundStyle(.white)
+                    Spacer()
+                    
+                    VStack(spacing: -8) { // negative spacing pulls them closer
+                        Image("RangleySticker")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 140, height: 140)
+                        
+                        Text("Rangley")
+                            .font(.system(size: 36, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
+
+                    
+                    Spacer()
+                    
+                    Image("MrFoxOrange")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 540, height:180)
+                        .padding(.bottom, 40)
                 }
             }
+            .transition(.opacity)
         case .supported:
             // Normal app flow
             if auth.isCheckingAuth {
@@ -67,10 +86,15 @@ struct RootGate: View
                             .padding(.top, 8)
                     }
                 }
+                .transition(.opacity)
             } else if auth.isAuthenticated {
-                PublicMapView().environmentObject(auth)
+                PublicMapView()
+                    .environmentObject(auth)
+                    .transition(.opacity)
             } else {
-                StartScreenView().environmentObject(auth)
+                StartScreenView()
+                    .environmentObject(auth)
+                    .transition(.opacity)
             }
         case .networkError(_):
             NetworkErrorView {
@@ -78,40 +102,48 @@ struct RootGate: View
                     await checkAppVersion()
                 }
             }
+            .transition(.opacity)
         case .serverError(let message):
             ServerErrorView(errorMessage: message) {
                 Task {
                     await checkAppVersion()
                 }
             }
+            .transition(.opacity)
         }
     }
     
     private func checkAppVersion() async
     {
         guard let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String else {
-            versionStatus = .networkError("Could not read app version")  // Changed from .error
+            versionStatus = .networkError("Could not read app version")
             return
         }
         
-        let baseURL = URL(string: "https://api.mrfoxco.com")! // Your API URL here
+        let baseURL = URL(string: "https://api.mrfoxco.com")!
         let versionInt = versionToInt(version)
         
         do {
             let response = try await AuthAPI.viewAppVersion(baseURL: baseURL, appVersion: versionInt)
             
-            if response.is_supported {
-                versionStatus = .supported
-            } else {
-                let latest = intToVersion(response.latest_version)
-                versionStatus = .updateRequired(current: version, latest: latest)
+            // Add a small delay to show the splash screen gracefully
+            try? await Task.sleep(for: .milliseconds(500))
+            
+            withAnimation(.easeInOut(duration: 0.5)) {
+                if response.is_supported {
+                    versionStatus = .supported
+                } else {
+                    let latest = intToVersion(response.latest_version)
+                    versionStatus = .updateRequired(current: version, latest: latest)
+                }
             }
         } catch {
-            // Categorize the error
-            if error.localizedDescription.contains("network") || error.localizedDescription.contains("connection") {
-                versionStatus = .networkError("Please check your internet connection and try again.")
-            } else {
-                versionStatus = .serverError("Our servers are temporarily unavailable. Please try again later.")
+            withAnimation(.easeInOut(duration: 0.3)) {
+                if error.localizedDescription.contains("network") || error.localizedDescription.contains("connection") {
+                    versionStatus = .networkError("Please check your internet connection and try again.")
+                } else {
+                    versionStatus = .serverError("Our servers are temporarily unavailable. Please try again later.")
+                }
             }
         }
     }

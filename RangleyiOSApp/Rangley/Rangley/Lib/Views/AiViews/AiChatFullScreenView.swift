@@ -9,7 +9,8 @@ import SwiftUI
 import MapKit
 import CoreLocation
 
-enum MeetCreationError: Error {
+enum MeetCreationError: Error
+{
     case noLocationAvailable
     case geocodingFailed
     case geocodingWLocationNameFailed(locationName: String)
@@ -45,6 +46,7 @@ struct AiChatFullScreenView: View
     @State private var isSearching            : Bool = false
     @State private var isIncognito            : Bool = false
     @State private var isSubmitting           : Bool = false
+    @State private var selectedGreeting: String = ""
     @FocusState private var isTextFieldFocused: Bool
     
     
@@ -92,11 +94,7 @@ struct AiChatFullScreenView: View
                     
                     // Title
                     VStack(spacing: 2) {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 16))
-                            .foregroundColor(AppPalette.Brand.neonPink)
-                        
-                        Text("AI Assistant")
+                        Text("Claude")
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundColor(AppPalette.Text.primary)
                     }
@@ -159,6 +157,7 @@ struct AiChatFullScreenView: View
                             }
                         }
                         .padding(.horizontal, 20)
+                        .padding(.top, 16)
                         .padding(.bottom, 20)
                     }
                     .onChange(of: chatHistory.count) { oldValue, newValue in
@@ -175,79 +174,95 @@ struct AiChatFullScreenView: View
         .onAppear {
             loadLocationNameIfExists()
             isTextFieldFocused = true
+            
+            // Set greeting once
+            let userName = authState.currentUser?.display_name ?? authState.currentUser?.username ?? "there"
+            let greetings = [
+                "Hey \(userName), what's the plan?",
+                "Where are we meeting, \(userName)?",
+                "Let's pick a time and place, \(userName).",
+                "Need a spot or a time, \(userName)?",
+                "Who's in? Where to?",
+                "Ready to make it happen, \(userName)?"
+            ]
+            selectedGreeting = greetings.randomElement() ?? "Hey \(userName), what's the plan?"
         }
     }
     
     // MARK: - Welcome Message
     private var welcomeMessageView: some View
     {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Image(systemName: "wand.and.stars")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(AppPalette.Brand.neonPink)
-                
-                Text("Welcome!")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundColor(AppPalette.Text.primary)
-            }
+        VStack(spacing: 16) {
+            Image("RangleyBubble")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 150, height: 150)
+                .foregroundColor(AppPalette.Brand.neonPink)
             
-            Text(welcomeMessageText)
-                .font(.system(size: 14, weight: .regular))
-                .foregroundColor(AppPalette.Text.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            Text(selectedGreeting)  // Use the stored greeting instead of randomElement()
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundColor(AppPalette.Text.primary)
+                .multilineTextAlignment(.center)
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.white.opacity(0.05))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(AppPalette.Brand.neonPink.opacity(0.2), lineWidth: 1)
-                )
-        )
     }
     
     private var welcomeMessageText: String
     {
         switch entryMode {
         case .tapOnMap:
-            return "I'll help you create a meet at \(locationName). Tell me about your event - what are you planning?"
+            return "Planning something at \(locationName)? What are we doing?"
+            
         case .createButton:
-            return "I'll help you create your meet. Tell me what kind of event you're planning!"
+            return "What kind of meet are we setting up?"
+            
         case .createWithGroup(let group, _):
-            return "I'll help you create a meet with \(group.name). What kind of event do you want to plan?"
+            return "Meet with \(group.name) — what’s the plan?"
+            
         case .update:
-            return "I'll help you update this meet. What changes would you like to make?"
+            return "What do you want to change?"
         }
     }
     
     // MARK: - Loading Indicator
     private var loadingIndicatorView: some View
     {
-        HStack(spacing: 8) {
-            ForEach(0..<3) { index in
-                Circle()
-                    .fill(AppPalette.Brand.neonPink)
-                    .frame(width: 8, height: 8)
-                    .opacity(0.6)
-                    .scaleEffect(isLoading ? 1.0 : 0.5)
-                    .animation(
-                        Animation.easeInOut(duration: 0.6)
-                            .repeatForever()
-                            .delay(Double(index) * 0.2),
-                        value: isLoading
-                    )
+        HStack(spacing: 12) {
+            // AI avatar
+            Circle()
+                .fill(AppPalette.Brand.neonPink.opacity(0.2))
+                .frame(width: 28, height: 28)
+                .overlay(
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 12))
+                        .foregroundColor(AppPalette.Brand.neonPink)
+                )
+            
+            // Typing indicator bubble
+            HStack(spacing: 4) {
+                ForEach(0..<3) { index in
+                    Circle()
+                        .fill(AppPalette.Text.secondary)
+                        .frame(width: 8, height: 8)
+                        .opacity(0.5)
+                        .animation(
+                            Animation.easeInOut(duration: 0.6)
+                                .repeatForever()
+                                .delay(Double(index) * 0.2),
+                            value: isLoading
+                        )
+                        .scaleEffect(isLoading ? 1.2 : 0.8)
+                }
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color.white.opacity(0.08))
+            )
+            
+            Spacer()
         }
-        .padding(.vertical, 12)
-        .padding(.horizontal, 16)
-        .background(
-            RoundedRectangle(cornerRadius: 18)
-                .fill(Color.white.opacity(0.08))
-        )
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, 8)
     }
     
     // MARK: - Error Message
@@ -390,14 +405,18 @@ struct AiChatFullScreenView: View
         
         // Call API
         Task {
-            // SNAPSHOT CONTEXT (only on first message)
-            let shouldSendContext = chatHistory.count == 1
+            // ALWAYS SEND CONTEXT - REMOVE THE CONDITIONAL
+            let currentTimeNatural: String = {
+                let formatter = DateFormatter()
+                formatter.dateFormat = "EEEE, MMMM d, yyyy 'at' h:mm a"
+                formatter.timeZone = TimeZone.current
+                return formatter.string(from: Date())
+            }()
             
-            let userTimezone = shouldSendContext ? TimeZone.current.identifier : nil
-            let currentTimeISO = shouldSendContext ? ISO8601DateFormatter().string(from: Date()) : nil
-            let userDisplayName = shouldSendContext ? authState.currentUser?.display_name : nil
-            let userLocation = shouldSendContext ? await resolveUserLocationString() : nil
-            let tapLocation = shouldSendContext ? extractTapLocation() : nil
+            let userTimezone = TimeZone.current.identifier
+            let userDisplayName = authState.currentUser?.display_name
+            let userLocation = await resolveUserLocationString()
+            let tapLocation = extractTapLocation()
             
             do {
                 let response = try await AuthAPI.postChatBot(
@@ -405,39 +424,31 @@ struct AiChatFullScreenView: View
                     token: token,
                     message: trimmedMessage,
                     history: Array(chatHistory.dropLast()),
-                    userTimezone: userTimezone,
-                    currentTimeISO: currentTimeISO,
-                    userLocation: userLocation,
-                    userDisplayName: userDisplayName,
-                    tapLocation: tapLocation
+                    currentTimeNatural: currentTimeNatural,  // ALWAYS send
+                    userTimezone: userTimezone,              // ALWAYS send
+                    userLocation: userLocation,              // ALWAYS send
+                    userDisplayName: userDisplayName,        // ALWAYS send
+                    tapLocation: tapLocation                 // ALWAYS send
                 )
                 
                 await MainActor.run {
                     // Try to parse as JSON first
                     if let proposed = tryParseProposedMeet(from: response) {
-                        // Extract the natural language text BEFORE the JSON
                         let naturalText = extractTextBeforeJSON(from: response)
                         
-                        // Always add the AI's natural language response to chat
                         let assistantMessage = ClaudeModel.ChatMessage(
                             role: "assistant",
                             content: naturalText.isEmpty ? "Here's what I've put together for you:" : naturalText
                         )
                         chatHistory.append(assistantMessage)
-                        
-                        // Store the proposed meet for the preview card
                         proposedMeet = proposed
                         
-                        // Resolve invitees in the background
                         Task {
                             await resolveInvitees(from: proposed.invitees)
                         }
                         
-                        // If ready, we'll show the button in the chat
-                        // No need for separate confirmation overlay
                         isLoading = false
                     } else {
-                        // Regular chat message (no JSON found)
                         let assistantMessage = ClaudeModel.ChatMessage(role: "assistant", content: response)
                         chatHistory.append(assistantMessage)
                         isLoading = false
@@ -830,7 +841,7 @@ struct ChatBubbleView: View
                                     : Color.white.opacity(0.08)
                                 )
                         )
-                        .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
+                        .frame(maxWidth: 280, alignment: isUser ? .trailing : .leading)  // Add max width
                 }
                 
                 // Meet preview card (if proposed meet exists)

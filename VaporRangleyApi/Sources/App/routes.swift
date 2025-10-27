@@ -1185,8 +1185,8 @@ public func routes(_ app: Application) throws
         let response = try await req.claudeService.generateChatResponse(
             userMessage         : input.message,
             conversationHistory : input.history,
+            currentTimeNatural  : input.currentTimeNatural,
             userTimezone        : input.userTimezone,
-            currentTimeISO      : input.currentTimeISO,
             userLocation        : input.userLocation,
             userDisplayName     : input.userDisplayName,
             tapLocation         : input.tapLocation

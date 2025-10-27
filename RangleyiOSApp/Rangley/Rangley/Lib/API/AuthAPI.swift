@@ -1555,8 +1555,8 @@ struct AuthAPI
         token: String,
         message: String,
         history: [ClaudeModel.ChatMessage]?,
+        currentTimeNatural: String? = nil,  // CHANGED from currentTimeISO
         userTimezone: String? = nil,
-        currentTimeISO: String? = nil,
         userLocation: String? = nil,
         userDisplayName: String? = nil,
         tapLocation: ClaudeModel.TapLocationContext? = nil
@@ -1569,6 +1569,7 @@ struct AuthAPI
         print("URL: \(url.absoluteString)")
         print("Message: \(message)")
         print("History count: \(history?.count ?? 0)")
+        print("Current time: \(currentTimeNatural ?? "nil")")  // CHANGED
         print("Timezone: \(userTimezone ?? "nil")")
         print("User location: \(userLocation ?? "nil")")
         #endif
@@ -1583,8 +1584,8 @@ struct AuthAPI
         let chatRequest = ClaudeModel.ChatbotRequest(
             message: message,
             history: history,
+            currentTimeNatural: currentTimeNatural,  // CHANGED
             userTimezone: userTimezone,
-            currentTimeISO: currentTimeISO,
             userLocation: userLocation,
             userDisplayName: userDisplayName,
             tapLocation: tapLocation

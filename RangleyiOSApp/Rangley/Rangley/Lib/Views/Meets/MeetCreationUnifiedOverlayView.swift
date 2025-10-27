@@ -217,7 +217,7 @@ struct CreateMeetConfirmationPopup: View
     private var title: String {
         switch entryMode {
         // TBD if i use location here
-        case .tapOnMap(let location): return "Create Meet Here?"
+        case .tapOnMap(_): return "Create Meet Here?"
         case .createButton: return "Create New Meet?"
         case .createWithGroup(let group, _): return "Create Meet with \(group.name)?"
         case .update: return "Update This Meet?"

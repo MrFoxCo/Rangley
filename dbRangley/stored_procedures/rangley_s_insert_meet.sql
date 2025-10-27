@@ -43,6 +43,7 @@ BEGIN
     validation_failed      := FALSE;
     validation_reason      := NULL;
     validation_message     := NULL;
+	CURRENT_TIMESTAMP      := NOW();
 
     -- ===== Basic guards
     v_sub := nullif(btrim(p_cognito_sub), '');
@@ -62,6 +63,13 @@ BEGIN
           MESSAGE='[ERRO] Invalid time window (start must be before end)',
           DETAIL=format('start=%s end=%s', p_dttm_start_utc, p_dttm_end_utc);
     END IF;
+
+	IF p_dttm_start_utc < CURRENT_TIMESTAMP THEN
+	    RAISE EXCEPTION USING
+	      ERRCODE='22023',
+	      MESSAGE='[ERRO] Meet start time must be in the future',
+	      DETAIL=format('start=%s current_time=%s', p_dttm_start_utc, NOW());
+	END IF;
 
 	-- Validation
 	IF p_max_capacity > 0 AND p_max_capacity < 2 THEN

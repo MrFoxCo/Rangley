@@ -181,6 +181,14 @@ BEGIN
           DETAIL=format('start=%s end=%s', final_dttm_start_utc, final_dttm_end_utc);
     END IF;
 
+	IF final_dttm_start_utc < (CURRENT_TIMESTAMP - INTERVAL '5 minutes') THEN
+	    RAISE EXCEPTION USING
+	      ERRCODE='22023',
+	      MESSAGE='[ERRO] Cannot update meet that already started',
+	      DETAIL=format('start=%s current_time=%s', final_dttm_start_utc, NOW());
+	END IF;
+
+
 	IF final_max_capacity IS NULL OR (final_max_capacity < 2 AND final_max_capacity <> -1) THEN
 	    RAISE EXCEPTION USING ERRCODE='22023',
 	      MESSAGE='[ERRO] max_capacity must be -1 or >= 2',

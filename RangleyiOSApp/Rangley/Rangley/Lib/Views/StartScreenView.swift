@@ -45,50 +45,55 @@ struct StartScreenView: View
     @EnvironmentObject private var auth: AuthStateStore
     @State private var isBusy = false
 
-    var body: some View
-    {
+    var body: some View {
         NavigationStack {
-            VStack(spacing: 24)
-            {
-                Spacer()
-                Image("RangleySticker")
+            VStack(spacing: 0) {
+                // Main Content Area
+                VStack(spacing: 32) {
+                    Spacer()
+
+                    // Logo
+                    Image("RangleySticker")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: 200, maxHeight: 200)
+                        .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
+
+                    // Buttons
+                    VStack(spacing: 16) {
+                        NavigationLink {
+                            UserRegisterFlow()
+                        } label: {
+                            Text("Create new account")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(CreateNewAccountCapsuleButton(font: FontStyles.headline))
+
+                        NavigationLink {
+                            LogInPageView()
+                        } label: {
+                            Text("Log In")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(OutlineCapsuleButton(font: FontStyles.title1))
+                    }
+                    .padding(.horizontal, 32) // Consistent, safe padding
+
+                    Spacer()
+                }
+                .padding(.vertical, 40) // Give breathing room top/bottom
+
+                // Bottom Branding – RESPONSIVE
+                Image("MrFoxOrange")
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 200, height: 200)
-                    .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
-
-                NavigationLink {
-                    LogInPageView()
-                } label: {
-                        Text("Log In")
-                }
-                .buttonStyle(OutlineCapsuleButton(font: FontStyles.title1))
-                // ensure text is neon
-
-                Spacer()
-
-                NavigationLink {
-                    UserRegisterFlow()
-                } label: {
-                    Text("Create new account")
-                }
-                .buttonStyle(CreateNewAccountCapsuleButton(font: FontStyles.headline))
-                .padding(.horizontal, 20)
-                .padding(.bottom, 24)
-
-
+                    .frame(maxWidth: .infinity, maxHeight: 120)
+                    .padding(.horizontal, 40)
+                    .padding(.bottom, 32)
             }
-            .padding(.horizontal, 16)
-            // We don't want title
-//            .toolbar {
-//                ToolbarItem(placement: .principal) {
-//                    Text("Welcome").font(.headline).foregroundStyle(.white)
-//                }
-//            }
-            .background(AppPalette.bgGradient.ignoresSafeArea()) 
+            .background(AppPalette.bgGradient.ignoresSafeArea())
         }
-        // <- THIS is what makes it show
-        .toolbarBackground(.clear, for: .navigationBar)  // keep the bar transparent
+        .toolbarBackground(.clear, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
     }
 }

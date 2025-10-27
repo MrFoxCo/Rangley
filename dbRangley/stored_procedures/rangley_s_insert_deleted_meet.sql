@@ -27,7 +27,7 @@ DECLARE
     -- Current values
     current_coordinate_id   int8;
     current_name            varchar(50);
-    current_description     varchar(50);
+    current_description     varchar(200);
     current_category_id     int2;
     current_max_capacity    int4;
     current_dttm_start_utc  timestamptz;
