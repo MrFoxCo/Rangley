@@ -1952,17 +1952,31 @@ enum Func
 enum Claude
 {
     // MARK: - Chatbot Models
-    struct ChatMessage: Content {
+    struct ChatMessage: Content
+    {
         let role: String  // "user" or "assistant"
         let content: String
     }
     
-    struct ChatbotRequest: Content {
-        let message: String
-        let history: [ChatMessage]?
+    struct ChatbotRequest: Content
+    {
+        let message         : String
+        let history         : [ChatMessage]?
+        let userTimezone    : String?
+        let currentTimeISO  : String?
+        let userLocation    : String?
+        let userDisplayName : String?
+        let tapLocation     : TapLocationContext?
     }
 
-    struct ChatbotResponse: Content {
+    struct TapLocationContext: Content
+    {
+        let name        : String?
+        let latitude    : Double
+        let longitude   : Double
+    }
+    struct ChatbotResponse: Content
+    {
         let message: String
     }
 }

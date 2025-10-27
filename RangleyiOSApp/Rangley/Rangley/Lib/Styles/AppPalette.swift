@@ -70,10 +70,10 @@ struct AppPalette
        static let decline = Brand.neonPink            // your neon pink
 
        // Positive / create
-       static let insert  = Brand.spearmintGreen      // minty confirm/create
+       static let insert  = Brand.spearmintGreen      // minty confirm/crea
        static let accept  = Brand.spearmintGreen
 
-       // Edit / change
+       // Edit / cha
        static let modify  = Brand.brightTeal          // teal reads “edit”
        static let update  = Brand.electricBlue        // blue = “save/update”
 

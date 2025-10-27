@@ -21,6 +21,9 @@ enum MeetCreationEntryMode
 // MARK: - Unified Form View
 struct MeetCreationUnifiedFormView: View
 {
+    @EnvironmentObject private var locationData: LocationDataStore
+    @EnvironmentObject private var authState: AuthStateStore
+    
     // MARK: Configuration
     let entryMode: MeetCreationEntryMode
     let baseURL: URL

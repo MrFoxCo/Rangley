@@ -1550,9 +1550,16 @@ struct AuthAPI
         }
     }
     
-    static func postChatBot(baseURL: URL, token: String,
+    static func postChatBot(
+        baseURL: URL,
+        token: String,
         message: String,
-        history: [ClaudeModel.ChatMessage]?
+        history: [ClaudeModel.ChatMessage]?,
+        userTimezone: String? = nil,
+        currentTimeISO: String? = nil,
+        userLocation: String? = nil,
+        userDisplayName: String? = nil,
+        tapLocation: ClaudeModel.TapLocationContext? = nil
     ) async throws -> String
     {
         let url = makeURL(baseURL, ["s", "chatbot", "chat"])
@@ -1562,6 +1569,8 @@ struct AuthAPI
         print("URL: \(url.absoluteString)")
         print("Message: \(message)")
         print("History count: \(history?.count ?? 0)")
+        print("Timezone: \(userTimezone ?? "nil")")
+        print("User location: \(userLocation ?? "nil")")
         #endif
         
         var req = URLRequest(url: url)
@@ -1570,8 +1579,16 @@ struct AuthAPI
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         
-        // Encode the request body
-        let chatRequest = ClaudeModel.ChatbotRequest(message: message, history: history)
+        // Encode the request body with context
+        let chatRequest = ClaudeModel.ChatbotRequest(
+            message: message,
+            history: history,
+            userTimezone: userTimezone,
+            currentTimeISO: currentTimeISO,
+            userLocation: userLocation,
+            userDisplayName: userDisplayName,
+            tapLocation: tapLocation
+        )
         let encoder = JSONEncoder()
         req.httpBody = try encoder.encode(chatRequest)
         

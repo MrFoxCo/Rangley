@@ -11,6 +11,11 @@ import CoreLocation
 
 struct MeetCreationUnifiedOverlay: View
 {
+    // Add environment objects at the top of the struct
+    @EnvironmentObject private var locationData: LocationDataStore
+    @EnvironmentObject private var authState: AuthStateStore
+
+    
     // MARK: Configuration
     @Binding var showOverlay: Bool
     @Binding var entryMode  : MeetCreationEntryMode?
@@ -22,12 +27,12 @@ struct MeetCreationUnifiedOverlay: View
 
     
     // MARK: State
-    @State private var isAnimating      = false
-    @State private var isExploding      = false
-    @State private var showConfetti     = false
-    @State private var showCreateForm   = false
-    @State private var showAiChat       = false  // NEW
-    @State private var isSoftDismissing = false
+    @State private var isAnimating          = false
+    @State private var isExploding          = false
+    @State private var showConfetti         = false
+    @State private var showCreateForm       = false
+    @State private var showAiChatFullScreen = false  // NEW
+    @State private var isSoftDismissing     = false
     
     // MARK: Body
     var body: some View
@@ -39,7 +44,7 @@ struct MeetCreationUnifiedOverlay: View
                     .ignoresSafeArea()
                     .onTapGesture {
                         // Allow backdrop dismiss only when showing confirmation
-                        if !showCreateForm && !showAiChat {
+                        if !showCreateForm {
                             dismiss()
                         }
                     }
@@ -47,7 +52,7 @@ struct MeetCreationUnifiedOverlay: View
                 // Content
                 ZStack {
                     // Initial confirmation popup (for both flows)
-                    if !showCreateForm && !showAiChat {
+                    if !showCreateForm {
                         CreateMeetConfirmationPopup(
                             entryMode: mode,
                             onConfirm: {
@@ -57,7 +62,7 @@ struct MeetCreationUnifiedOverlay: View
                             },
                             onConfirmWithAI: {
                                 withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                    showAiChat = true
+                                    showAiChatFullScreen = true
                                 }
                             },
                             onCancel: dismiss
@@ -65,43 +70,6 @@ struct MeetCreationUnifiedOverlay: View
                         .transition(.asymmetric(
                             insertion: .scale.combined(with: .opacity),
                             removal: .scale(scale: 0.95).combined(with: .opacity)
-                        ))
-                    }
-                    
-                    // AI Chat interface
-                    if showAiChat {
-                        AiChatInterfaceView(
-                          entryMode     : mode,
-                          baseURL       : baseURL,
-                          token         : token,
-                          onClose       : { softDismiss() },
-                          onCreate: { body in
-                              do {
-                                  try await onCreate(body)
-                                  await MainActor.run { explodeThenDismiss() }
-                              } catch {
-                                  if let v = parseContentViolation(from: error) { await MainActor.run { onContentViolation(v) } }
-                                  throw error
-                              }
-                          },
-                          onCreateWithInvites: { body in
-                              do {
-                                  try await onCreateWithInvites(body)
-                                  await MainActor.run { explodeThenDismiss() }
-                              } catch {
-                                  if let v = parseContentViolation(from: error) { await MainActor.run { onContentViolation(v) } }
-                                  throw error
-                              }
-                          },
-                        )
-                        .allowsHitTesting(!isExploding)
-                        .scaleEffect(isExploding ? 0.6 : (isSoftDismissing ? 0.95 : 1.0))
-                        .opacity(isExploding ? 0.0 : (isSoftDismissing ? 0.0 : 1.0))
-                        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: isExploding)
-                        .animation(.easeOut(duration: 0.25), value: isSoftDismissing)
-                        .transition(.asymmetric(
-                            insertion: .move(edge: .trailing).combined(with: .opacity),
-                            removal: .move(edge: .leading).combined(with: .opacity)
                         ))
                     }
                     
@@ -157,7 +125,29 @@ struct MeetCreationUnifiedOverlay: View
         }
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showOverlay)
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showCreateForm)
-        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showAiChat)
+        .fullScreenCover(isPresented: $showAiChatFullScreen) {
+            AiChatFullScreenView(
+                entryMode: entryMode ?? .createButton,
+                baseURL: baseURL,
+                token: token,
+                onClose: {
+                    showAiChatFullScreen = false
+                    dismiss()  // Also dismiss the overlay behind it
+                },
+                onCreate: { body in
+                    try await onCreate(body)
+                    showAiChatFullScreen = false
+                    await MainActor.run { explodeThenDismiss() }
+                },
+                onCreateWithInvites: { body in
+                    try await onCreateWithInvites(body)
+                    showAiChatFullScreen = false
+                    await MainActor.run { explodeThenDismiss() }
+                }
+            )
+            .environmentObject(locationData)
+            .environmentObject(authState)
+        }
     }
     
     // MARK: ^^ HELPER FUNCTION
@@ -177,7 +167,6 @@ struct MeetCreationUnifiedOverlay: View
             showOverlay = false
             entryMode = nil
             showCreateForm = false
-            showAiChat = false
         }
     }
     
@@ -189,7 +178,6 @@ struct MeetCreationUnifiedOverlay: View
             showOverlay = false
             entryMode = nil
             showCreateForm = false
-            showAiChat = false
             isSoftDismissing = false
         }
     }
@@ -207,7 +195,6 @@ struct MeetCreationUnifiedOverlay: View
                 showOverlay = false
                 entryMode = nil
                 showCreateForm = false
-                showAiChat = false
                 isExploding = false
             }
         }

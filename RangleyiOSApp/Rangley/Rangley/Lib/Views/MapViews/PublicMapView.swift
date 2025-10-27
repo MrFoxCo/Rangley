@@ -634,7 +634,7 @@ public struct PublicMapView: View
     {
         content
             .environmentObject(inbox)
-        
+            .environmentObject(locationData)
             .onChange(of: scenePhase) { oldPhase, phase in
                 guard phase == .active else { return }
                 Task {

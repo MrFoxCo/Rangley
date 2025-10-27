@@ -1170,7 +1170,9 @@ public func routes(_ app: Application) throws
     }
     //comment
     
-    // MARK: - Chatbot
+    // =========================================================
+    // MARK: - AI
+    // =========================================================
     s.post("chatbot", "chat")
     {
         req async throws -> Claude.ChatbotResponse in
@@ -1181,12 +1183,21 @@ public func routes(_ app: Application) throws
         let input = try req.content.decode(Claude.ChatbotRequest.self)
         
         let response = try await req.claudeService.generateChatResponse(
-            userMessage: input.message,
-            conversationHistory: input.history
+            userMessage         : input.message,
+            conversationHistory : input.history,
+            userTimezone        : input.userTimezone,
+            currentTimeISO      : input.currentTimeISO,
+            userLocation        : input.userLocation,
+            userDisplayName     : input.userDisplayName,
+            tapLocation         : input.tapLocation
         )
         
         return Claude.ChatbotResponse(message: response)
     }
+    
+    // =========================================================
+    // MARK: - END AI
+    // =========================================================
     
     
     s.delete("inbox", "notification")

@@ -21,21 +21,38 @@ struct ClaudeService
     
     /// Generate chatbot response for meet creation
     func generateChatResponse(
-        userMessage: String,
-        conversationHistory: [Claude.ChatMessage]?
+        userMessage         : String,
+        conversationHistory : [Claude.ChatMessage]?,
+        userTimezone        : String?,
+        currentTimeISO      : String?,
+        userLocation        : String?,
+        userDisplayName     : String?,
+        tapLocation         : Claude.TapLocationContext?
     ) async throws -> String
     {
         
-        // Get current date/time info
-        let now = Date()
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let nowISO = formatter.string(from: now)
+        // Build context from provided parameters (NOT server timezone/time)
+        let contextLines: [String] = [
+            currentTimeISO.map { "- Current time (UTC): \($0)" },
+            userTimezone.map { "- User timezone: \($0)" },
+            userLocation.map { "- User is currently near: \($0)" },
+            userDisplayName.map { "- User's name: \($0)" },
+            tapLocation.map { loc in
+                if let name = loc.name {
+                    return "- User tapped on map at: \(name) (\(loc.latitude), \(loc.longitude))"
+                } else {
+                    return "- User tapped on map at coordinates: (\(loc.latitude), \(loc.longitude))"
+                }
+            }
+        ].compactMap { $0 }
         
-        let timeZone = TimeZone.current
-        let timeZoneName = timeZone.identifier // e.g., "America/Chicago"
+        let contextBlock = contextLines.isEmpty ? "" : """
+            CURRENT CONTEXT:
+            \(contextLines.joined(separator: "\n"))
+            
+            """
         
-        let systemPrompt = """
+        let systemPrompt = contextBlock + """
             You are a helpful assistant for Rangley, a location-based meetup app. 
             Your goal is to make creating a meet as frictionless as possible. 
             You interpret a user's natural language messages and extract all the information needed 
@@ -126,30 +143,24 @@ struct ClaudeService
             - Never use bold markdown (**text**) in your conversational responses.
             - Keep asking until name, location, start, and end are known. Then preview; then finalize on confirmation.
             - Location must be specific enough to geocode successfully
-            """
+        """
 
         
         // Build messages array
         var messages: [[String: String]] = []
-        
-        if conversationHistory == nil || conversationHistory?.isEmpty == true {
-            let contextMessage = "Current time: \(nowISO), Timezone: \(timeZoneName)"
-            messages.append(["role": "user", "content": contextMessage])
-            messages.append(["role": "assistant", "content": "Understood. I'll use that as the reference for all relative times."])
-        }
-        
+
         // Add conversation history if exists
         if let history = conversationHistory {
-            messages = history.map { ["role": $0.role, "content": $0.content] }
+          messages = history.map { ["role": $0.role, "content": $0.content] }
         }
-        
+
         // Add current message
         messages.append(["role": "user", "content": userMessage])
-        
+
         // Make API call
         return try await callClaudeAPI(
-            systemPrompt: systemPrompt,
-            messages: messages
+          systemPrompt: systemPrompt,
+          messages: messages
         )
     }
     
