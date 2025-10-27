@@ -1171,34 +1171,50 @@ public func routes(_ app: Application) throws
     //comment
     
     // =========================================================
-    // MARK: - AI
+    // MARK: - AI CHATBOT ROUTE - FIXED
     // =========================================================
+
     s.post("chatbot", "chat")
     {
         req async throws -> Claude.ChatbotResponse in
         
+        // Auth check
         let sub = req.cognito.sub.value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !sub.isEmpty else { throw Abort(.unauthorized, reason: "Invalid auth sub") }
         
+        // Decode request
         let input = try req.content.decode(Claude.ChatbotRequest.self)
         
+        #if DEBUG
+        req.logger.info("=== Chatbot Request ===")
+        req.logger.info("Message: \(input.message)")
+        req.logger.info("History count: \(input.history?.count ?? 0)")
+        req.logger.info("Current time: \(input.currentTimeNatural)")
+        req.logger.info("Timezone: \(input.userTimezone)")
+        req.logger.info("User location: \(input.userLocation)")
+        req.logger.info("User display name: \(input.userDisplayName)")
+        if let tap = input.tapLocation {
+            req.logger.info("Tap location: \(tap.name ?? "Unnamed") at (\(tap.latitude), \(tap.longitude))")
+        }
+        #endif
+        
+        // Call Claude service with REQUIRED context
         let response = try await req.claudeService.generateChatResponse(
-            userMessage         : input.message,
-            conversationHistory : input.history,
-            currentTimeNatural  : input.currentTimeNatural,
-            userTimezone        : input.userTimezone,
-            userLocation        : input.userLocation,
-            userDisplayName     : input.userDisplayName,
-            tapLocation         : input.tapLocation
+            userMessage: input.message,
+            conversationHistory: input.history ?? [],
+            currentTimeNatural: input.currentTimeNatural,
+            userTimezone: input.userTimezone,
+            userLocation: input.userLocation,
+            userDisplayName: input.userDisplayName,
+            tapLocation: input.tapLocation
         )
         
         return Claude.ChatbotResponse(message: response)
     }
-    
+
     // =========================================================
     // MARK: - END AI
     // =========================================================
-    
     
     s.delete("inbox", "notification")
     {

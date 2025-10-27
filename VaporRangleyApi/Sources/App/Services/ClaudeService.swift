@@ -62,143 +62,191 @@ struct ClaudeService {
 
     // MARK: Public API
 
-    /// Generate chatbot response for meet creation — PLAID+ MODE
+    /// Generate chatbot response for meet creation — PLAID+ MODE WITH AGGRESSIVE EXTRACTION
     func generateChatResponse(
-        userMessage         : String,
-        conversationHistory : [Claude.ChatMessage]?,
-        currentTimeNatural  : String?,
-        userTimezone        : String?,
-        userLocation        : String?,
-        userDisplayName     : String?,
-        tapLocation         : Claude.TapLocationContext?
+        userMessage: String,
+        conversationHistory: [Claude.ChatMessage]?,
+        currentTimeNatural: String,      // NOW REQUIRED
+        userTimezone: String,            // NOW REQUIRED
+        userLocation: String,            // NOW REQUIRED
+        userDisplayName: String,         // NOW REQUIRED
+        tapLocation: Claude.TapLocationContext?
     ) async throws -> String {
 
-        // 1. CONTEXT BLOCK
-        let contextLines: [String] = [
-            currentTimeNatural.map { "- Current time: \($0)" },
-            userTimezone.map { "- User timezone: \($0)" },
-            userLocation.map { "- User is currently near: \($0)" },
-            userDisplayName.map { "- User's name: \($0)" },
-            tapLocation.map { loc in
-                if let name = loc.name, !name.isEmpty {
-                    return "- User tapped on map at: \(name) (\(loc.latitude), \(loc.longitude))"
-                } else {
-                    return "- User tapped on map at coordinates: (\(loc.latitude), \(loc.longitude))"
-                }
+        // 1. CONTEXT BLOCK - ALWAYS AVAILABLE
+        var contextLines: [String] = [
+            "- Current time: \(currentTimeNatural)",
+            "- User timezone: \(userTimezone)",
+            "- User is currently near: \(userLocation)",
+            "- User's name: \(userDisplayName)"
+        ]
+        
+        if let tap = tapLocation {
+            if let name = tap.name, !name.isEmpty {
+                contextLines.append("- User tapped on map at: \(name) (\(tap.latitude), \(tap.longitude))")
+            } else {
+                contextLines.append("- User tapped on map at coordinates: (\(tap.latitude), \(tap.longitude))")
             }
-        ].compactMap { $0 }
+        }
 
-        let contextBlock = contextLines.isEmpty ? "" : """
-           CURRENT CONTEXT:
-           \(contextLines.joined(separator: "\n"))
-           
-           """
-
-        // 2. PLAID+ PROMPT — Clear, robust, scannable
-        let systemPrompt = contextBlock + """
-        NOW: \(currentTimeNatural ?? "unknown") (\(userTimezone ?? "UTC"))
-
-        TIME RULES:
-        - Never create events in the past
-        - All relative times → next future occurrence
-        - "yesterday" → ask: "Did you mean next week?"
-        - "tomorrow" → 18:00 if no time given
-        - "tonight" → 19:00 today
-        - "this weekend" → Saturday 11:00
-        - "after work" → 18:00 today
-        - "ASAP" → now + 45 min, but only 08:00–22:00 local; else 08:00 next day
-        - "7-9" → start 19:00, end 21:00
-        - "noon" → 12:00, "midnight" → 00:00 next day
-        - If end ≤ start → default end = start + 2h, add to assumptions
-
-        REQUIRED:
-        1. name: string (e.g., "Brunch")
-           • MAX 50 characters
-           • MIN 2 characters
-           • No leading/trailing whitespace
-           • If user input is too long, truncate intelligently or ask for shorter version
-        2. location_name: geocodable address or venue
-           • MAX 100 characters
-           • Must be specific enough to geocode
-           • Vague? Ask once: "Which [venue]?" or "What's the address?"
-        3. dttm_start_utc: ISO8601 with ms + Z (e.g., 2025-10-28T16:00:00.000Z)
-           • MUST be in the future
-        4. dttm_end_utc: > start, default +2h
-           • MUST be after start
-           • MAX duration: 24 hours (if longer, ask for clarification)
-
-        OPTIONAL:
-        - description: string | null
-          • MAX 200 characters
-          • If user provides longer text, summarize key details
-          • No leading/trailing whitespace
-        - meet_category_id: 1–9 | null
-          1=Activity 2=Sports 3=Outdoors 4=Social 5=Music 6=Food 7=Planned Trip 8=Spontaneous 9=Custom
-          • MUST be integer between 1-9 or null
-          • Invalid category → default to 9 (Custom)
-        - invitees: ["sam"] | null → only @mentions, strip @
-          • MAX 20 invitees per meet
-          • Each username MAX 30 characters
-          • Strip @ symbol and whitespace
-          • Lowercase preferred
-        - assumptions: [] → list all inferences
-          • Each assumption MAX 100 characters
-        - confidence: 0.0–1.0
-          • Must be decimal between 0.0 and 1.0
-
-        PARSE:
-        - 12h or 24h, "8p", "0730", "8pm"
-        - No year → next future
-        - "7-9pm" → start=19:00, end=21:00
-
-        COMPOUND RESPONSES:
-        - User may provide MULTIPLE pieces of info in one message
-        - Examples: "a surprise party at 1318 n cleveland", "brunch tomorrow at 10am at Wildberry"
-        - ALWAYS extract ALL information from each message:
-          • Event type/name (before "at" or standalone)
-          • Location (after "at", "in", or address patterns)
-          • Time (tomorrow, tonight, specific times)
-        - Do NOT re-ask questions already answered in the current or previous messages
-        - Common patterns to recognize:
-          • "[event] at [location]" → extract both
-          • "[event] at [location] at [time]" → extract all three
-          • "[location]" alone when asking about location → use as location_name
-        - Update ALL fields that user provides, even if given in unexpected order
-
-        DATA VALIDATION RULES:
-        - Trim all string fields before outputting JSON
-        - Ensure name fits in 50 chars (truncate or abbreviate if needed)
-        - Ensure description fits in 200 chars (summarize if needed)
-        - Never output empty strings - use null instead
-        - max_capacity: must be -1 (unlimited) or >= 2
-        - All timestamps MUST include milliseconds (.000Z)
-        - Location must be real and geocodable (not "TBD" or "anywhere")
-
-        RESPONSE MODES:
-        1. GATHERING (missing required):
-           → 1 short question (≤2 sentences). No JSON. No bold.
-
-        2. PREVIEW (all required filled):
-           → "Here's your meetup:" + minified JSON (ready: false)
-           {"ready":false,"name":"Brunch","location_name":"Wildberry, 130 E Randolph","dttm_start_utc":"2025-10-28T16:00:00.000Z","dttm_end_utc":"2025-10-28T18:00:00.000Z","description":null,"meet_category_id":6,"invitees":["sam"],"assumptions":["+2h duration"],"confidence":0.94}
-
-        3. FINALIZE (user confirms):
-           → JSON only (ready: true). No text.
-           {"ready":true,"name":"Brunch",...}
-
-        VALIDATION:
-        - Start > now
-        - End > start
-        - End - Start <= 24 hours
-        - name: 2-50 chars, trimmed
-        - description: 0-200 chars, trimmed, or null
-        - location_name must be geocodable and specific
-        - JSON must be valid, minified
-        - All string fields must be trimmed
-        - Empty strings → null
+        let contextBlock = """
+        CURRENT CONTEXT (ALWAYS FRESH):
+        \(contextLines.joined(separator: "\n"))
+        
         """
 
-        // 3. MESSAGES
+        // 2. AGGRESSIVE EXTRACTION PROMPT
+        let systemPrompt = contextBlock + """
+        NOW: \(currentTimeNatural) (\(userTimezone))
+        
+        ⚠️ CRITICAL PARSING RULES - READ FIRST ⚠️
+        
+        1. EXTRACT ALL INFORMATION from EVERY message - users provide compound data
+        2. NEVER re-ask for information already provided in current or previous messages
+        3. CHECK THE CONVERSATION HISTORY before asking questions
+        4. If you have ALL REQUIRED FIELDS → GO TO PREVIEW MODE IMMEDIATELY
+        
+        COMPOUND INPUT PATTERNS - RECOGNIZE AND EXTRACT:
+        
+        • "[event] at [location]" → extract BOTH name AND location
+          Example: "party at 1318 n cleveland" 
+          → name: "Party", location_name: "1318 N Cleveland Ave, Chicago, IL"
+        
+        • "[event] at [location] [time]" → extract ALL THREE
+          Example: "brunch at wildberry tomorrow at 10am" 
+          → name: "Brunch", location_name: "Wildberry", start: tomorrow 10:00
+        
+        • "[event] at [location] [time] for [duration]" → extract ALL FOUR
+          Example: "party at 1318 n cleveland tomorrow at 2pm for an hour"
+          → name: "Party", location_name: "1318 N Cleveland Ave", start: tomorrow 14:00, end: tomorrow 15:00
+        
+        • "surprise [event]" → include "Surprise" in the name
+          Example: "surprise tennis match" → name: "Surprise Tennis Match"
+        
+        • Address patterns (numbers + street names) → ALWAYS use as location_name
+          Example: "1318 n cleveland" → location_name: "1318 N Cleveland Ave, Chicago, IL"
+          Example: "3703 greenview" → location_name: "3703 N Greenview Ave, Chicago, IL"
+        
+        • Time + duration in one phrase → calculate both
+          Example: "tomorrow at 2pm for an hour" → start: tomorrow 14:00, end: tomorrow 15:00
+          Example: "tonight for 2 hours" → start: tonight 19:00, end: tonight 21:00
+        
+        COMPLETE EXAMPLE OF WHAT YOU SHOULD DO:
+        User: "Let's make a party at 1318 n cleveland in chicago tomorrow at 2pm for an hour please"
+        
+        You extract:
+        ✓ name: "Party"
+        ✓ location_name: "1318 N Cleveland Ave, Chicago, IL"
+        ✓ dttm_start_utc: [calculate tomorrow at 14:00 in \(userTimezone) → convert to UTC with .000Z]
+        ✓ dttm_end_utc: [calculate tomorrow at 15:00 in \(userTimezone) → convert to UTC with .000Z]
+        
+        → ALL REQUIRED FIELDS FILLED → GO TO PREVIEW MODE IMMEDIATELY
+        → DO NOT ASK "WHAT KIND OF MEETUP?" - YOU ALREADY KNOW IT'S A PARTY
+        
+        TIME PARSING RULES:
+        - Current time is: \(currentTimeNatural)
+        - Never create events in the past
+        - "tomorrow" → add 1 day to current date
+        - "tomorrow at 2pm" → tomorrow's date at 14:00 in \(userTimezone)
+        - "for an hour" / "for 1 hour" → endTime = startTime + 1 hour
+        - "for 2 hours" → endTime = startTime + 2 hours
+        - "tonight" → today at 19:00
+        - "this weekend" → next Saturday at 11:00
+        - "7-9pm" → start: 19:00, end: 21:00
+        - "noon" → 12:00, "midnight" → 00:00 next day
+        - No time specified → default to 18:00 (6 PM)
+        - No end time specified → default to start + 2 hours
+        
+        LOCATION PARSING RULES:
+        - Street addresses → format as full address with city
+          "1318 n cleveland" → "1318 N Cleveland Ave, Chicago, IL"
+          "3703 greenview" → "3703 N Greenview Ave, Chicago, IL"
+        - Venue names → use as-is
+          "millennium park" → "Millennium Park, Chicago, IL"
+          "wildberry" → "Wildberry Pancakes & Cafe"
+        - If user tapped map → prefer tap location
+        - Add "Chicago, IL" to addresses if city not specified (user is in Chicago)
+        - Vague locations ("somewhere", "TBD") → ask for clarification
+        
+        REQUIRED FIELDS:
+        1. name: string (2-50 characters, trimmed)
+           • Extract from user's message
+           • "party" → "Party"
+           • "brunch" → "Brunch"
+           • "surprise tennis" → "Surprise Tennis Match"
+        
+        2. location_name: geocodable address or venue (max 100 characters)
+           • Must be specific enough to geocode
+           • Extract from "at [location]" pattern
+        
+        3. dttm_start_utc: ISO8601 with milliseconds and Z
+           • Format: "2025-10-28T19:00:00.000Z"
+           • MUST be in the future
+           • Convert from \(userTimezone) to UTC
+           • ALWAYS include .000Z at the end
+        
+        4. dttm_end_utc: ISO8601, must be > start
+           • Calculate from duration if provided
+           • Default: start + 2 hours if not specified
+           • Max duration: 24 hours
+           • ALWAYS include .000Z at the end
+        
+        OPTIONAL FIELDS:
+        - description: string | null (max 200 chars, trimmed)
+        - meet_category_id: 1-9 | null
+          1=Activity 2=Sports 3=Outdoors 4=Social 5=Music 6=Food 7=Planned Trip 8=Spontaneous 9=Custom
+        - invitees: array of @mentions (strip @ symbol) | null
+          Example: ["sam", "alex"] from "@sam @alex"
+        - assumptions: array of inferences made
+          Example: ["Duration set to 2 hours", "Category inferred as Social", "Added Chicago to address"]
+        - confidence: 0.0-1.0
+        
+        DATA VALIDATION:
+        - Trim all string fields
+        - Empty strings → null
+        - ALL timestamps MUST include .000Z
+        - name must be 2-50 chars
+        - description must be 0-200 chars or null
+        - meet_category_id must be 1-9 or null
+        
+        RESPONSE MODES:
+        
+        1. GATHERING MODE (missing required fields that user HASN'T mentioned):
+           → Ask ONE short question (≤2 sentences)
+           → NO JSON
+           → NO bold formatting
+           → ONLY ask if info is ACTUALLY missing after checking history
+           → DO NOT ask for info the user already gave you
+           
+           Example:
+           "What time works for you?"
+        
+        2. PREVIEW MODE (all 4 required fields filled):
+           → Brief natural confirmation + minified JSON with ready: false
+           
+           Example:
+           Perfect! I've got a party scheduled for tomorrow at 2pm at 1318 N Cleveland Ave.
+           {"ready":false,"name":"Party","location_name":"1318 N Cleveland Ave, Chicago, IL","dttm_start_utc":"2025-10-29T19:00:00.000Z","dttm_end_utc":"2025-10-29T20:00:00.000Z","description":null,"meet_category_id":4,"invitees":null,"assumptions":["Duration set to 1 hour","Category set to Social","Added Chicago to address"],"confidence":0.95}
+        
+        3. FINALIZE MODE (user confirms with "yes", "looks good", "create it", etc.):
+           → JSON ONLY with ready: true
+           → NO text before or after
+           
+           Example:
+           {"ready":true,"name":"Party","location_name":"1318 N Cleveland Ave, Chicago, IL","dttm_start_utc":"2025-10-29T19:00:00.000Z","dttm_end_utc":"2025-10-29T20:00:00.000Z","description":null,"meet_category_id":4,"invitees":null,"assumptions":["Duration set to 1 hour","Category set to Social","Added Chicago to address"],"confidence":0.95}
+        
+        CRITICAL REMINDERS:
+        - Extract ALL information from EACH message
+        - NEVER ask for info the user already gave you
+        - Recognize compound patterns like "party at [location] tomorrow at [time] for [duration]"
+        - If you have name + location + time → GO TO PREVIEW MODE
+        - Be conversational but DECISIVE
+        - Don't apologize excessively
+        - JSON must be valid and minified (no newlines in the JSON itself)
+        - ALWAYS include .000Z in timestamps
+        """
+
+        // 3. BUILD MESSAGES WITH HISTORY
         var messages: [[String: String]] = []
         if let history = conversationHistory {
             messages = history.map { ["role": $0.role, "content": $0.content] }
@@ -206,139 +254,123 @@ struct ClaudeService {
         messages.append(["role": "user", "content": userMessage])
 
         // 4. CALL CLAUDE
-        let rawResponse: String
-        do {
-            rawResponse = try await callClaudeAPI(systemPrompt: systemPrompt, messages: messages)
-        } catch {
-            await logPlaidError(PlaidError.internal("Claude API failed: \(error)"))
-            return "Sorry, I'm having trouble connecting. Try again?"
-        }
+        let rawResponse = try await callClaudeAPI(
+            systemPrompt: systemPrompt,
+            messages: messages
+        )
 
-        // 5. POST-PROCESSING WITH FULL ERROR RECOVERY
-        do {
-            return try await postProcessPlaidResponse(
-                raw: rawResponse,
-                userMessage: userMessage,
-                conversationHistory: conversationHistory ?? [],
-                currentTimeNatural: currentTimeNatural,
-                userTimezone: userTimezone,
-                tapLocation: tapLocation
-            )
-        } catch let error as PlaidError {
-            await logPlaidError(error)
-            return await recoverFromPlaidError(error, userMessage: userMessage, tapLocation: tapLocation)
-        } catch {
-            await logPlaidError(PlaidError.internal("Unexpected error: \(error)"))
-            return "Sorry, something went wrong. Try again?"
-        }
+        // 5. VALIDATE & RETURN
+        return try await validateAndNormalizeResponse(
+            raw: rawResponse,
+            userMessage: userMessage,
+            tapLocation: tapLocation,
+            history: conversationHistory ?? []
+        )
     }
 
-    // MARK: Post-Processing (Full PLAID+ pipeline)
+    // MARK: Response Validation
 
-    private func postProcessPlaidResponse(
+    private func validateAndNormalizeResponse(
         raw: String,
         userMessage: String,
-        conversationHistory: [Claude.ChatMessage],
-        currentTimeNatural: String?,
-        userTimezone: String?,
-        tapLocation: Claude.TapLocationContext?
+        tapLocation: Claude.TapLocationContext?,
+        history: [Claude.ChatMessage]
     ) async throws -> String {
 
-        // ── STEP 1: EXTRACT JSON IF PRESENT ──────────────────────────────
-        guard let jsonStr = extractJSON(from: raw) else {
-            // No JSON → GATHERING mode
-            let clean = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-            if clean.count > 280 || clean.contains("**") || clean.contains("```") {
-                throw PlaidError.modelBrokeRules(violation: "GATHER mode: too long or contains markup")
-            }
-            return clean
+        // ── STEP 1: FINALIZE (ready=true) ───────────────────────────────────
+        if let jsonStr = extractJSON(from: raw),
+           let data = jsonStr.data(using: .utf8),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           json["ready"] as? Bool == true {
+            return jsonStr  // Return pure JSON for finalize
         }
 
-        // ── STEP 2: VALIDATE JSON STRUCTURE ──────────────────────────────
-        guard let data = jsonStr.data(using: .utf8),
+        // ── STEP 2: USER CONFIRMATION → FORCE FINALIZE ──────────────────────
+        let confirmWords = ["yes", "yep", "yeah", "correct", "looks good", "perfect", "create it", "make it", "confirm"]
+        if confirmWords.contains(where: { userMessage.lowercased().contains($0) }) {
+            return try forceFinalizeFromHistory(history: history)
+        }
+
+        // ── STEP 3: GATHERING (no JSON) ──────────────────────────────────────
+        if extractJSON(from: raw) == nil {
+            return raw  // Pure text response
+        }
+
+        // ── STEP 4: PREVIEW (ready=false) ────────────────────────────────────
+        guard let jsonStr = extractJSON(from: raw),
+              let data = jsonStr.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw PlaidError.invalidJSON(details: "Could not parse JSON")
         }
 
-        let isReady = json["ready"] as? Bool ?? false
-
-        // ── VALIDATE REQUIRED FIELDS ──────────────────────────────────────
-        var missing: [String] = []
-        if json["name"] as? String == nil { missing.append("name") }
-        if json["location_name"] as? String == nil { missing.append("location_name") }
-        if json["dttm_start_utc"] as? String == nil { missing.append("dttm_start_utc") }
-        if json["dttm_end_utc"] as? String == nil { missing.append("dttm_end_utc") }
-
-        // ── TIME VALIDATION ───────────────────────────────────────────────
-        if let startStr = json["dttm_start_utc"] as? String,
-           let endStr = json["dttm_end_utc"] as? String,
-           let start = isoDate(from: startStr),
-           let end = isoDate(from: endStr) {
-            if start <= Date() {
-                throw PlaidError.invalidTime(details: "Start time is in the past")
-            }
-            if end <= start {
-                throw PlaidError.invalidTime(details: "End time must be after start")
-            }
-            if end.timeIntervalSince(start) > 86400 {
-                throw PlaidError.invalidTime(details: "Duration exceeds 24 hours")
-            }
-        }
-
-        // ── LOCATION VALIDATION ───────────────────────────────────────────
-        if let loc = json["location_name"] as? String, !loc.isEmpty {
-            let isValid = await isGeocodable(loc)
-            if !isValid {
-                throw PlaidError.noValidLocation
-            }
-        }
-
-        // ── STEP 3: READY=TRUE → FINALIZE ─────────────────────────────────
-        if isReady {
-            if !missing.isEmpty {
-                throw PlaidError.missingRequired(fields: missing)
-            }
-            // Return pure JSON for finalization
-            return jsonStr
-        }
-
-        // ── STEP 4: READY=FALSE → PREVIEW ─────────────────────────────────
+        // Validate required fields
+        let required = ["name", "location_name", "dttm_start_utc", "dttm_end_utc"]
+        let missing = required.filter { json[$0] == nil || (json[$0] as? String)?.isEmpty == true }
+        
         if !missing.isEmpty {
             throw PlaidError.missingRequired(fields: missing)
         }
 
-        // Valid preview
-        if raw.lowercased().contains("here's your meetup") {
-            return raw
-        } else {
-            return "Here's your meetup: \(jsonStr)"
+        // Validate timestamps
+        guard let startStr = json["dttm_start_utc"] as? String,
+              let endStr = json["dttm_end_utc"] as? String,
+              let start = isoDate(from: startStr),
+              let end = isoDate(from: endStr) else {
+            throw PlaidError.invalidTime(details: "Invalid ISO8601 timestamps")
         }
+
+        if start < Date() {
+            throw PlaidError.invalidTime(details: "Start time is in the past")
+        }
+
+        if end <= start {
+            throw PlaidError.invalidTime(details: "End time must be after start time")
+        }
+
+        // Valid preview - return as-is
+        return raw
     }
 
     // MARK: JSON Extraction
 
     private func extractJSON(from text: String) -> String? {
-        let regex = Regex {
-            "{"
-            Capture { OneOrMore(.any, .reluctant) }
-            "}"
+        // Find the first '{' and match braces to find the complete JSON object
+        guard let firstBrace = text.firstIndex(of: "{") else { return nil }
+        
+        var braceCount = 0
+        var inString = false
+        var escapeNext = false
+        
+        for (offset, char) in text[firstBrace...].enumerated() {
+            if escapeNext {
+                escapeNext = false
+                continue
+            }
+            
+            if char == "\\" {
+                escapeNext = true
+                continue
+            }
+            
+            if char == "\"" {
+                inString.toggle()
+                continue
+            }
+            
+            if !inString {
+                if char == "{" {
+                    braceCount += 1
+                } else if char == "}" {
+                    braceCount -= 1
+                    if braceCount == 0 {
+                        let endIndex = text.index(firstBrace, offsetBy: offset + 1)
+                        return String(text[firstBrace..<endIndex])
+                    }
+                }
+            }
         }
-        return text.firstMatch(of: regex).map { String($0.1) }
-    }
-
-    // MARK: Fallback UX
-
-    private func generateFallbackQuestion(
-        userMessage: String,
-        tapLocation: Claude.TapLocationContext?
-    ) -> String {
-        if userMessage.lowercased().contains("where") || userMessage.lowercased().contains("location") {
-            return "What's the exact address or venue name?"
-        }
-        if let name = tapLocation?.name, !name.isEmpty {
-            return "Is this meetup at \(name)?"
-        }
-        return "Can you give me a specific location?"
+        
+        return nil
     }
 
     // MARK: Force Finalize from History
@@ -352,7 +384,7 @@ struct ClaudeService {
                json["ready"] as? Bool == false {
                 var mutable = json
                 mutable["ready"] = true
-                mutable["assumptions"] = (mutable["assumptions"] as? [String] ?? []) + ["forced finalize"]
+                mutable["assumptions"] = (mutable["assumptions"] as? [String] ?? []) + ["User confirmed"]
                 let updated = try JSONSerialization.data(
                     withJSONObject: mutable,
                     options: [.withoutEscapingSlashes, .sortedKeys]
@@ -360,60 +392,7 @@ struct ClaudeService {
                 return String(data: updated, encoding: .utf8)!
             }
         }
-        // Safe default
-        let start = nextHourISO()
-        let end = nextHourISO(offset: 2)
-        return """
-        {"ready":true,"name":"Quick Meetup","location_name":"TBD","dttm_start_utc":"\(start)","dttm_end_utc":"\(end)","description":null,"meet_category_id":null,"invitees":[],"assumptions":["forced from no history"],"confidence":0.6}
-        """
-    }
-
-    // MARK: Geocoding
-
-    private func isGeocodable(_ location: String) async -> Bool {
-        guard !location.isEmpty else { return false }
-        let query = location.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        let url = URI(string: "https://nominatim.openstreetmap.org/search?format=json&q=\(query)&limit=1")
-        
-        do {
-            let response = try await client.get(url) { req in
-                req.headers.add(name: "User-Agent", value: "RangleyApp/1.0")
-            }
-            let results = try response.content.decode([[String: String]].self)
-            return !results.isEmpty
-        } catch {
-            await logPlaidError(PlaidError.geocodeFailed)
-            return false
-        }
-    }
-
-    // MARK: Error Recovery UX
-
-    private func recoverFromPlaidError(
-        _ error: PlaidError,
-        userMessage: String,
-        tapLocation: Claude.TapLocationContext?
-    ) async -> String {
-        switch error {
-        case .modelBrokeRules:
-            return generateFallbackQuestion(userMessage: userMessage, tapLocation: tapLocation)
-        case .missingRequired(let fields):
-            if fields.contains("location_name") {
-                return "I need a specific venue or address. Which one?"
-            }
-            return "Can you clarify the \(fields.first!)?"
-        case .invalidTime:
-            return "That time doesn't work. When should it be?"
-        case .noValidLocation, .geocodeFailed:
-            if let name = tapLocation?.name, !name.isEmpty {
-                return "Is this at \(name)? Or give me a real address."
-            }
-            return "I need a real location — address or venue name?"
-        case .finalizeWithoutPreview:
-            return "I don't have a meetup to confirm yet. What do you want to plan?"
-        default:
-            return "Let me try again. What kind of meetup?"
-        }
+        throw PlaidError.finalizeWithoutPreview
     }
 
     // MARK: ISO Helpers
@@ -423,26 +402,6 @@ struct ClaudeService {
         let fmt = ISO8601DateFormatter()
         fmt.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return fmt.date(from: s)
-    }
-
-    private func nextHourISO(offset: Int = 0) -> String {
-        let date = Calendar.current.date(byAdding: .hour, value: 1 + offset, to: Date())!
-        let fmt = ISO8601DateFormatter()
-        fmt.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        fmt.timeZone = TimeZone(identifier: "UTC")
-        return fmt.string(from: date)
-    }
-
-    // MARK: Logging
-
-    private func logPlaidError(_ error: PlaidError) async {
-        let payload = [
-            "error": error.analyticsCode,
-            "message": error.description,
-            "timestamp": ISO8601DateFormatter().string(from: Date())
-        ]
-        // Replace with your logger
-        print("PLAID ERROR: \(payload)")
     }
 
     // MARK: Claude API Call

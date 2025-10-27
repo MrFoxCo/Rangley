@@ -335,59 +335,7 @@ struct AiChatFullScreenView: View
     
     // MARK: - Context Helpers
     
-    private func resolveUserLocationString() async -> String?
-    {
-        guard let userLoc = locationData.userLocation else { return nil }
-        
-        let info = await locationData.reverseGeocode(coordinate: userLoc.coordinate)
-        
-        // Build string like "Near Wicker Park, Chicago, IL"
-        var components: [String] = []
-        
-        if let subLocality = info?.SubLocality {
-            components.append(subLocality)
-        } else if let locality = info?.Locality {
-            components.append(locality)
-        }
-        
-        if let city = info?.Locality, !components.contains(city) {
-            components.append(city)
-        }
-        
-        if let state = info?.AdministrativeArea {
-            components.append(state)
-        }
-        
-        return components.isEmpty ? nil : "Near \(components.joined(separator: ", "))"
-    }
-    
-    private func extractTapLocation() -> ClaudeModel.TapLocationContext?
-    {
-        guard case .tapOnMap(let location) = entryMode else { return nil }
-        
-        // Build a descriptive name from the location info
-        let name: String
-        if let locName = location.Name {
-            name = locName
-        } else if let thoroughfare = location.ThoroughFare {
-            if let subThoroughfare = location.SubThoroughFare {
-                name = "\(subThoroughfare) \(thoroughfare)"
-            } else {
-                name = thoroughfare
-            }
-        } else if let locality = location.Locality {
-            name = locality
-        } else {
-            name = "Selected location"
-        }
-        
-        return ClaudeModel.TapLocationContext(
-            name: name,
-            latitude: location.Coordinate.latitude,
-            longitude: location.Coordinate.longitude
-        )
-    }
-    
+
     // MARK: - Actions
     private func sendMessage()
     {
@@ -405,8 +353,8 @@ struct AiChatFullScreenView: View
         
         // Call API
         Task {
-            // ALWAYS SEND CONTEXT - REMOVE THE CONDITIONAL
-            let currentTimeNatural: String = {
+            // ALWAYS BUILD CONTEXT - NEVER CONDITIONAL
+            let currentTimeString: String = {
                 let formatter = DateFormatter()
                 formatter.dateFormat = "EEEE, MMMM d, yyyy 'at' h:mm a"
                 formatter.timeZone = TimeZone.current
@@ -414,7 +362,7 @@ struct AiChatFullScreenView: View
             }()
             
             let userTimezone = TimeZone.current.identifier
-            let userDisplayName = authState.currentUser?.display_name
+            let userDisplayName = authState.currentUser?.display_name ?? "User"
             let userLocation = await resolveUserLocationString()
             let tapLocation = extractTapLocation()
             
@@ -424,11 +372,11 @@ struct AiChatFullScreenView: View
                     token: token,
                     message: trimmedMessage,
                     history: Array(chatHistory.dropLast()),
-                    currentTimeNatural: currentTimeNatural,  // ALWAYS send
-                    userTimezone: userTimezone,              // ALWAYS send
-                    userLocation: userLocation,              // ALWAYS send
-                    userDisplayName: userDisplayName,        // ALWAYS send
-                    tapLocation: tapLocation                 // ALWAYS send
+                    currentTimeNatural: currentTimeString,     // ALWAYS SEND
+                    userTimezone: userTimezone,                // ALWAYS SEND
+                    userLocation: userLocation,                // ALWAYS SEND
+                    userDisplayName: userDisplayName,          // ALWAYS SEND
+                    tapLocation: tapLocation                   // ALWAYS SEND
                 )
                 
                 await MainActor.run {
@@ -462,6 +410,56 @@ struct AiChatFullScreenView: View
                 }
             }
         }
+    }
+
+    // MARK: - Helper Functions
+
+    private func extractTapLocation() -> ClaudeModel.TapLocationContext? {
+        guard let location = selectedLocation else { return nil }
+        return ClaudeModel.TapLocationContext(
+            name: location.Name,
+            latitude: location.Coordinate.latitude,
+            longitude: location.Coordinate.longitude
+        )
+    }
+
+    private func resolveUserLocationString() async -> String
+    {
+        // Use selected location if available
+        if let location = selectedLocation {
+            return "Near \(location.Name ?? "Unknown Location")"
+        }
+        
+        // Use user's actual current location from GPS
+        if let userLocation = locationData.userLocation {
+            let geocoder = CLGeocoder()
+            do {
+                let placemarks = try await geocoder.reverseGeocodeLocation(userLocation)
+                if let placemark = placemarks.first {
+                    var components: [String] = []
+                    
+                    if let neighborhood = placemark.subLocality {
+                        components.append(neighborhood)
+                    }
+                    if let city = placemark.locality {
+                        components.append(city)
+                    }
+                    if let state = placemark.administrativeArea {
+                        components.append(state)
+                    }
+                    if let country = placemark.country {
+                        components.append(country)
+                    }
+                    
+                    return components.isEmpty ? "Unknown location" : "Near \(components.joined(separator: ", "))"
+                }
+            } catch {
+                print("Geocoding failed: \(error)")
+            }
+        }
+        
+        // Only if we have NOTHING
+        return "Unknown location"
     }
     
     private func extractTextBeforeJSON(from response: String) -> String

@@ -1554,12 +1554,12 @@ struct AuthAPI
         baseURL: URL,
         token: String,
         message: String,
-        history: [ClaudeModel.ChatMessage]?,
-        currentTimeNatural: String? = nil,  // CHANGED from currentTimeISO
-        userTimezone: String? = nil,
-        userLocation: String? = nil,
-        userDisplayName: String? = nil,
-        tapLocation: ClaudeModel.TapLocationContext? = nil
+        history: [ClaudeModel.ChatMessage],
+        currentTimeNatural: String,  // NOT OPTIONAL
+        userTimezone: String,  // NOT OPTIONAL
+        userLocation: String,  // NOT OPTIONAL
+        userDisplayName: String,  // NOT OPTIONAL
+        tapLocation: ClaudeModel.TapLocationContext?  // This one can be optional
     ) async throws -> String
     {
         let url = makeURL(baseURL, ["s", "chatbot", "chat"])
@@ -1568,10 +1568,10 @@ struct AuthAPI
         print("=== ChatBot Request ===")
         print("URL: \(url.absoluteString)")
         print("Message: \(message)")
-        print("History count: \(history?.count ?? 0)")
-        print("Current time: \(currentTimeNatural ?? "nil")")  // CHANGED
-        print("Timezone: \(userTimezone ?? "nil")")
-        print("User location: \(userLocation ?? "nil")")
+        print("History count: \(history.count)")
+        print("Current time: \(currentTimeNatural)")  // FIXED - no ??
+        print("Timezone: \(userTimezone)")  // FIXED - no ??
+        print("User location: \(userLocation)")  // FIXED - no ??
         #endif
         
         var req = URLRequest(url: url)
@@ -1580,11 +1580,10 @@ struct AuthAPI
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         
-        // Encode the request body with context
         let chatRequest = ClaudeModel.ChatbotRequest(
             message: message,
             history: history,
-            currentTimeNatural: currentTimeNatural,  // CHANGED
+            currentTimeNatural: currentTimeNatural,
             userTimezone: userTimezone,
             userLocation: userLocation,
             userDisplayName: userDisplayName,
