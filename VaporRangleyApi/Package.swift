@@ -23,6 +23,7 @@ let package = Package(
                 .product(name: "SQLKit", package: "sql-kit"),
                 .product(name: "JWT", package: "jwt"),
                 .product(name: "AWSPinpointSMSVoiceV2", package: "aws-sdk-swift"),
+                .product(name: "AWSCognitoIdentityProvider", package: "aws-sdk-swift"),
             ],
             path: "Sources/App",
             swiftSettings: [.enableUpcomingFeature("ExistentialAny")]

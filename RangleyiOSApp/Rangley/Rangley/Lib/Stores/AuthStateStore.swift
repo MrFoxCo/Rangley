@@ -14,7 +14,7 @@ class AuthStateStore: ObservableObject
 {
     @Published var isAuthenticated = false
     @Published var currentToken = ""
-    @Published var currentUser: ViewUserMeModel?
+    @Published var currentUser  : ViewUserMeModel?
     @Published var isCheckingAuth = true
     
     private var hubListener: UnsubscribeToken?

@@ -48,6 +48,7 @@ fileprivate enum ForgotPasswordStep: Hashable {
 @MainActor
 fileprivate final class ForgotPasswordVM: ObservableObject
 {
+    @Published var resetToken: String?
     // Form inputs
     @Published var phoneRaw: String = ""
     @Published var verificationCode: String = ""
@@ -57,8 +58,11 @@ fileprivate final class ForgotPasswordVM: ObservableObject
     // Flow state
     @Published var currentStep: ForgotPasswordStep = .enterPhone
     
-    // ✅ ADDED: Track the phone number that was successfully reset
+    // Track the phone number that was successfully reset
     @Published var completedPhone: String?
+    
+    // Track when code was requested
+    @Published var codeRequestedAt: Date?
     
     // UI state
     @Published var phoneStatus: StatusMessage = .none
@@ -116,59 +120,90 @@ fileprivate final class ForgotPasswordVM: ObservableObject
     
     func sendResetCode() async
     {
-            guard let phone = e164Phone else {
-                phoneStatus = .error("Please enter a valid phone number")
-                return
+        guard let phone = e164Phone else {
+            phoneStatus = .error("Please enter a valid phone number")
+            return
+        }
+        
+        // Check if we're still in a rate limit period
+        if let retryTime = retryAfter, retryTime > Date() {
+            let remaining = Int(retryTime.timeIntervalSinceNow / 60) + 1
+            phoneStatus = .error("Please wait \(remaining) more minutes before trying again")
+            return
+        }
+        
+        isBusy = true
+        phoneStatus = .none
+        isRateLimited = false
+        defer { isBusy = false }
+        
+        #if DEBUG
+        print("=== SENDING RESET CODE VIA VAPOR ===")
+        print("Phone: \(phone)")
+        print("Timestamp: \(Date())")
+        #endif
+        
+        do {
+            // Call YOUR Vapor API instead of Cognito
+            try await AuthAPI.sendPasswordResetCode(
+                baseURL: Env.apiBaseURL,
+                phone: phone
+            )
+            
+            #if DEBUG
+            print("Reset code request successful")
+            #endif
+            
+            await MainActor.run {
+                self.codeRequestedAt = Date()
             }
             
-            // Check if we're still in a rate limit period
-            if let retryTime = retryAfter, retryTime > Date() {
-                let remaining = Int(retryTime.timeIntervalSinceNow / 60) + 1
-                phoneStatus = .error("Please wait \(remaining) more minutes before trying again")
-                return
-            }
+            currentStep = .verifyCode(phone: phone)
+            verifyStatus = .info("Reset code sent to \(phone)")
+            retryAfter = nil
+            rateLimitMessage = ""
             
-            isBusy = true
-            phoneStatus = .none
-            isRateLimited = false
-            defer { isBusy = false }
+        } catch let error as AuthAPIError {
+            #if DEBUG
+            print("❌ RESET CODE FAILED")
+            print("Error: \(error)")
+            #endif
             
-            do {
-                let resetResult = try await Amplify.Auth.resetPassword(for: phone)
+            Log.auth.error("Password reset initiation failed: \(error)")
+            
+            switch error {
+            case .http(429, let reason):
+                // Rate limited
+                isRateLimited = true
+                rateLimitMessage = reason ?? "Rate limit exceeded"
                 
-                if case .confirmResetPasswordWithCode = resetResult.nextStep {
-                    currentStep = .verifyCode(phone: phone)
-                    verifyStatus = .info("Reset code sent to \(phone)")
-                    // Clear any previous rate limit state on success
-                    retryAfter = nil
-                    rateLimitMessage = ""
-                } else {
-                    phoneStatus = .error("Unexpected reset flow. Please try again")
-                }
-            } catch {
-                Log.auth.error("Password reset initiation failed: \(error)")
-                let errorMsg = userFriendlyAuthError(error)
-                
-                // Check if this is a rate limit error and set retry time
-                if errorMsg.contains("wait") || errorMsg.contains("limit") {
-                    isRateLimited = true
-                    rateLimitMessage = errorMsg
-                    
-                    // Set retry time based on error type
-                    if errorMsg.contains("15 minutes") {
+                if let reason = reason {
+                    if reason.contains("15 minutes") {
                         retryAfter = Date().addingTimeInterval(15 * 60)
-                    } else if errorMsg.contains("5 minutes") {
+                    } else if reason.contains("5 minutes") {
                         retryAfter = Date().addingTimeInterval(5 * 60)
-                    } else if errorMsg.contains("after") {
-                        // Try to extract specific time or default to 15 minutes
+                    } else {
                         retryAfter = Date().addingTimeInterval(15 * 60)
                     }
+                    phoneStatus = .error(reason)
+                } else {
+                    retryAfter = Date().addingTimeInterval(15 * 60)
+                    phoneStatus = .error("Rate limit exceeded. Try again later.")
                 }
                 
-                phoneStatus = .error(errorMsg)
+            case .http(_, let reason):
+                phoneStatus = .error(reason ?? "Failed to send code")
+                
+            default:
+                phoneStatus = .error("Failed to send code. Please try again.")
             }
+            
+        } catch {
+            Log.auth.error("Unexpected error: \(error)")
+            phoneStatus = .error("Something went wrong. Please try again.")
         }
-    
+    }
+
     func verifyCode() async
     {
         guard case .verifyCode(let phone) = currentStep else { return }
@@ -181,51 +216,75 @@ fileprivate final class ForgotPasswordVM: ObservableObject
         verifyStatus = .none
         defer { isBusy = false }
         
+        #if DEBUG
+        print("=== VERIFYING CODE VIA VAPOR ===")
+        print("Phone: \(phone)")
+        print("Code: \(verificationCode)")
+        print("Timestamp: \(Date())")
+        if let requestTime = codeRequestedAt {
+            let elapsed = Date().timeIntervalSince(requestTime)
+            print("⏱️ Time since code requested: \(Int(elapsed)) seconds")
+        }
+        #endif
+        
         do {
-            // Try with a password that meets all requirements but we know will be different
-            // from what the user actually wants. If this succeeds, the code was valid.
-            // If it fails due to code issues, we'll catch that.
-            try await Amplify.Auth.confirmResetPassword(
-                for: phone,
-                with: "ValidTemp123!@#", // A valid password format
-                confirmationCode: verificationCode
+            // ✅ Verify code with YOUR Vapor API
+            let response = try await AuthAPI.verifyPasswordResetCode(
+                baseURL: Env.apiBaseURL,
+                phone: phone,
+                code: verificationCode
             )
             
-            // If we get here, the reset actually succeeded with our temp password
-            // This shouldn't happen in normal flow, but if it does, we need to handle it
-            verifyStatus = .error("Unexpected success. Please request a new reset code.")
+            #if DEBUG
+            print("✅ Code verified successfully")
+            print("Reset token received: \(response.reset_token)")
+            #endif
             
-        } catch {
+            // Store the reset token for the final step
+            await MainActor.run {
+                self.resetToken = response.reset_token
+            }
+            
+            verifyStatus = .success("Code verified! ✓")
+            
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            
+            currentStep = .setNewPassword(phone: phone, code: verificationCode)
+            passwordStatus = .info("Now create your new password")
+            
+        } catch let error as AuthAPIError {
+            #if DEBUG
+            print("❌ VERIFICATION FAILED")
+            print("Error: \(error)")
+            #endif
+            
             Log.auth.error("Code verification failed: \(error)")
             
-            let errorMsg = userFriendlyAuthError(error)
-            
-            // Check if it's specifically a code-related error
-            if errorMsg.contains("Invalid verification code") ||
-               errorMsg.contains("expired") ||
-               errorMsg.contains("CodeMismatch") ||
-               errorMsg.contains("ExpiredCodeException") ||
-               errorMsg.contains("CodeMismatchException") {
-                verifyStatus = .error(errorMsg)
-            } else {
-                // Any other error likely means the code was valid but something else failed
-                // (like password policy, rate limiting, etc.)
-                verifyStatus = .success("Code verified! ✓")
-                
-                // Small delay to show the success message
-                try? await Task.sleep(nanoseconds: 800_000_000) // 0.8 seconds
-                
-                currentStep = .setNewPassword(phone: phone, code: verificationCode)
-                passwordStatus = .info("Now create your new password")
+            switch error {
+            case .http(400, let reason):
+                verifyStatus = .error(reason ?? "Invalid or expired code")
+            case .http(_, let reason):
+                verifyStatus = .error(reason ?? "Verification failed")
+            default:
+                verifyStatus = .error("Invalid or expired code")
             }
+            
+        } catch {
+            Log.auth.error("Unexpected error: \(error)")
+            verifyStatus = .error("Something went wrong. Please try again.")
         }
     }
-    
+
     func setNewPassword() async
     {
-        guard case .setNewPassword(let phone, let code) = currentStep else { return }
+        guard case .setNewPassword(let phone, _) = currentStep else { return }
         guard canSetNewPassword else {
             passwordStatus = .error("Please check password requirements")
+            return
+        }
+        
+        guard let token = resetToken else {
+            passwordStatus = .error("Invalid session. Please start over.")
             return
         }
         
@@ -233,25 +292,34 @@ fileprivate final class ForgotPasswordVM: ObservableObject
         passwordStatus = .none
         defer { isBusy = false }
         
+        #if DEBUG
+        print("=== SETTING NEW PASSWORD VIA VAPOR ===")
+        print("Phone: \(phone)")
+        print("Has reset token: \(resetToken != nil)")
+        #endif
+        
         do {
-            // Confirm the password reset with Amplify
-            try await Amplify.Auth.confirmResetPassword(
-                for: phone,
-                with: newPassword,
-                confirmationCode: code
+            // ✅ Confirm password reset with YOUR Vapor API
+            let response = try await AuthAPI.confirmPasswordReset(
+                baseURL: Env.apiBaseURL,
+                phone: phone,
+                resetToken: token,
+                newPassword: newPassword
             )
             
-            // Sign out to clear all cached tokens/sessions
-            _ = await Amplify.Auth.signOut()
-            Log.auth.info("User signed out after password reset to clear cached credentials")
+            #if DEBUG
+            print("✅ Password reset successful")
+            print("Message: \(response.message)")
+            #endif
             
-            // Update the keychain with the new password
-            // This ensures biometric login works with the new password
+            // Sign out from Amplify to clear cached credentials
+            _ = await Amplify.Auth.signOut()
+            Log.auth.info("User signed out after password reset")
+            
+            // Update keychain with new password
             do {
-                // Check if user had biometric auth enabled
                 let hadBiometrics = KeychainAuth.hasCredentials(for: phone)
                 
-                // Update keychain with new password
                 try KeychainAuth.save(
                     username: phone,
                     password: newPassword,
@@ -259,79 +327,127 @@ fileprivate final class ForgotPasswordVM: ObservableObject
                 )
                 Log.auth.info("Updated keychain with new password (biometrics: \(hadBiometrics))")
             } catch {
-                Log.auth.error("Failed to update keychain after password reset: \(error)")
-                // Non-fatal - user can still sign in manually
+                Log.auth.error("Failed to update keychain: \(error)")
+                // Non-fatal
             }
             
-            // Store the phone number for auto-fill on login screen
             completedPhone = phone
-            
             currentStep = .complete
             passwordStatus = .success("Password reset successfully!")
             
-        } catch {
+        } catch let error as AuthAPIError {
+            #if DEBUG
+            print("❌ PASSWORD RESET FAILED")
+            print("Error: \(error)")
+            #endif
+            
             Log.auth.error("Password reset confirmation failed: \(error)")
             
-            let errorMsg = userFriendlyAuthError(error)
-            
-            // Check if it's a rate limit error
-            if errorMsg.contains("limit") || errorMsg.contains("Too many") {
-                // Set retry time for 1 hour
+            switch error {
+            case .http(400, let reason):
+                if let reason = reason, reason.contains("meet requirements") {
+                    passwordStatus = .error("Password doesn't meet requirements")
+                } else {
+                    passwordStatus = .error(reason ?? "Invalid request")
+                }
+                
+            case .http(401, _):
+                passwordStatus = .error("Session expired. Please go back and request a new code.")
+                
+            case .http(429, let reason):
                 retryAfter = Date().addingTimeInterval(60 * 60)
                 isRateLimited = true
-                passwordStatus = .error(errorMsg)
+                passwordStatus = .error(reason ?? "Too many attempts")
+                
+            case .http(_, let reason):
+                passwordStatus = .error(reason ?? "Failed to reset password")
+                
+            default:
+                passwordStatus = .error("Failed to reset password. Please try again.")
             }
-            // Check if it's a code error (code might have expired between steps)
-            else if errorMsg.contains("Invalid verification code") ||
-               errorMsg.contains("expired") ||
-               errorMsg.contains("CodeMismatch") {
-                passwordStatus = .error("Verification code expired. Please go back and request a new code.")
-            } else {
-                passwordStatus = .error("Reset failed: " + errorMsg)
-            }
+            
+        } catch {
+            Log.auth.error("Unexpected error: \(error)")
+            passwordStatus = .error("Something went wrong. Please try again.")
         }
     }
-    
+
     func resendVerificationCode() async
     {
-           guard case .verifyCode(let phone) = currentStep else { return }
-           
-           // Check rate limit for resending too
-           if let retryTime = retryAfter, retryTime > Date() {
-               let remaining = Int(retryTime.timeIntervalSinceNow / 60) + 1
-               verifyStatus = .error("Please wait \(remaining) more minutes before requesting a new code")
-               return
-           }
-           
-           isResending = true
-           verifyStatus = .none
-           defer { isResending = false }
-           
-           do {
-               let resetResult = try await Amplify.Auth.resetPassword(for: phone)
-               
-               if case .confirmResetPasswordWithCode = resetResult.nextStep {
-                   verifyStatus = .info("New reset code sent to \(phone)")
-                   retryAfter = nil // Clear rate limit on success
-               } else {
-                   verifyStatus = .error("Unexpected reset flow. Please try again")
-               }
-           } catch {
-               Log.auth.error("Password reset resend failed: \(error)")
-               let errorMsg = userFriendlyAuthError(error)
-               
-               // Handle rate limiting for resend
-               if errorMsg.contains("wait") || errorMsg.contains("limit") {
-                   if errorMsg.contains("15 minutes") {
-                       retryAfter = Date().addingTimeInterval(15 * 60)
-                   } else if errorMsg.contains("5 minutes") {
-                       retryAfter = Date().addingTimeInterval(5 * 60)
-                   }
-               }
-               
-               verifyStatus = .error(errorMsg)
-           }
-       }
+        guard case .verifyCode(let phone) = currentStep else { return }
+        
+        if let retryTime = retryAfter, retryTime > Date() {
+            let remaining = Int(retryTime.timeIntervalSinceNow / 60) + 1
+            verifyStatus = .error("Please wait \(remaining) more minutes before requesting a new code")
+            return
+        }
+        
+        isResending = true
+        verifyStatus = .none
+        
+        await MainActor.run {
+            self.verificationCode = ""
+        }
+        
+        defer { isResending = false }
+        
+        #if DEBUG
+        print("=== RESENDING CODE VIA VAPOR ===")
+        print("Phone: \(phone)")
+        print("Previous code cleared: YES")
+        print("Timestamp: \(Date())")
+        #endif
+        
+        do {
+            try await AuthAPI.sendPasswordResetCode(
+                baseURL: Env.apiBaseURL,
+                phone: phone
+            )
+            
+            #if DEBUG
+            print("✅ New code sent successfully")
+            #endif
+            
+            await MainActor.run {
+                self.codeRequestedAt = Date()
+            }
+            
+            verifyStatus = .info("New reset code sent to \(phone)")
+            retryAfter = nil
+            
+        } catch let error as AuthAPIError {
+            #if DEBUG
+            print("❌ RESEND FAILED")
+            print("Error: \(error)")
+            #endif
+            
+            Log.auth.error("Password reset resend failed: \(error)")
+            
+            switch error {
+            case .http(429, let reason):
+                if let reason = reason {
+                    if reason.contains("15 minutes") {
+                        retryAfter = Date().addingTimeInterval(15 * 60)
+                    } else if reason.contains("5 minutes") {
+                        retryAfter = Date().addingTimeInterval(5 * 60)
+                    }
+                    verifyStatus = .error(reason)
+                } else {
+                    verifyStatus = .error("Too many attempts. Try again later.")
+                }
+                
+            case .http(_, let reason):
+                verifyStatus = .error(reason ?? "Failed to send code")
+                
+            default:
+                verifyStatus = .error("Failed to send code. Please try again.")
+            }
+            
+        } catch {
+            Log.auth.error("Unexpected error: \(error)")
+            verifyStatus = .error("Something went wrong. Please try again.")
+        }
+    }
     
     
     // MARK: - Rate Limit Status Methods

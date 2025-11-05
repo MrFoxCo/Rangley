@@ -216,6 +216,133 @@ struct AuthAPI
     }
     
     
+    // MARK: - Password Reset API
+
+    /// POST /auth/password-reset/send-code - Send password reset SMS code
+    static func sendPasswordResetCode(baseURL: URL, phone: String)
+        async throws -> Void
+    {
+        let body = PasswordResetRequestModel(phone: phone)
+        
+        var req = URLRequest(url: makeURL(baseURL, ["auth", "password-reset", "send-code"]))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        
+        do {
+            req.httpBody = try isoEncoder.encode(body)
+        } catch {
+            throw AuthAPIError.encode
+        }
+        
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else {
+            throw AuthAPIError.http(-1, "No HTTPURLResponse")
+        }
+        
+        guard (200..<300).contains(http.statusCode) else {
+            #if DEBUG
+            print("=== Send Password Reset Code Failed ===")
+            print("Status Code: \(http.statusCode)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        }
+        
+        // Success - no response body expected for 200 OK
+    }
+
+    /// POST /auth/password-reset/verify-code - Verify password reset code
+    static func verifyPasswordResetCode(baseURL: URL, phone: String, code: String)
+        async throws -> PasswordResetVerifyResponseModel
+    {
+        let body = PasswordResetVerifyRequestModel(phone: phone, code: code)
+        
+        var req = URLRequest(url: makeURL(baseURL, ["auth", "password-reset", "verify-code"]))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        
+        do {
+            req.httpBody = try isoEncoder.encode(body)
+        } catch {
+            throw AuthAPIError.encode
+        }
+        
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else {
+            throw AuthAPIError.http(-1, "No HTTPURLResponse")
+        }
+        
+        guard (200..<300).contains(http.statusCode) else {
+            #if DEBUG
+            print("=== Verify Password Reset Code Failed ===")
+            print("Status Code: \(http.statusCode)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        }
+        
+        do {
+            return try isoDecoder.decode(PasswordResetVerifyResponseModel.self, from: data)
+        } catch {
+            #if DEBUG
+            print("=== Decode Error in verifyPasswordResetCode ===")
+            print("Error: \(error)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.decode(error.localizedDescription)
+        }
+    }
+
+    /// POST /auth/password-reset/confirm - Confirm password reset with new password
+    static func confirmPasswordReset(baseURL: URL, phone: String, resetToken: String, newPassword: String)
+        async throws -> PasswordResetConfirmResponseModel
+    {
+        let body = PasswordResetConfirmRequestModel(
+            phone: phone,
+            reset_token: resetToken,
+            new_password: newPassword
+        )
+        
+        var req = URLRequest(url: makeURL(baseURL, ["auth", "password-reset", "confirm"]))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        
+        do {
+            req.httpBody = try isoEncoder.encode(body)
+        } catch {
+            throw AuthAPIError.encode
+        }
+        
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else {
+            throw AuthAPIError.http(-1, "No HTTPURLResponse")
+        }
+        
+        guard (200..<300).contains(http.statusCode) else {
+            #if DEBUG
+            print("=== Confirm Password Reset Failed ===")
+            print("Status Code: \(http.statusCode)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        }
+        
+        do {
+            return try isoDecoder.decode(PasswordResetConfirmResponseModel.self, from: data)
+        } catch {
+            #if DEBUG
+            print("=== Decode Error in confirmPasswordReset ===")
+            print("Error: \(error)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.decode(error.localizedDescription)
+        }
+    }
+    
+    
     // GET /auth/whoami  (protected; Bearer ID token)
     static func whoAmI(baseURL: URL, token: String)
         async throws -> WhoAmI

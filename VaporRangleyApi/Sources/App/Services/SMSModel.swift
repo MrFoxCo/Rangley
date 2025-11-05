@@ -9,7 +9,8 @@ import Vapor
 import Foundation
 
 // Simple, concurrency-safe verification code store
-actor VerificationCodeStore {
+actor VerificationCodeStore
+{
     static let shared = VerificationCodeStore()
     
     private var codes: [String: CodeEntry] = [:]
@@ -52,18 +53,57 @@ actor VerificationCodeStore {
     }
 }
 
+actor PasswordResetCodeStore {
+    static let shared = PasswordResetCodeStore()
+    
+    private var codes: [String: (code: String, expires: Date)] = [:]
+    private var resetTokens: [String: (token: String, expires: Date)] = [:]
+    
+    func store(phone: String, code: String) {
+        codes[phone] = (code, Date().addingTimeInterval(15 * 60)) // 15 min expiry
+    }
+    
+    func verify(phone: String, code: String) -> Bool {
+        guard let stored = codes[phone], stored.expires > Date() else {
+            codes.removeValue(forKey: phone)
+            return false
+        }
+        return stored.code == code
+    }
+    
+    func storeResetToken(phone: String, token: String) {
+        resetTokens[phone] = (token, Date().addingTimeInterval(10 * 60)) // 10 min to complete reset
+    }
+    
+    func validateResetToken(phone: String, token: String) -> Bool {
+        guard let stored = resetTokens[phone], stored.expires > Date() else {
+            resetTokens.removeValue(forKey: phone)
+            return false
+        }
+        return stored.token == token
+    }
+    
+    func invalidateResetToken(phone: String, token: String) {
+        resetTokens.removeValue(forKey: phone)
+        codes.removeValue(forKey: phone)
+    }
+}
+
 // MARK: - Request/Response Models
 
-struct PhoneVerificationRequest: Content {
+struct PhoneVerificationRequest: Content
+{
     let phone: String
 }
 
-struct VerifyCodeRequest: Content {
+struct VerifyCodeRequest: Content
+{
     let phone: String
     let code: String
 }
 
-struct VerificationResponse: Content {
+struct VerificationResponse: Content
+{
     let verified: Bool
     let token: String?
     let message: String?
@@ -73,4 +113,35 @@ struct VerificationResponse: Content {
         self.token = token
         self.message = message
     }
+}
+
+struct PasswordResetRequest: Content
+{
+    let phone: String
+}
+
+struct PasswordResetVerifyRequest: Content
+{
+    let phone   : String
+    let code    : String
+}
+
+struct PasswordResetVerifyResponse: Content
+{
+    let verified    : Bool
+    let reset_token : String
+    let message     : String
+}
+
+struct PasswordResetConfirmRequest: Content
+{
+    let phone       : String
+    let reset_token : String
+    let new_password: String
+}
+
+struct PasswordResetConfirmResponse: Content
+{
+    let success: Bool
+    let message: String
 }

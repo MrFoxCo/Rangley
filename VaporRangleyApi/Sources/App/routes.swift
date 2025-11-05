@@ -439,8 +439,155 @@ public func routes(_ app: Application) throws
 //    }
 
 
-    // TODO: Same number might be able to beat Rater Limiter with multiple consecutive requests
-    // TODO: ENHANCE for race conditions
+    // Password reset flow (separate from phone verification)
+    publicAuth.post("password-reset", "send-code")
+    {
+        req async throws -> HTTPStatus in
+        let body = try req.content.decode(PasswordResetRequest.self)
+        
+        guard body.phone.starts(with: "+"), body.phone.count >= 10 else {
+            throw Abort(.badRequest, reason: "Invalid phone number format")
+        }
+        
+        let clientIP = req.headers.forwarded.first?.for ??
+                       req.remoteAddress?.hostname ??
+                       "unknown"
+        
+        let normalizedPhone = body.phone.replacingOccurrences(of: " ", with: "")
+                                         .replacingOccurrences(of: "-", with: "")
+                                         .replacingOccurrences(of: "(", with: "")
+                                         .replacingOccurrences(of: ")", with: "")
+        
+        // Rate limiting
+        let rateCheck = await SMSRateLimiter.shared.canSend(to: normalizedPhone, from: clientIP)
+        guard rateCheck.allowed else {
+            if let waitInfo = await SMSRateLimiter.shared.getRemainingTime(for: normalizedPhone, from: clientIP) {
+                let minutes = Int(waitInfo.timeUntilReset / 60) + 1
+                throw Abort(.tooManyRequests, reason: "Too many reset attempts. Try again in \(minutes) minutes.")
+            }
+            throw Abort(.tooManyRequests, reason: "Rate limit exceeded. Please try again later.")
+        }
+        
+        // Check if user exists in Cognito
+        do {
+            let userExists = try await req.cognitoAdmin.userExists(phone: normalizedPhone)
+            guard userExists else {
+                req.logger.warning("Password reset requested for non-existent user: •••\(normalizedPhone.suffix(4))")
+                // Return success anyway to prevent user enumeration
+                return .ok
+            }
+        } catch {
+            req.logger.error("Failed to check user existence in Cognito: \(error)")
+            // Don't reveal the error to the user
+            return .ok
+        }
+        
+        let code = String(format: "%06d", Int.random(in: 100000...999999))
+        await PasswordResetCodeStore.shared.store(phone: normalizedPhone, code: code)
+        
+        // Send SMS
+        do {
+            let message = "\(code) is your Rangley password reset code. Don't share it."
+            try await req.smsService.sendText(to: body.phone, body: message)
+            
+            await SMSRateLimiter.shared.recordAttempt(for: normalizedPhone, from: clientIP)
+            req.logger.info("Password reset code sent to •••\(normalizedPhone.suffix(4))")
+            return .ok
+        } catch {
+            req.logger.error("Failed to send password reset SMS: \(error)")
+            throw Abort(.internalServerError, reason: "Failed to send reset code")
+        }
+    }
+
+    publicAuth.post("password-reset", "verify-code")
+    {
+        req async throws -> PasswordResetVerifyResponse in
+        let body = try req.content.decode(PasswordResetVerifyRequest.self)
+        
+        let normalizedPhone = body.phone.replacingOccurrences(of: " ", with: "")
+                                         .replacingOccurrences(of: "-", with: "")
+                                         .replacingOccurrences(of: "(", with: "")
+                                         .replacingOccurrences(of: ")", with: "")
+        
+        guard await PasswordResetCodeStore.shared.verify(phone: normalizedPhone, code: body.code) else {
+            req.logger.warning("Invalid password reset code for •••\(normalizedPhone.suffix(4))")
+            throw Abort(.badRequest, reason: "Invalid or expired verification code")
+        }
+        
+        let resetToken = UUID().uuidString
+        await PasswordResetCodeStore.shared.storeResetToken(phone: normalizedPhone, token: resetToken)
+        
+        req.logger.info("Password reset code verified for •••\(normalizedPhone.suffix(4))")
+        
+        return PasswordResetVerifyResponse(
+            verified: true,
+            reset_token: resetToken,
+            message: "Code verified. You may now reset your password."
+        )
+    }
+
+    publicAuth.post("password-reset", "confirm")
+    {
+        req async throws -> PasswordResetConfirmResponse in
+        let body = try req.content.decode(PasswordResetConfirmRequest.self)
+        
+        let normalizedPhone = body.phone.replacingOccurrences(of: " ", with: "")
+                                         .replacingOccurrences(of: "-", with: "")
+                                         .replacingOccurrences(of: "(", with: "")
+                                         .replacingOccurrences(of: ")", with: "")
+        
+        // Verify reset token
+        guard await PasswordResetCodeStore.shared.validateResetToken(phone: normalizedPhone, token: body.reset_token) else {
+            throw Abort(.unauthorized, reason: "Invalid or expired reset token")
+        }
+        
+        // Validate password complexity
+        guard body.new_password.count >= 8,
+              body.new_password.range(of: "[a-z]", options: .regularExpression) != nil,
+              body.new_password.range(of: "[A-Z]", options: .regularExpression) != nil,
+              body.new_password.range(of: "\\d", options: .regularExpression) != nil,
+              body.new_password.range(of: #"[^A-Za-z0-9]"#, options: .regularExpression) != nil else {
+            throw Abort(.badRequest, reason: "Password doesn't meet requirements: must be at least 8 characters with uppercase, lowercase, number, and special character")
+        }
+        
+        do {
+            // Reset password in Cognito
+            try await req.cognitoAdmin.setUserPassword(
+                username: normalizedPhone,
+                password: body.new_password,
+                permanent: true
+            )
+            
+            // Invalidate token
+            await PasswordResetCodeStore.shared.invalidateResetToken(phone: normalizedPhone, token: body.reset_token)
+            
+            req.logger.info("Password reset successful for •••\(normalizedPhone.suffix(4))")
+            
+            return PasswordResetConfirmResponse(
+                success: true,
+                message: "Password reset successfully"
+            )
+        } catch let error as Abort {
+            // Re-throw Abort errors
+            throw error
+        } catch {
+            req.logger.error("Failed to reset password in Cognito: \(error)")
+            
+            // Check for specific Cognito errors
+            let errorDesc = String(describing: error).lowercased()
+            if errorDesc.contains("usernotfound") {
+                throw Abort(.notFound, reason: "User not found")
+            } else if errorDesc.contains("invalidpassword") {
+                throw Abort(.badRequest, reason: "Password doesn't meet Cognito requirements")
+            } else if errorDesc.contains("limitexceeded") {
+                throw Abort(.tooManyRequests, reason: "Too many password reset attempts. Try again later.")
+            } else {
+                throw Abort(.internalServerError, reason: "Failed to reset password. Please try again.")
+            }
+        }
+    }
+    
+    
     
     // Send verification code with rate limiting
     // Enhanced send verification route with IP protection
@@ -517,7 +664,6 @@ public func routes(_ app: Application) throws
         }
     }
     
-
     // Verify phone code (with attempt limiting too)
     // Verify phone code with phone normalization
     publicAuth.post("verify-phone")

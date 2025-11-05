@@ -11,7 +11,7 @@ private func requireEnv(_ k: String) -> String {
     return v
 }
 
-public func configure(_ app: Application) throws
+public func configure(_ app: Application) async throws
 {
 
     // MARK: - DATABASE
@@ -103,9 +103,9 @@ public func configure(_ app: Application) throws
 
     // === Load JWKS synchronously at boot ===
     let jwksURI = URI(string: "\(cognitoIssuer)/.well-known/jwks.json")
-    let res = try app.client.get(jwksURI, beforeSend: { req in
+    let res = try await app.client.get(jwksURI, beforeSend: { req in
         req.headers.replaceOrAdd(name: .accept, value: "application/json")
-    }).wait()
+    }).get()
 
     guard res.status == .ok, var body = res.body,
           let jwksJSON = body.readString(length: body.readableBytes) else {
@@ -114,12 +114,23 @@ public func configure(_ app: Application) throws
     }
 
     // Bridge async add() onto NIO and block until it completes
-    _ = try app.eventLoopGroup.next().makeFutureWithTask {
+    _ = try await app.eventLoopGroup.next().makeFutureWithTask {
         try await app.jwt.keys.add(jwksJSON: jwksJSON)
-    }.wait()
+    }.get()
 
     app.logger.info("Loaded Cognito JWKS from \(jwksURI)")
 
+    // MARK: - COGNITO ADMIN SERVICE
+    let cognitoRegion = requireEnv("AWS_REGION") // e.g., "us-east-2"
+
+    app.cognitoAdmin = try await CognitoAdminService(
+        region: cognitoRegion,
+        userPoolId: cognitoUserPoolId
+    )
+
+    app.logger.info("Configured Cognito Admin Service for region: \(cognitoRegion)")
+    
+    
     // MARK: - END COGNITO
     
     try routes(app)
