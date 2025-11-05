@@ -18,4 +18,12 @@ struct ViewUserMeModel: Codable, Identifiable
     let dttm_created_utc    : Date
     
     var id: UUID { user_uuid }
+    
+    var firstName: String {
+        let components = display_name.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
+        if let first = components.first {
+            return String(first)
+        }
+        return display_name
+    }
 }

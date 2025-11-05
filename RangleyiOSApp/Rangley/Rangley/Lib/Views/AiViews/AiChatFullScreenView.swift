@@ -176,16 +176,16 @@ struct AiChatFullScreenView: View
             isTextFieldFocused = true
             
             // Set greeting once
-            let userName = authState.currentUser?.display_name ?? authState.currentUser?.username ?? "there"
+            let firstName = authState.currentUser?.firstName ?? authState.currentUser?.username ?? "there"
             let greetings = [
-                "Hey \(userName), what's the plan?",
-                "Where are we meeting, \(userName)?",
-                "Let's pick a time and place, \(userName).",
-                "Need a spot or a time, \(userName)?",
+                "Hey \(firstName), what's the plan?",
+                "Where are we meeting, \(firstName)?",
+                "Let's pick a time and place, \(firstName).",
+                "Need a spot or a time, \(firstName)?",
                 "Who's in? Where to?",
-                "Ready to make it happen, \(userName)?"
+                "Ready to make it happen, \(firstName)?"
             ]
-            selectedGreeting = greetings.randomElement() ?? "Hey \(userName), what's the plan?"
+            selectedGreeting = greetings.randomElement() ?? "Hey \(firstName), what's the plan?"
         }
     }
     

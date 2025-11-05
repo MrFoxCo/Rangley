@@ -49,9 +49,8 @@ extension AuthAPIError
 extension AuthAPI
 {
     /// GET /v/users — browse all discoverable (no filters). Server should allow no filters here.
-    static func browseAllUsers(
-        baseURL: URL,token: String,limit: Int? = nil,offset: Int? = nil
-    ) async throws -> [ViewUsersModel]
+    static func browseAllUsers(baseURL: URL,token: String,limit: Int? = nil,offset: Int? = nil)
+        async throws -> [ViewUsersModel]
     {
         var url = makeURL(baseURL, ["v", "users"])
         if let limit, let offset {
@@ -97,47 +96,14 @@ extension AuthAPI
 struct AuthAPI
 {
     
-    // JSON enc/dec with ISO-8601 dates
-    private static var isoEncoder: JSONEncoder
-    {
-        let e = JSONEncoder()
-        e.dateEncodingStrategy = .iso8601
-        return e
-    }
-    
-    private static var isoDecoder: JSONDecoder
-    {
-        let d = JSONDecoder()
-        d.dateDecodingStrategy = .custom { dec in
-            let c = try dec.singleValueContainer()
 
-            // 1) Try string → ISO8601 (± fractional seconds) → or numeric seconds in a string
-            if let s = try? c.decode(String.self) {
-                let f1 = ISO8601DateFormatter()
-                f1.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-                if let dt = f1.date(from: s) { return dt }
-
-                let f2 = ISO8601DateFormatter()
-                f2.formatOptions = [.withInternetDateTime]
-                if let dt = f2.date(from: s) { return dt }
-
-                if let secs = Double(s) { return Date(timeIntervalSince1970: secs) }
-                throw DecodingError.dataCorrupted(.init(codingPath: dec.codingPath, debugDescription: "Unparseable date string: \(s)"))
-            }
-
-            // 2) Try numeric epoch seconds
-            if let secs = try? c.decode(Double.self) {
-                return Date(timeIntervalSince1970: secs)
-            }
-
-            throw DecodingError.dataCorrupted(.init(codingPath: dec.codingPath, debugDescription: "Date was neither string nor number"))
-        }
-        return d
-    }
-
+    // ====================================================================
+    // MARK: - BEGIN - USER / ACCOUNT RELATED
+    // ====================================================================
     
     // POST /i/auth-register  (protected; Bearer ID token)
-    static func register(baseURL: URL, token: String, payload: UserRegisterModel) async throws -> UserRegisterResult
+    static func register(baseURL: URL, token: String, payload: UserRegisterModel)
+        async throws -> UserRegisterResult
     {
         var req = URLRequest(url: makeURL(baseURL, ["auth", "register"]))
         req.httpMethod = "POST"
@@ -173,7 +139,8 @@ struct AuthAPI
     // MARK: - Phone Verification API
         
     /// POST /auth/send-verification - Send SMS verification code
-    static func sendVerificationCode(baseURL: URL, phone: String) async throws -> Void
+    static func sendVerificationCode(baseURL: URL, phone: String)
+        async throws -> Void
     {
         let body = SendVerificationRequest(phone: phone)
         
@@ -206,8 +173,8 @@ struct AuthAPI
     }
     
     /// POST /auth/verify-phone - Verify SMS code
-    static func verifyPhoneCode(baseURL: URL, phone: String, code: String) async throws
-        -> VerifyPhoneResponse
+    static func verifyPhoneCode(baseURL: URL, phone: String, code: String)
+        async throws -> VerifyPhoneResponse
     {
         let body = VerifyPhoneRequest(phone: phone, code: code)
         
@@ -249,6 +216,250 @@ struct AuthAPI
     }
     
     
+    // GET /auth/whoami  (protected; Bearer ID token)
+    static func whoAmI(baseURL: URL, token: String)
+        async throws -> WhoAmI
+    {
+        var req = URLRequest(url: makeURL(baseURL, ["auth", "whoami"]))
+        req.httpMethod = "GET"
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
+        guard (200..<300).contains(http.statusCode) else {
+            #if DEBUG
+            print("=== WhoAmI Failed ===")
+            print("Status Code: \(http.statusCode)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        }
+        
+        do {
+            return try JSONDecoder().decode(WhoAmI.self, from: data)
+        } catch {
+            #if DEBUG
+            print("=== Decode Error in whoAmI ===")
+            print("Error: \(error)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.decode(error.localizedDescription)
+        }
+    }
+    
+    /// GET /v/me  (protected; Bearer ID token)
+    static func viewUserMe(baseURL: URL, token: String)
+        async throws -> ViewUserMeModel
+    {
+        var req = URLRequest(url: makeURL(baseURL, ["v", "user", "me"]))
+        req.httpMethod = "GET"
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
+        guard (200..<300).contains(http.statusCode) else {
+            #if DEBUG
+            print("=== Me Failed ===")
+            print("Status Code: \(http.statusCode)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        }
+        
+        do {
+            return try isoDecoder.decode(ViewUserMeModel.self, from: data)
+        } catch {
+            #if DEBUG
+            print("=== Decode Error in me ===")
+            print("Error: \(error)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.decode(error.localizedDescription)
+        }
+    }
+    
+    static func viewUsersProfile(baseURL: URL, token: String, userUUID: UUID)
+        async throws -> ViewUserProfileModelResponse
+    {
+        var req = URLRequest(url: makeURL(baseURL, ["v", "users", "profile", userUUID.uuidString]))
+        req.httpMethod = "GET"
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
+        guard (200..<300).contains(http.statusCode) else {
+            #if DEBUG
+            print("=== Profile Failed ===")
+            print("Status Code: \(http.statusCode)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        }
+        
+        do {
+            return try isoDecoder.decode(ViewUserProfileModelResponse.self, from: data)
+        } catch {
+            #if DEBUG
+            print("=== Decode Error in profile ===")
+            print("Error: \(error)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.decode(error.localizedDescription)
+        }
+    }
+    
+    /// GET /auth/check  (protected; Bearer ID token)
+    static func checkUsernameAvailability(baseURL: URL, body: CheckUsernameAvailabilityModelBody)
+        async throws -> CheckUsernameAvailabilityModelResponse
+    {
+        // URL encode the username parameter
+        guard let encodedUsername = body.username.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
+            throw AuthAPIError.decode("Invalid username characters")
+        }
+        
+        let urlString = makeURL(baseURL, ["auth", "check", "username-availability"]).absoluteString + "?username=\(encodedUsername)"
+        guard let url = URL(string: urlString) else {
+            throw AuthAPIError.decode("Invalid URL")
+        }
+        
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
+        guard (200..<300).contains(http.statusCode) else {
+            #if DEBUG
+            print("=== Username Check Failed ===")
+            print("Status Code: \(http.statusCode)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        }
+        
+        do {
+            return try isoDecoder.decode(CheckUsernameAvailabilityModelResponse.self, from: data)
+        } catch {
+            #if DEBUG
+            print("=== Decode Error in username check ===")
+            print("Error: \(error)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.decode(error.localizedDescription)
+        }
+    }
+
+    
+    // MARK: - Optional debug helper (pretty raw JSON)
+    static func whoAmIPrettyRaw(baseURL: URL, token: String)
+        async throws -> String
+    {
+        var req = URLRequest(url: makeURL(baseURL, ["auth", "whoami"]))
+        req.httpMethod = "GET"
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
+        guard (200..<300).contains(http.statusCode) else {
+            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        }
+
+        if let obj = try? JSONSerialization.jsonObject(with: data),
+           let pretty = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted]),
+           let s = String(data: pretty, encoding: .utf8) { return s }
+        return String(data: data, encoding: .utf8) ?? ""
+    }
+    
+    /// GET /validate/display-name?display_name=... (public endpoint)
+    static func validateDisplayName(baseURL: URL, body: ValidateDisplayNameModelBody)
+        async throws -> ValidateDisplayNameModelResponse
+    {
+        // URL encode the display name parameter
+        guard let encodedDisplayName = body.display_name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
+            throw AuthAPIError.decode("Invalid display name characters")
+        }
+        
+        let urlString = makeURL(baseURL, ["auth", "validate", "display-name"]).absoluteString + "?display_name=\(encodedDisplayName)"
+        guard let url = URL(string: urlString) else {
+            throw AuthAPIError.decode("Invalid URL")
+        }
+        
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
+        guard (200..<300).contains(http.statusCode) else {
+            #if DEBUG
+            print("=== Display Name Validation Failed ===")
+            print("Status Code: \(http.statusCode)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        }
+        
+        do {
+            return try isoDecoder.decode(ValidateDisplayNameModelResponse.self, from: data)
+        } catch {
+            #if DEBUG
+            print("=== Decode Error in display name validation ===")
+            print("Error: \(error)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.decode(error.localizedDescription)
+        }
+    }
+
+    static func deleteUser(baseURL: URL, token: String) async throws -> DeleteUserResponse
+    {
+        var req = URLRequest(url: makeURL(baseURL, ["s","user","delete"]))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        // No body needed - cognito_sub comes from auth token
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
+        guard (200..<300).contains(http.statusCode) else {
+            #if DEBUG
+            print("=== User Deletion Failed ===")
+            print("Status Code: \(http.statusCode)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        }
+        
+        do {
+            return try JSONDecoder().decode(DeleteUserResponse.self, from: data)
+        } catch {
+            #if DEBUG
+            print("=== Decode Error in deleteUser ===")
+            print("Error: \(error)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.decode(error.localizedDescription)
+        }
+    }
+    
+    // ====================================================================
+    // MARK: - END - USER / ACCOUNT RELATED
+    // ====================================================================
+    
+    
+    
+    
+    
+    
+    // ====================================================================
+    // MARK: - BEGNI - Updating App
+    // ====================================================================
+    
     static func viewAppVersion(baseURL: URL, appVersion: Int32)
         async throws -> AppVersionModelResponse
     {
@@ -286,100 +497,18 @@ struct AuthAPI
         }
     }
     
+    // ====================================================================
+    // MARK: - END - Updating App
+    // ====================================================================
     
     
-    // GET /auth/whoami  (protected; Bearer ID token)
-    static func whoAmI(baseURL: URL, token: String) async throws -> WhoAmI
-    {
-        var req = URLRequest(url: makeURL(baseURL, ["auth", "whoami"]))
-        req.httpMethod = "GET"
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-
-        let (data, resp) = try await URLSession.shared.data(for: req)
-        guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
-        guard (200..<300).contains(http.statusCode) else {
-            #if DEBUG
-            print("=== WhoAmI Failed ===")
-            print("Status Code: \(http.statusCode)")
-            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
-            #endif
-            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
-        }
-        
-        do {
-            return try JSONDecoder().decode(WhoAmI.self, from: data)
-        } catch {
-            #if DEBUG
-            print("=== Decode Error in whoAmI ===")
-            print("Error: \(error)")
-            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
-            #endif
-            throw AuthAPIError.decode(error.localizedDescription)
-        }
-    }
     
-    // GET /v/me  (protected; Bearer ID token)
-    static func viewUserMe(baseURL: URL, token: String) async throws -> ViewUserMeModel
-    {
-        var req = URLRequest(url: makeURL(baseURL, ["v", "user", "me"]))
-        req.httpMethod = "GET"
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-
-        let (data, resp) = try await URLSession.shared.data(for: req)
-        guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
-        guard (200..<300).contains(http.statusCode) else {
-            #if DEBUG
-            print("=== Me Failed ===")
-            print("Status Code: \(http.statusCode)")
-            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
-            #endif
-            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
-        }
-        
-        do {
-            return try isoDecoder.decode(ViewUserMeModel.self, from: data)
-        } catch {
-            #if DEBUG
-            print("=== Decode Error in me ===")
-            print("Error: \(error)")
-            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
-            #endif
-            throw AuthAPIError.decode(error.localizedDescription)
-        }
-    }
     
-    static func viewUsersProfile(baseURL: URL, token: String, userUUID: UUID) async throws -> ViewUserProfileModelResponse
-    {
-        var req = URLRequest(url: makeURL(baseURL, ["v", "users", "profile", userUUID.uuidString]))
-        req.httpMethod = "GET"
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-
-        let (data, resp) = try await URLSession.shared.data(for: req)
-        guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
-        guard (200..<300).contains(http.statusCode) else {
-            #if DEBUG
-            print("=== Profile Failed ===")
-            print("Status Code: \(http.statusCode)")
-            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
-            #endif
-            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
-        }
-        
-        do {
-            return try isoDecoder.decode(ViewUserProfileModelResponse.self, from: data)
-        } catch {
-            #if DEBUG
-            print("=== Decode Error in profile ===")
-            print("Error: \(error)")
-            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
-            #endif
-            throw AuthAPIError.decode(error.localizedDescription)
-        }
-    }
     
+    
+    // ====================================================================
+    // MARK: - BEGIN - FRIENDS
+    // ====================================================================
     
     // MARK: - Send Friend Request
     static func sendFriendRequest(baseURL: URL,token: String,recipientUserUUID: UUID)
@@ -496,7 +625,8 @@ struct AuthAPI
     }
     
     /// GET /v/friends - Get list of all friends
-    static func getFriendsList(baseURL: URL, token: String) async throws -> [FriendItem]
+    static func getFriendsList(baseURL: URL, token: String)
+        async throws -> [FriendItem]
     {
         var req = URLRequest(url: makeURL(baseURL, ["v", "friends"]))
         req.httpMethod = "GET"
@@ -529,7 +659,8 @@ struct AuthAPI
     }
     
     /// DELETE /s/friends/:user_uuid - Remove a friend
-    static func unfriend(baseURL: URL, token: String, userUUID: UUID) async throws -> UnfriendResponse
+    static func unfriend(baseURL: URL, token: String, userUUID: UUID)
+        async throws -> UnfriendResponse
     {
         var req = URLRequest(url: makeURL(baseURL, ["s", "friends", userUUID.uuidString]))
         req.httpMethod = "DELETE"
@@ -561,8 +692,20 @@ struct AuthAPI
         }
     }
     
+    
+    // ====================================================================
+    // MARK: - END - FRIENDS
+    // ====================================================================
 
-    // MARK: - Get User Inbox
+    
+    
+    
+    
+    
+    // ====================================================================
+    // MARK: - BEGIN - In App Notifications
+    // ====================================================================
+    
     static func viewUserInbox(baseURL: URL,token: String) async throws -> [InboxNotificationModelBody]
     {
         var req = URLRequest(url: makeURL(baseURL, ["v", "inbox"]))
@@ -596,91 +739,8 @@ struct AuthAPI
         }
     }
     
-    
-    // GET /auth/check  (protected; Bearer ID token)
-    static func checkUsernameAvailability(baseURL: URL, body: CheckUsernameAvailabilityModelBody)
-        async throws -> CheckUsernameAvailabilityModelResponse
-    {
-        // URL encode the username parameter
-        guard let encodedUsername = body.username.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
-            throw AuthAPIError.decode("Invalid username characters")
-        }
-        
-        let urlString = makeURL(baseURL, ["auth", "check", "username-availability"]).absoluteString + "?username=\(encodedUsername)"
-        guard let url = URL(string: urlString) else {
-            throw AuthAPIError.decode("Invalid URL")
-        }
-        
-        var req = URLRequest(url: url)
-        req.httpMethod = "GET"
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-
-        let (data, resp) = try await URLSession.shared.data(for: req)
-        guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
-        guard (200..<300).contains(http.statusCode) else {
-            #if DEBUG
-            print("=== Username Check Failed ===")
-            print("Status Code: \(http.statusCode)")
-            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
-            #endif
-            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
-        }
-        
-        do {
-            return try isoDecoder.decode(CheckUsernameAvailabilityModelResponse.self, from: data)
-        } catch {
-            #if DEBUG
-            print("=== Decode Error in username check ===")
-            print("Error: \(error)")
-            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
-            #endif
-            throw AuthAPIError.decode(error.localizedDescription)
-        }
-    }
-
-    // GET /validate/display-name?display_name=... (public endpoint)
-    static func validateDisplayName(baseURL: URL, body: ValidateDisplayNameModelBody)
-        async throws -> ValidateDisplayNameModelResponse
-    {
-        // URL encode the display name parameter
-        guard let encodedDisplayName = body.display_name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
-            throw AuthAPIError.decode("Invalid display name characters")
-        }
-        
-        let urlString = makeURL(baseURL, ["auth", "validate", "display-name"]).absoluteString + "?display_name=\(encodedDisplayName)"
-        guard let url = URL(string: urlString) else {
-            throw AuthAPIError.decode("Invalid URL")
-        }
-        
-        var req = URLRequest(url: url)
-        req.httpMethod = "GET"
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-
-        let (data, resp) = try await URLSession.shared.data(for: req)
-        guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
-        guard (200..<300).contains(http.statusCode) else {
-            #if DEBUG
-            print("=== Display Name Validation Failed ===")
-            print("Status Code: \(http.statusCode)")
-            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
-            #endif
-            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
-        }
-        
-        do {
-            return try isoDecoder.decode(ValidateDisplayNameModelResponse.self, from: data)
-        } catch {
-            #if DEBUG
-            print("=== Decode Error in display name validation ===")
-            print("Error: \(error)")
-            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
-            #endif
-            throw AuthAPIError.decode(error.localizedDescription)
-        }
-    }
-
-    
-    static func clearInbox(baseURL: URL, token: String) async throws -> ClearInboxResponse
+    static func clearInbox(baseURL: URL, token: String)
+        async throws -> ClearInboxResponse
     {
         var req = URLRequest(url: makeURL(baseURL, ["s", "inbox", "clear"]))
         req.httpMethod = "POST"
@@ -721,28 +781,55 @@ struct AuthAPI
         return try isoDecoder.decode(DeleteNotificationResponse.self, from: data)
     }
     
-    // MARK: - Optional debug helper (pretty raw JSON)
-    static func whoAmIPrettyRaw(baseURL: URL, token: String) async throws -> String
+    static func viewNotifications(baseURL: URL, token: String) async throws -> [ViewNotificationsModel]
     {
-        var req = URLRequest(url: makeURL(baseURL, ["auth", "whoami"]))
+        var req = URLRequest(url: makeURL(baseURL, ["v", "notifications"]))
         req.httpMethod = "GET"
+        req.cachePolicy = .reloadIgnoringLocalCacheData
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
         let (data, resp) = try await URLSession.shared.data(for: req)
         guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
         guard (200..<300).contains(http.statusCode) else {
+            #if DEBUG
+            print("=== View Notifications Failed ===")
+            print("Status Code: \(http.statusCode)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
             throw AuthAPIError.http(http.statusCode, extractReason(from: data))
         }
-
-        if let obj = try? JSONSerialization.jsonObject(with: data),
-           let pretty = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted]),
-           let s = String(data: pretty, encoding: .utf8) { return s }
-        return String(data: data, encoding: .utf8) ?? ""
+        
+        do {
+            let wrapper = try isoDecoder.decode(NotificationsResponse.self, from: data)
+            return wrapper.results
+        } catch {
+            #if DEBUG
+            print("=== Decode Error in viewNotifications ===")
+            print("Error: \(error)")
+            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            #endif
+            throw AuthAPIError.decode(error.localizedDescription)
+        }
     }
+ 
+    
+    // ====================================================================
+    // MARK: - END - In App Notifications
+    // ====================================================================
+    
+    
+    
+    
+    
+    
+    // ====================================================================
+    // MARK: - BEGIN - MEETS
+    // ====================================================================
     
     // THE VERY FIRST MEET corresponds to SystemInsertMeet
-    static func createMeet(baseURL: URL, token: String, body: MeetInsertBody) async throws -> MeetInsertResponse
+    static func createMeet(baseURL: URL, token: String, body: MeetInsertBody)
+        async throws -> MeetInsertResponse
     {
         var req = URLRequest(url: makeURL(baseURL, ["s", "meet"]))
         req.httpMethod = "POST"
@@ -866,7 +953,6 @@ struct AuthAPI
         }
     }
     
-    
     static func updateMeet(baseURL: URL, token: String, body: UpdatedMeetInsertBody)
         async throws -> UpdatedMeetInsertResponse
     {
@@ -909,7 +995,6 @@ struct AuthAPI
         throw AuthAPIError.http(http.statusCode, extractReason(from: data))
     }
     
-    
     // Corresponds to SystemInsertUpdatedMeet in VAPOR
     static func deleteMeet(baseURL: URL, token: String, body: DeletedMeetInsertBody)
         async throws -> DeletedMeetInsertResponse
@@ -944,45 +1029,12 @@ struct AuthAPI
         }
     }
     
-    
-    // Move this outside the function
+    // TODO: Move this outside this file
     struct DeleteUserResponse: Codable
     {
         let is_success: Bool
     }
 
-    static func deleteUser(baseURL: URL, token: String) async throws -> DeleteUserResponse
-    {
-        var req = URLRequest(url: makeURL(baseURL, ["s","user","delete"]))
-        req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        // No body needed - cognito_sub comes from auth token
-
-        let (data, resp) = try await URLSession.shared.data(for: req)
-        guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
-        guard (200..<300).contains(http.statusCode) else {
-            #if DEBUG
-            print("=== User Deletion Failed ===")
-            print("Status Code: \(http.statusCode)")
-            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
-            #endif
-            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
-        }
-        
-        do {
-            return try JSONDecoder().decode(DeleteUserResponse.self, from: data)
-        } catch {
-            #if DEBUG
-            print("=== Decode Error in deleteUser ===")
-            print("Error: \(error)")
-            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
-            #endif
-            throw AuthAPIError.decode(error.localizedDescription)
-        }
-    }
-    
     /// GET /v/meets  (protected; Bearer ID token)
     static func viewMeets(baseURL: URL, token: String) async throws -> [ViewMeetsModel]
     {
@@ -1014,40 +1066,6 @@ struct AuthAPI
             throw AuthAPIError.decode(error.localizedDescription)
         }
     }
-    
-    static func viewNotifications(baseURL: URL, token: String) async throws -> [ViewNotificationsModel]
-    {
-        var req = URLRequest(url: makeURL(baseURL, ["v", "notifications"]))
-        req.httpMethod = "GET"
-        req.cachePolicy = .reloadIgnoringLocalCacheData
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-
-        let (data, resp) = try await URLSession.shared.data(for: req)
-        guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
-        guard (200..<300).contains(http.statusCode) else {
-            #if DEBUG
-            print("=== View Notifications Failed ===")
-            print("Status Code: \(http.statusCode)")
-            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
-            #endif
-            throw AuthAPIError.http(http.statusCode, extractReason(from: data))
-        }
-        
-        do {
-            let wrapper = try isoDecoder.decode(NotificationsResponse.self, from: data)
-            return wrapper.results
-        } catch {
-            #if DEBUG
-            print("=== Decode Error in viewNotifications ===")
-            print("Error: \(error)")
-            print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
-            #endif
-            throw AuthAPIError.decode(error.localizedDescription)
-        }
-    }
- 
-    // MARK: - Invitations API
     
     static func respondToInvitation(baseURL: URL, token: String, body: RespondToInviteBody)
         async throws -> RespondToInviteResponse
@@ -1148,7 +1166,19 @@ struct AuthAPI
         }
     }
     
-    // MARK: - DTOs for Users API
+    // ====================================================================
+    // MARK: - END - MEETS
+    // ====================================================================
+    
+    
+    
+
+
+
+    // ====================================================================
+    // MARK: - BEGIN - Searching Users
+    // ====================================================================
+
 
     private struct UsersSearchBody: Codable, Sendable
     {
@@ -1283,13 +1313,19 @@ struct AuthAPI
         }
     }
     
+    // ====================================================================
+    // MARK: - END - Searching Users
+    // ====================================================================
+    
+    
+    
+    
+    
+    
     // =========================================================
-    // MARK: - Meet Group Stuff
+    // MARK: - BEGIN - Meet Group Stuff
     // =========================================================
 
-    
-    // Create friend group
-    // Create meet group
     static func insertMeetGroup(baseURL: URL, token: String, body: InsertGroupBody)
         async throws -> InsertGroupResponse
     {
@@ -1550,79 +1586,7 @@ struct AuthAPI
         }
     }
     
-    static func postChatBot(
-        baseURL: URL,
-        token: String,
-        message: String,
-        history: [ClaudeModel.ChatMessage],
-        currentTimeNatural: String,  // NOT OPTIONAL
-        userTimezone: String,  // NOT OPTIONAL
-        userLocation: String,  // NOT OPTIONAL
-        userDisplayName: String,  // NOT OPTIONAL
-        tapLocation: ClaudeModel.TapLocationContext?  // This one can be optional
-    ) async throws -> String
-    {
-        let url = makeURL(baseURL, ["s", "chatbot", "chat"])
-        
-        #if DEBUG
-        print("=== ChatBot Request ===")
-        print("URL: \(url.absoluteString)")
-        print("Message: \(message)")
-        print("History count: \(history.count)")
-        print("Current time: \(currentTimeNatural)")  // FIXED - no ??
-        print("Timezone: \(userTimezone)")  // FIXED - no ??
-        print("User location: \(userLocation)")  // FIXED - no ??
-        #endif
-        
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        
-        let chatRequest = ClaudeModel.ChatbotRequest(
-            message: message,
-            history: history,
-            currentTimeNatural: currentTimeNatural,
-            userTimezone: userTimezone,
-            userLocation: userLocation,
-            userDisplayName: userDisplayName,
-            tapLocation: tapLocation
-        )
-        let encoder = JSONEncoder()
-        req.httpBody = try encoder.encode(chatRequest)
-        
-        #if DEBUG
-        if let bodyString = String(data: req.httpBody ?? Data(), encoding: .utf8) {
-            print("Request body: \(bodyString)")
-        }
-        #endif
-
-        let (data, resp) = try await URLSession.shared.data(for: req)
-        guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
-        guard (200..<300).contains(http.statusCode) else {
-           #if DEBUG
-           print("=== Send Message to Chatbot ===")
-           print("Status Code: \(http.statusCode)")
-           print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
-           #endif
-           throw AuthAPIError.http(http.statusCode, extractReason(from: data))
-        }
-
-        do {
-            let decoder = JSONDecoder()
-            let response = try decoder.decode(ClaudeModel.ChatbotResponse.self, from: data)
-            return response.message
-        } catch {
-           #if DEBUG
-           print("=== Decode Error in postChatBot ===")
-           print("Error: \(error)")
-           print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
-           #endif
-           throw AuthAPIError.decode(error.localizedDescription)
-        }
-    }
-
+    
     // View meet group members
     static func viewMeetGroupMembers(baseURL: URL, token: String, meetGroupId: Int64)
         async throws -> [GroupMember]
@@ -1692,10 +1656,102 @@ struct AuthAPI
     }
     
     // =========================================================
-    // MARK: - Meet Group Stuff
+    // MARK: - END - Meet Group Stuff
     // =========================================================
+    
+    
+    
+    
 
-    // MARK: - helpers
+    
+    // =========================================================
+    // MARK: - BEGIN - AI
+    // =========================================================
+    
+    // TODO: Breakout a class for this method signature
+    static func postChatBot(
+        baseURL: URL,token: String,message: String,
+        history: [ClaudeModel.ChatMessage],
+        currentTimeNatural: String,  // NOT OPTIONAL
+        userTimezone: String,  // NOT OPTIONAL
+        userLocation: String,  // NOT OPTIONAL
+        userDisplayName: String,  // NOT OPTIONAL
+        tapLocation: ClaudeModel.TapLocationContext?  // This one can be optional
+    ) async throws -> String
+    {
+        let url = makeURL(baseURL, ["s", "chatbot", "chat"])
+        
+        #if DEBUG
+        print("=== ChatBot Request ===")
+        print("URL: \(url.absoluteString)")
+        print("Message: \(message)")
+        print("History count: \(history.count)")
+        print("Current time: \(currentTimeNatural)")  // FIXED - no ??
+        print("Timezone: \(userTimezone)")  // FIXED - no ??
+        print("User location: \(userLocation)")  // FIXED - no ??
+        #endif
+        
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        
+        let chatRequest = ClaudeModel.ChatbotRequest(
+            message: message,
+            history: history,
+            currentTimeNatural: currentTimeNatural,
+            userTimezone: userTimezone,
+            userLocation: userLocation,
+            userDisplayName: userDisplayName,
+            tapLocation: tapLocation
+        )
+        let encoder = JSONEncoder()
+        req.httpBody = try encoder.encode(chatRequest)
+        
+        #if DEBUG
+        if let bodyString = String(data: req.httpBody ?? Data(), encoding: .utf8) {
+            print("Request body: \(bodyString)")
+        }
+        #endif
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else { throw AuthAPIError.http(-1, "No HTTPURLResponse") }
+        guard (200..<300).contains(http.statusCode) else {
+           #if DEBUG
+           print("=== Send Message to Chatbot ===")
+           print("Status Code: \(http.statusCode)")
+           print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+           #endif
+           throw AuthAPIError.http(http.statusCode, extractReason(from: data))
+        }
+
+        do {
+            let decoder = JSONDecoder()
+            let response = try decoder.decode(ClaudeModel.ChatbotResponse.self, from: data)
+            return response.message
+        } catch {
+           #if DEBUG
+           print("=== Decode Error in postChatBot ===")
+           print("Error: \(error)")
+           print("Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+           #endif
+           throw AuthAPIError.decode(error.localizedDescription)
+        }
+    }
+
+    
+    // =========================================================
+    // MARK: - END - AI
+    // =========================================================
+    
+    
+    
+
+    
+    // =========================================================
+    // MARK: - BEGIN - Helpers
+    // =========================================================
     
     private static func extractReason(from data: Data) -> String?
     {
@@ -1710,4 +1766,46 @@ struct AuthAPI
     {
         segments.reduce(base) { $0.appendingPathComponent($1) }
     }
+    
+    // JSON enc/dec with ISO-8601 dates
+    private static var isoEncoder: JSONEncoder
+    {
+        let e = JSONEncoder()
+        e.dateEncodingStrategy = .iso8601
+        return e
+    }
+    
+    private static var isoDecoder: JSONDecoder
+    {
+        let d = JSONDecoder()
+        d.dateDecodingStrategy = .custom { dec in
+            let c = try dec.singleValueContainer()
+
+            // 1) Try string → ISO8601 (± fractional seconds) → or numeric seconds in a string
+            if let s = try? c.decode(String.self) {
+                let f1 = ISO8601DateFormatter()
+                f1.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                if let dt = f1.date(from: s) { return dt }
+
+                let f2 = ISO8601DateFormatter()
+                f2.formatOptions = [.withInternetDateTime]
+                if let dt = f2.date(from: s) { return dt }
+
+                if let secs = Double(s) { return Date(timeIntervalSince1970: secs) }
+                throw DecodingError.dataCorrupted(.init(codingPath: dec.codingPath, debugDescription: "Unparseable date string: \(s)"))
+            }
+
+            // 2) Try numeric epoch seconds
+            if let secs = try? c.decode(Double.self) {
+                return Date(timeIntervalSince1970: secs)
+            }
+
+            throw DecodingError.dataCorrupted(.init(codingPath: dec.codingPath, debugDescription: "Date was neither string nor number"))
+        }
+        return d
+    }
+    
+    // =========================================================
+    // MARK: - END - Helpers
+    // =========================================================
 }

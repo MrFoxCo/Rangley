@@ -57,6 +57,9 @@ fileprivate final class ForgotPasswordVM: ObservableObject
     // Flow state
     @Published var currentStep: ForgotPasswordStep = .enterPhone
     
+    // ✅ ADDED: Track the phone number that was successfully reset
+    @Published var completedPhone: String?
+    
     // UI state
     @Published var phoneStatus: StatusMessage = .none
     @Published var verifyStatus: StatusMessage = .none
@@ -238,15 +241,48 @@ fileprivate final class ForgotPasswordVM: ObservableObject
                 confirmationCode: code
             )
             
+            // Sign out to clear all cached tokens/sessions
+            _ = await Amplify.Auth.signOut()
+            Log.auth.info("User signed out after password reset to clear cached credentials")
+            
+            // Update the keychain with the new password
+            // This ensures biometric login works with the new password
+            do {
+                // Check if user had biometric auth enabled
+                let hadBiometrics = KeychainAuth.hasCredentials(for: phone)
+                
+                // Update keychain with new password
+                try KeychainAuth.save(
+                    username: phone,
+                    password: newPassword,
+                    protectWithBiometrics: hadBiometrics
+                )
+                Log.auth.info("Updated keychain with new password (biometrics: \(hadBiometrics))")
+            } catch {
+                Log.auth.error("Failed to update keychain after password reset: \(error)")
+                // Non-fatal - user can still sign in manually
+            }
+            
+            // Store the phone number for auto-fill on login screen
+            completedPhone = phone
+            
             currentStep = .complete
             passwordStatus = .success("Password reset successfully!")
             
         } catch {
             Log.auth.error("Password reset confirmation failed: \(error)")
             
-            // Check if it's a code error (code might have expired between steps)
             let errorMsg = userFriendlyAuthError(error)
-            if errorMsg.contains("Invalid verification code") ||
+            
+            // Check if it's a rate limit error
+            if errorMsg.contains("limit") || errorMsg.contains("Too many") {
+                // Set retry time for 1 hour
+                retryAfter = Date().addingTimeInterval(60 * 60)
+                isRateLimited = true
+                passwordStatus = .error(errorMsg)
+            }
+            // Check if it's a code error (code might have expired between steps)
+            else if errorMsg.contains("Invalid verification code") ||
                errorMsg.contains("expired") ||
                errorMsg.contains("CodeMismatch") {
                 passwordStatus = .error("Verification code expired. Please go back and request a new code.")
@@ -391,6 +427,9 @@ struct ForgotPasswordView: View
     @StateObject private var vm = ForgotPasswordVM()
     @Environment(\.dismiss) private var dismiss
     
+    // ✅ ADDED: Callback to pass phone number back to login screen
+    var onPasswordResetComplete: ((String) -> Void)?
+    
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
@@ -435,7 +474,14 @@ struct ForgotPasswordView: View
                         
                     case .complete:
                         CompleteStep(
-                            onDone: { dismiss() }
+                            onDone: {
+                                // ✅ FIXED: Pass the phone number back to login screen
+                                if case .complete = vm.currentStep,
+                                   let phone = vm.completedPhone {
+                                    onPasswordResetComplete?(phone)
+                                }
+                                dismiss()
+                            }
                         )
                     }
                 }
@@ -729,12 +775,12 @@ fileprivate struct CompleteStep: View
                     .font(.title2.bold())
                     .foregroundStyle(AppPalette.Text.primary)
                 
-                Text("Your password has been successfully reset. You can now sign in with your new password.")
+                Text("Your password has been successfully reset. Please sign in again with your new password.")
                     .font(.subheadline)
                     .foregroundStyle(AppPalette.Text.secondary)
             }
             
-            Button("Done") {
+            Button("Sign In") {
                 onDone()
             }
             .buttonStyle(PrimaryCapsuleButton())
@@ -882,6 +928,8 @@ fileprivate func userFriendlyAuthError(_ error: Error) -> String
             return "Too many attempts. Please wait 15 minutes before trying again."
         case let desc where desc.contains("LimitExceededException"):
             return "Password reset limit exceeded. Please try again later."
+        case let desc where desc.contains("Attempt limit exceeded"):
+            return "Too many password reset attempts. Please wait 1 hour before trying again."
         default:
             return "Something went wrong. Please try again"
         }

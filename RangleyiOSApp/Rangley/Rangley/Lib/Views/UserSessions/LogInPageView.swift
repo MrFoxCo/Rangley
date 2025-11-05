@@ -8,9 +8,8 @@ import SwiftUI
 import Amplify
 import AWSPluginsCore
 
-// User-friendly error handler
+// MARK: - Better Error Handler
 fileprivate func getUserFriendlyError(_ error: Error) -> String {
-    // Log the full error for debugging (in development only)
     #if DEBUG
     print("Auth Error Debug: \(error)")
     if let ae = error as? AuthError {
@@ -21,30 +20,34 @@ fileprivate func getUserFriendlyError(_ error: Error) -> String {
     }
     #endif
     
-    // Return user-friendly messages only
     if let ae = error as? AuthError {
-        // Check the underlying error type for specific AWS errors
+        let errorDesc = ae.errorDescription.lowercased()
+        
+        // Check for account lockout FIRST
+        if errorDesc.contains("password attempts exceeded") {
+            return "Too many failed attempts. Account locked for 1 hour. Try resetting your password to unlock."
+        }
+        
         if let underlying = ae.underlyingError as NSError? {
             let errorType = (underlying.userInfo["__type"] as? String) ?? ""
             
             switch errorType {
             case "UserNotFoundException":
-                return "Account not found"
+                return "No account found. Check your phone number format (+13125551234)"
             case "NotAuthorizedException":
-                return "Incorrect password"
+                return "Incorrect credentials. Sign in with your phone number (+13125551234), not username."
             case "UserNotConfirmedException":
-                return "Please verify your account first"
+                return "Account not verified. Check your phone for verification code."
             case "PasswordResetRequiredException":
-                return "Password reset required"
+                return "Password reset required. Use 'Forgot Password' below."
             case "TooManyRequestsException":
-                return "Too many attempts. Try again later"
+                return "Too many attempts. Wait 15 minutes."
             case "LimitExceededException":
-                return "Rate limit exceeded. Try again later"
+                return "Rate limit hit. Wait 1 hour."
             default:
                 break
             }
             
-            // Check for network-related errors
             if underlying.domain == NSURLErrorDomain {
                 switch underlying.code {
                 case NSURLErrorNotConnectedToInternet:
@@ -57,28 +60,22 @@ fileprivate func getUserFriendlyError(_ error: Error) -> String {
             }
         }
         
-        // Check AuthError description for common patterns
-        let description = ae.errorDescription.lowercased()
-        if description.contains("network") || description.contains("connection") {
+        if errorDesc.contains("network") || errorDesc.contains("connection") {
             return "Connection problem"
         }
-        if description.contains("invalid") && description.contains("password") {
-            return "Invalid password"
-        }
-        if description.contains("user") && description.contains("not found") {
-            return "Account not found"
+        if errorDesc.contains("user") && errorDesc.contains("not found") {
+            return "No account found. Check phone number format."
         }
     }
     
-    // Generic fallback
-    return "Sign in failed"
+    return "Sign in failed. Check credentials."
 }
 
 @MainActor
 private final class SignInVM: ObservableObject
 {
     // Inputs
-    @Published var principalRaw = ""   // phone/username/email
+    @Published var principalRaw = ""
     @Published var password = ""
     
     // UI State
@@ -86,6 +83,7 @@ private final class SignInVM: ObservableObject
     @Published var idToken: String = ""
     @Published var statusMessage: String = ""
     @Published var isError: Bool = false
+    @Published var isAccountLocked: Bool = false
     
     // Remembered users UI
     struct SavedAccount: Identifiable, Hashable {
@@ -96,22 +94,18 @@ private final class SignInVM: ObservableObject
     @Published var savedAccounts: [SavedAccount] = []
     @Published var showUsernameChip = false
     
-    // Settings - simplified
+    // Settings
     @Published var shouldOfferBiometrics = false
     
-    // CRITICAL: Load usernames WITHOUT triggering Face ID - just get the list
     func loadRememberedUsers()
     {
-        // This method MUST NEVER trigger biometric authentication
         do {
             let usernames = try KeychainAuth.listUsernamesWithoutBiometrics()
             self.savedAccounts = usernames.map { username in
                 let label: String
                 if username.hasPrefix("+"), username.count >= 6 {
-                    // Format phone numbers nicely
                     label = "Mobile ••••\(username.suffix(4))"
                 } else if username.contains("@") {
-                    // Format emails nicely
                     let parts = username.split(separator: "@")
                     if parts.count == 2 {
                         let localPart = String(parts[0])
@@ -125,7 +119,6 @@ private final class SignInVM: ObservableObject
                         label = username
                     }
                 } else {
-                    // Username format
                     if username.count > 6 {
                         label = "\(username.prefix(3))••••\(username.suffix(2))"
                     } else {
@@ -135,20 +128,16 @@ private final class SignInVM: ObservableObject
                 return SavedAccount(username: username, label: label)
             }
             
-            // Show chip if we have saved accounts
             showUsernameChip = !savedAccounts.isEmpty
         } catch {
-            // Silently fail - don't show chips if we can't load usernames safely
             self.savedAccounts = []
             self.showUsernameChip = false
         }
     }
     
-    // CRITICAL: This is THE ONLY method that should trigger Face ID
     func authenticateAndFillCredentials(for username: String) async -> Bool
     {
         do {
-            // This is THE SINGLE POINT where Face ID gets triggered
             guard let password = try KeychainAuth.loadPassword(
                 username: username,
                 prompt: "Authenticate to sign in as \(username)"
@@ -159,7 +148,6 @@ private final class SignInVM: ObservableObject
                 return false
             }
             
-            // Fill both fields at once
             await MainActor.run {
                 self.principalRaw = username
                 self.password = password
@@ -169,7 +157,6 @@ private final class SignInVM: ObservableObject
             return true
         } catch {
             await MainActor.run {
-                // Don't show error for user cancellation
                 if (error as NSError).code != Int(errSecUserCanceled) {
                     self.showError("Authentication failed")
                 }
@@ -178,7 +165,6 @@ private final class SignInVM: ObservableObject
         }
     }
     
-    // Auto-login after successful credential fill
     func attemptAutoLogin(onSuccess: @escaping (String) -> Void) async
     {
         guard canSubmit else {
@@ -195,53 +181,62 @@ private final class SignInVM: ObservableObject
         await signIn(onSuccess: onSuccess)
     }
     
-    // Message helpers
     private func showError(_ message: String) {
         statusMessage = message
         isError = true
+        isAccountLocked = message.contains("locked") || message.contains("Wait") || message.contains("hour")
     }
     
     private func showSuccess(_ message: String) {
         statusMessage = message
         isError = false
+        isAccountLocked = false
     }
     
     private func showMessage(_ message: String, isError: Bool) {
         statusMessage = message
         self.isError = isError
+        if isError {
+            isAccountLocked = message.contains("locked") || message.contains("Wait") || message.contains("hour")
+        }
     }
     
     private func clearMessage() {
         statusMessage = ""
         isError = false
+        isAccountLocked = false
     }
     
-    // Clear form
     func clearForm() {
         principalRaw = ""
         password = ""
         clearMessage()
     }
     
-    // ===== existing sign-in logic =====
-    private var phoneDigits: String { principalRaw.filter(\.isNumber) }
-    
+    // ✅ FIXED: Improved phone normalization
     private var normalizedPrincipal: String
     {
         let trimmed = principalRaw.trimmingCharacters(in: .whitespacesAndNewlines)
         
-        // If it looks like a phone number, normalize it
+        // Normalize phone numbers to +1XXXXXXXXXX format
         let digits = trimmed.filter(\.isNumber)
         if digits.count >= 10 {
             switch digits.count {
-            case 10: return "+1" + digits
-            case 11 where digits.hasPrefix("1"): return "+" + digits
-            case 12...15: return "+" + digits
-            default: break
+            case 10:
+                // 3125551234 → +13125551234
+                return "+1" + digits
+            case 11 where digits.hasPrefix("1"):
+                // 13125551234 → +13125551234
+                return "+" + digits
+            case 12...15:
+                // Already has country code, just add + if missing
+                return trimmed.hasPrefix("+") ? ("+" + digits) : ("+" + digits)
+            default:
+                break
             }
         }
         
-        // Otherwise return as-is (email or username)
+        // Not a phone number - return as-is (email or username)
         return trimmed
     }
     
@@ -257,6 +252,11 @@ private final class SignInVM: ObservableObject
             return
         }
         
+        // Show what we're using for sign in (debug)
+        #if DEBUG
+        print("Signing in with normalized principal: \(normalizedPrincipal)")
+        #endif
+        
         await MainActor.run {
             self.isBusy = true
             self.clearMessage()
@@ -269,6 +269,7 @@ private final class SignInVM: ObservableObject
         }
         
         do {
+            // Use normalized phone number
             let res = try await Amplify.Auth.signIn(username: normalizedPrincipal, password: password)
             guard res.isSignedIn else {
                 await MainActor.run {
@@ -292,19 +293,15 @@ private final class SignInVM: ObservableObject
                 self.showSuccess("Signed in successfully")
             }
 
-            // Check if we should offer biometric setup for this user
             let hasExistingCredentials = KeychainAuth.hasCredentials(for: normalizedPrincipal)
             
             if !hasExistingCredentials && BiometricAuth.isAvailable() {
-                // New user - offer to save with biometrics
-                // Store the success callback to call after biometric setup
                 await MainActor.run {
                     self.pendingSuccessCallback = onSuccess
                     self.pendingToken = tokens.idToken
                     self.shouldOfferBiometrics = true
                 }
             } else {
-                // Just save credentials normally (existing user or no biometrics)
                 try? KeychainAuth.save(username: normalizedPrincipal,
                                      password: password,
                                      protectWithBiometrics: hasExistingCredentials)
@@ -321,7 +318,6 @@ private final class SignInVM: ObservableObject
     private var pendingSuccessCallback: ((String) -> Void)?
     private var pendingToken: String?
     
-    // Handle biometric setup decision
     func setupBiometrics(enable: Bool) {
         shouldOfferBiometrics = false
         
@@ -330,10 +326,9 @@ private final class SignInVM: ObservableObject
                                 password: password,
                                 protectWithBiometrics: enable)
         } catch {
-            // Silent fail - credentials still work without biometrics
+            // Silent fail
         }
         
-        // Now call the success callback that was delayed
         if let callback = pendingSuccessCallback, let token = pendingToken {
             callback(token)
             pendingSuccessCallback = nil
@@ -362,23 +357,32 @@ struct LogInPageView: View
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    
-                    // Clean status message display
                     if !vm.statusMessage.isEmpty {
-                        Text(vm.statusMessage)
-                            .font(.caption)
-                            .foregroundColor(vm.isError ? .red : .green)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(vm.isError ? .red.opacity(0.1) : .green.opacity(0.1))
-                            .cornerRadius(8)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(vm.statusMessage)
+                                .font(.caption)
+                                .foregroundColor(vm.isError ? .red : .green)
+                            
+                            //  Show "Reset Password" link when account is locked
+                            if vm.isAccountLocked {
+                                Button("Reset Password to Unlock") {
+                                    showForgotPassword = true
+                                }
+                                .font(.caption2)
+                                .foregroundColor(.blue)
+                            }
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(vm.isError ? .red.opacity(0.1) : .green.opacity(0.1))
+                        .cornerRadius(8)
                     }
 
                     // === USERNAME ===
                     TextField("",
                               text: $vm.principalRaw,
-                              prompt: Text("Phone or username").foregroundStyle(.white.opacity(0.95)))
+                              prompt: Text("Phone (+13125551234)").foregroundStyle(.white.opacity(0.95)))
                         .textFieldStyle(.plain)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
@@ -390,14 +394,12 @@ struct LogInPageView: View
                         .darkField(focused: userFocused)
                         .onChange(of: userFocused) { _, focused in
                             if focused {
-                                // CRITICAL: This MUST NOT trigger Face ID - only load the list!
                                 vm.loadRememberedUsers()
                             } else {
                                 vm.showUsernameChip = false
                             }
                         }
                         .onChange(of: vm.principalRaw) { _, _ in
-                            // Clear message when user starts typing
                             if !vm.statusMessage.isEmpty {
                                 vm.statusMessage = ""
                             }
@@ -417,7 +419,6 @@ struct LogInPageView: View
                         .focused($passFocused)
                         .darkField(focused: passFocused)
                         .onChange(of: vm.password) { _, _ in
-                            // Clear message when user starts typing
                             if !vm.statusMessage.isEmpty {
                                 vm.statusMessage = ""
                             }
@@ -443,8 +444,8 @@ struct LogInPageView: View
                         }
                     }
                     .buttonStyle(PrimaryCapsuleButton(font: FontStyles.headline))
-                    .disabled(!vm.canSubmit || vm.isBusy)
-                    .opacity((!vm.canSubmit || vm.isBusy) ? 0.45 : 1)
+                    .disabled(!vm.canSubmit || vm.isBusy || vm.isAccountLocked)  // Disable when locked
+                    .opacity((!vm.canSubmit || vm.isBusy || vm.isAccountLocked) ? 0.45 : 1)
                     
                     Button("Forgot Password?") {
                         showForgotPassword = true
@@ -454,7 +455,6 @@ struct LogInPageView: View
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.top, 8)
                     
-                    // Clear form button for testing
                     Button("Clear Form") {
                         vm.clearForm()
                     }
@@ -477,11 +477,9 @@ struct LogInPageView: View
         .tint(AppPalette.Brand.neonPink)
         .background(AppPalette.bgGradient.ignoresSafeArea())
         
-        // CRITICAL: Username suggestion chips - NO Face ID until tapped!
         .safeAreaInset(edge: .bottom) {
             if vm.showUsernameChip && userFocused && !vm.savedAccounts.isEmpty {
                 VStack(spacing: 8) {
-                    // Header text
                     Text("Tap to sign in with saved account")
                         .font(.caption2)
                         .foregroundColor(.secondary)
@@ -491,23 +489,17 @@ struct LogInPageView: View
                         HStack(spacing: 12) {
                             ForEach(vm.savedAccounts) { account in
                                 Button {
-                                    // CRITICAL: This is THE ONLY place Face ID should trigger
                                     Task {
-                                        // First dismiss keyboard immediately for better UX
                                         userFocused = false
                                         vm.showUsernameChip = false
                                         
-                                        // THIS IS THE SINGLE AUTHENTICATION POINT
                                         let success = await vm.authenticateAndFillCredentials(for: account.username)
                                         
                                         if success {
-                                            // Auto-login after filling credentials successfully
                                             await vm.attemptAutoLogin { _ in
                                                 auth.checkAuthenticationStatus()
                                             }
                                         }
-                                        // If Face ID fails or is cancelled, do nothing
-                                        // User can try again by tapping another chip
                                     }
                                 } label: {
                                     HStack(spacing: 8) {
