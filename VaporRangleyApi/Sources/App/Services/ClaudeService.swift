@@ -443,17 +443,19 @@ struct ClaudeService {
 
     // MARK: - Request/Response Models
 
-    struct ClaudeAPIResponse: Content {
-        let id: String
-        let type: String
-        let role: String
-        let content: [ClaudeContent]
-        let model: String
-        let stop_reason: String?
+    struct ClaudeAPIResponse: Content
+    {
+        let id          : String
+        let type        : String
+        let role        : String
+        let content     : [ClaudeContent]
+        let model       : String
+        let stop_reason : String?
         
-        struct ClaudeContent: Content {
-            let type: String
-            let text: String
+        struct ClaudeContent: Content
+        {
+            let type    : String
+            let text    : String
         }
     }
 }

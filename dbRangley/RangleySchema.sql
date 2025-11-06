@@ -33,9 +33,16 @@ DROP TABLE IF exists rangley.vw_meet_group_invitations;
 -- Enable UUIDs if not already
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
--- ===== LOOKUP / ENUM / DICTIONARY TABLES =====
 
+-- =====================================================================
+-- RANGLEY LOOKUP TABLES
+-- =====================================================================
+-- Purpose: Static values 
+-- Features: Dictionary and Enum Tables
+-- =====================================================================
 
+-- this table may be over-normalized and we could crunch it into the friendships table 
+-- so we can avoid joins... just a thought
 CREATE TABLE rangley.td_friend_request_status
 (
      friend_request_status_id   INT2        PRIMARY KEY
@@ -74,7 +81,6 @@ CREATE INDEX idx_violations_category_time
 
 
 
-
 -- "1.2.3" becomes 10203 (major*10000 + minor*100 + patch)
 -- "2.0.1" becomes 20001
 
@@ -90,19 +96,11 @@ CREATE TABLE rangley.td_versions
 (
     version 			INT4 PRIMARY KEY,
     status_id 			INT2 NOT NULL DEFAULT 1,
-    dttm_created_utc    TIMESTAMPTZ not null default N)
+    dttm_created_utc    TIMESTAMPTZ not null default NOW(),
     dttm_released_utc 	TIMESTAMPTZ not null DEFAULT NOW(),
     dttm_deprecated_utc TIMESTAMPTZ
 );
 
-
-ALTER TABLE rangley.td_versions
-RENAME COLUMN dttm_deprecated_utc TO dttm_released_utc;
-
-
-
-ALTER TABLE rangley.td_versions
-ADD COLUMN dttm_deprecated_utc TIMESTAMPTZ;
 
 CREATE TABLE rangley.te_version_features
 (
@@ -130,14 +128,6 @@ CREATE TABLE rangley.td_versions
     
 
 );
-
-
-
-
-update rangley.te_version_features
-set version = 10000
-where version = 10002;
-
 
 
 CREATE TABLE rangley.td_participant_status
@@ -215,13 +205,318 @@ CREATE TABLE rangley.td_notification_type
     ,modified_by          	VARCHAR(75) 	NOT NULL DEFAULT ''
 );
 
+
+-- =====================================================================
+-- END - RANGLEY LOOKUP TABLES
+-- =====================================================================
+
+
+
+
+update rangley.te_version_features
+set version = 10000
+where version = 10002;
+
+
+-- =====================================================================
+-- RANGLEY AI INTEGRATION MIGRATION
+-- =====================================================================
+-- Purpose: Add AI chat functionality for meet creation
+-- Features: Rate limiting, cost tracking, conversation threading, user context
+-- =====================================================================
+
+
+
+-- =====================================================================
+-- STEP 1: AI LOOKUP TABLES
+-- =====================================================================
+
+-- Rate limit tiers (free, premium, enterprise)
+CREATE TABLE IF NOT EXISTS rangley.td_rate_limit_tier
+(
+     rate_limit_tier_id INT2        PRIMARY KEY
+        -- Unique identifier for the rate limit tier (1=free, 2=premium, 3=enterprise)
+        
+    ,tier_name          VARCHAR(50) NOT NULL UNIQUE
+        -- Human-readable name of the tier ('free', 'premium', 'enterprise')
+        
+    ,requests_per_hour  INT4        NOT NULL
+        -- Maximum number of successful AI requests allowed per rolling 1-hour window
+        
+    ,requests_per_day   INT4        NOT NULL
+        -- Maximum number of successful AI requests allowed per rolling 24-hour window
+        
+    ,dttm_created_utc   TIMESTAMPTZ NOT NULL DEFAULT now()
+        -- Timestamp when this tier configuration was created
+        
+    ,created_by         VARCHAR(75) NOT NULL DEFAULT CURRENT_USER
+        -- Database user who created this tier configuration
+        
+    ,dttm_modified_utc  TIMESTAMPTZ NULL
+        -- Timestamp of last modification to this tier's limits
+        
+    ,modified_by        VARCHAR(75) NOT NULL DEFAULT ''
+        -- Database user who last modified this tier configuration
+);
+
+-- LLM model pricing and configuration
+CREATE TABLE IF NOT EXISTS rangley.td_llm_model
+(
+     llm_model_id               INT2            PRIMARY KEY
+        -- Unique identifier for the LLM model (1=claude-sonnet-4-5, 2=claude-opus-4-1, etc.)
+        
+    ,provider                   VARCHAR(50)     NOT NULL
+        -- LLM provider name ('anthropic', 'openai', etc.)
+        
+    ,model_name                 VARCHAR(100)    NOT NULL UNIQUE
+        -- Official model identifier string used in API calls (e.g., 'claude-sonnet-4-5-20250929')
+        
+    ,cost_per_1k_input_tokens   DECIMAL(10, 6)  NULL
+        -- Cost in USD per 1,000 input tokens (e.g., 0.003 = $3 per 1M tokens)
+        
+    ,cost_per_1k_output_tokens  DECIMAL(10, 6)  NULL
+        -- Cost in USD per 1,000 output tokens (e.g., 0.015 = $15 per 1M tokens)
+        
+    ,dttm_created_utc           TIMESTAMPTZ     NOT NULL DEFAULT now()
+        -- Timestamp when this model was added to the system
+        
+    ,created_by                 VARCHAR(75)     NOT NULL DEFAULT CURRENT_USER
+        -- Database user who added this model configuration
+        
+    ,dttm_modified_utc          TIMESTAMPTZ     NULL
+        -- Timestamp of last modification to this model's pricing
+        
+    ,modified_by                VARCHAR(75)     NOT NULL DEFAULT ''
+        -- Database user who last modified this model configuration
+);
+
+-- =====================================================================
+-- STEP 2: AI CONVERSATION TABLES
+-- =====================================================================
+
+-- Conversation threading (optional for MVP, but schema-ready)
+CREATE TABLE IF NOT EXISTS rangley.tb_ai_conversation
+(
+     conversation_id    INT8        GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY
+        -- Unique identifier for a multi-turn conversation thread
+        
+    ,user_id            INT8        NOT NULL
+        -- Foreign key to tb_users - which user owns this conversation
+        
+    ,feature_name       VARCHAR(50) NOT NULL DEFAULT 'meet_creation'
+        -- Which feature this conversation relates to ('meet_creation', 'general_chat', etc.)
+        
+    ,title              VARCHAR(255) NOT NULL DEFAULT ''
+        -- Human-readable title for the conversation
+        -- Could be auto-generated from first message or user-provided
+        
+    ,status             VARCHAR(20) NOT NULL DEFAULT 'active'
+        -- Conversation state: 'active', 'completed', 'abandoned'
+        -- 'active' = in progress, 'completed' = meet created, 'abandoned' = user left
+        
+    ,dttm_created_utc   TIMESTAMPTZ NOT NULL DEFAULT now()
+        -- Timestamp when the conversation started (first message sent)
+        
+    ,dttm_modified_utc  TIMESTAMPTZ NULL
+        -- Timestamp of last message in this conversation
+        -- Updated with each new turn
+        
+    ,dttm_closed_utc    TIMESTAMPTZ NULL
+        -- Timestamp when conversation ended (meet created, user cancelled, or timeout)
+        -- NULL means conversation is still active
+        
+    ,CONSTRAINT chk_conversation_status CHECK (status IN ('active', 'completed', 'abandoned'))
+        -- Ensures status values are constrained to valid states only
+);
+
+-- Main AI interaction tracking table (every API call logged here)
+CREATE TABLE IF NOT EXISTS rangley.tb_ai_interaction
+(
+     ai_interaction_id  INT8        GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY
+        -- Unique identifier for this AI interaction/request
+        
+    ,user_id            INT8        NOT NULL
+        -- Foreign key to tb_users - which user made this AI request
+        
+    ,conversation_id    INT8        NULL
+        -- Foreign key to tb_ai_conversation - links to conversation thread (NULL for stateless)
+        
+    ,llm_model_id       INT2        NOT NULL
+        -- Foreign key to td_llm_model - which AI model was used for this request
+        
+    ,prompt_version     INT2        NOT NULL DEFAULT 1
+        -- Version of the system prompt used (for A/B testing and prompt improvement tracking)
+        
+    ,feature_name       VARCHAR(50) NOT NULL DEFAULT 'meet_creation'
+        -- Which feature triggered this AI call ('meet_creation', 'chat', 'search', etc.)
+        -- Used for analytics to see which features consume most AI resources
+        
+    ,conversation_turn  INT4        NOT NULL DEFAULT 1
+        -- Position of this message in a multi-turn conversation (1=first, 2=second, etc.)
+        -- Helps track how many back-and-forth exchanges were needed
+        
+    ,prompt             TEXT        NOT NULL
+        -- The complete prompt sent to the AI model (includes system prompt + user message)
+        -- Stored for debugging, cost analysis, and prompt improvement
+        
+    ,response           TEXT        NULL
+        -- The AI model's response text
+        -- Nullable because errors may occur before receiving a response
+        
+    ,prompt_tokens      INT4        NULL
+        -- Number of tokens in the prompt (input tokens)
+        -- Used to calculate actual API costs
+        
+    ,response_tokens    INT4        NULL
+        -- Number of tokens in the response (output tokens)
+        -- Used to calculate actual API costs
+        
+    ,total_tokens       INT4        NULL
+        -- Sum of prompt_tokens + response_tokens
+        -- Convenience field for total token usage per request
+        
+    ,cost_usd           DECIMAL(10, 6) NULL
+        -- Calculated cost in USD for this request
+        -- Formula: (prompt_tokens/1000 * input_cost) + (response_tokens/1000 * output_cost)
+        
+    ,duration_ms        INT4        NULL
+        -- Time in milliseconds from API request sent to response received
+        -- Used for performance monitoring and timeout analysis
+        
+    ,status             VARCHAR(20) NOT NULL DEFAULT 'success'
+        -- Outcome of the AI request: 'success', 'error', 'timeout', 'rate_limited'
+        -- Used to filter successful requests for rate limiting calculations
+        
+    ,error_message      TEXT        NULL
+        -- If status != 'success', contains the error message or exception details
+        -- Used for debugging and error pattern analysis
+        
+    ,metadata           JSONB       NULL
+        -- Flexible field for additional context not captured in other columns
+        -- Examples: user_timezone, device_type, ios_version, contains_pii
+        -- Allows extending tracking without schema changes
+        
+    ,dttm_created_utc   TIMESTAMPTZ NOT NULL DEFAULT now()
+        -- Timestamp when this AI interaction occurred
+        -- Used for rate limiting windows and analytics
+        
+    ,CONSTRAINT chk_ai_status CHECK (status IN ('success', 'error', 'timeout', 'rate_limited'))
+        -- Ensures status values are constrained to valid states only
+);
+
+-- =====================================================================
+-- STEP 3: INDEXES FOR AI TABLES
+-- =====================================================================
+
+-- Conversation indexes
+CREATE INDEX IF NOT EXISTS idx_ai_conversation_user 
+    ON rangley.tb_ai_conversation(user_id, dttm_modified_utc DESC);
+
+CREATE INDEX IF NOT EXISTS idx_ai_conversation_status
+    ON rangley.tb_ai_conversation(status, dttm_created_utc DESC);
+
+-- AI interaction indexes (performance-critical for rate limiting)
+CREATE INDEX IF NOT EXISTS idx_ai_interaction_user_created 
+    ON rangley.tb_ai_interaction(user_id, dttm_created_utc DESC);
+
+CREATE INDEX IF NOT EXISTS idx_ai_interaction_user_status_created
+    ON rangley.tb_ai_interaction(user_id, status, dttm_created_utc DESC)
+    WHERE status = 'success';
+    -- Optimized for rate limiting queries (only count successful requests)
+
+CREATE INDEX IF NOT EXISTS idx_ai_interaction_conversation
+    ON rangley.tb_ai_interaction(conversation_id, conversation_turn)
+    WHERE conversation_id IS NOT NULL;
+    -- For retrieving conversation history in order
+
+CREATE INDEX IF NOT EXISTS idx_ai_interaction_status 
+    ON rangley.tb_ai_interaction(status);
+
+CREATE INDEX IF NOT EXISTS idx_ai_interaction_model 
+    ON rangley.tb_ai_interaction(llm_model_id);
+
+CREATE INDEX IF NOT EXISTS idx_ai_interaction_feature 
+    ON rangley.tb_ai_interaction(feature_name, dttm_created_utc DESC);
+
+CREATE INDEX IF NOT EXISTS idx_ai_interaction_prompt_version
+    ON rangley.tb_ai_interaction(prompt_version, status, dttm_created_utc DESC);
+    -- For A/B testing prompt effectiveness
+
+
+-- =====================================================================
+-- END - RANGLEY AI INTEGRATION MIGRATION
+-- =====================================================================
+
+
+-- Add rate limit tier to users (with safe check for existing column)
+DO $$ 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'rangley' 
+        AND table_name = 'tb_users' 
+        AND column_name = 'rate_limit_tier_id'
+    ) THEN
+        ALTER TABLE rangley.tb_users 
+        ADD COLUMN rate_limit_tier_id INT2 NOT NULL DEFAULT 1;
+    END IF;
+END $$;
+
+-- Add AI attribution to meets (with safe checks)
+DO $$ 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'rangley' 
+        AND table_name = 'tb_meets' 
+        AND column_name = 'created_by_ai'
+    ) THEN
+        ALTER TABLE rangley.tb_meets
+        ADD COLUMN created_by_ai BOOLEAN NOT NULL DEFAULT FALSE;
+    END IF;
+    
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'rangley' 
+        AND table_name = 'tb_meets' 
+        AND column_name = 'ai_interaction_id'
+    ) THEN
+        ALTER TABLE rangley.tb_meets
+        ADD COLUMN ai_interaction_id INT8 NULL;
+    END IF;
+END $$;
+
+-- =====================================================================
+-- STEP 5: INDEXES FOR ALTERED TABLES
+-- =====================================================================
+
+CREATE INDEX IF NOT EXISTS idx_users_rate_tier 
+    ON rangley.tb_users(rate_limit_tier_id);
+
+CREATE INDEX IF NOT EXISTS idx_meets_ai_created 
+    ON rangley.tb_meets(created_by_ai, dttm_start_utc DESC)
+    WHERE created_by_ai = TRUE;
+    -- Partial index: only AI-created meets
+
+CREATE INDEX IF NOT EXISTS idx_meets_ai_interaction 
+    ON rangley.tb_meets(ai_interaction_id) 
+    WHERE ai_interaction_id IS NOT NULL;
+    -- Partial index: for linking back to conversation
+
+
+
+
+-- =====================================================================
+-- RANGLEY Normal Tables
+-- =====================================================================
+-- Purpose: Assets, notificaiotns etc.
+-- =====================================================================
+
 -- ===== NORMAL TABLES =====
 
 -- ===== NEED TO ADD =======================
--- Need to add partitioning feature
--- partitioned notificaiton tabls by month
--- ===== BEFORE V2 =========================
-
+-- Need to add partitioning feature ever ?????????
+-- partitioned notificaiton tabls by month ???????????/
 
 -- This stays empty until you implement uploads
 CREATE TABLE rangley.tb_uploaded_assets
@@ -308,6 +603,31 @@ CREATE INDEX IF NOT EXISTS ix_part_meet_accepted_only
 	WHERE participant_status_id IN (6,7);
 
 
+-- =====================================================================
+-- END - RANGLEY Normal Tables
+-- =====================================================================
+-- Purpose: Assets, notificaiotns etc.
+-- =====================================================================
+
+
+
+
+
+
+-- =====================================================================
+-- RANGLEY Meet Related Tables (coordinates, meet_ids)
+-- =====================================================================
+-- Purpose: Fully versionable meet creation and editing system featuring 
+-- changestamps to beat concurrency and race conditions.
+-- Features: Never fails when database grows, read and write only tables
+-- tb_meets
+-- tb_meet_coordinates
+-- tb_meet_ids
+-- tb_change_stamps
+-- =====================================================================
+
+select * from rangley.tb_meets;
+
 CREATE TABLE rangley.tb_meets
 (
      meet_id          		INT8      	 NOT NULL
@@ -321,8 +641,9 @@ CREATE TABLE rangley.tb_meets
     ,max_capacity     		INT4	     NOT NULL DEFAULT 2
     ,dttm_start_utc   		TIMESTAMPTZ  NOT NULL DEFAULT now()
     ,dttm_end_utc    		TIMESTAMPTZ  NOT NULL DEFAULT now()
-    ,uuid                   UUID        NOT NULL DEFAULT gen_random_uuid()
-
+    ,uuid                   UUID         NOT NULL DEFAULT gen_random_uuid()
+    ,created_by_ai_id       BOOL		 NOT NULL DEFAULT FALSE
+    ,ai_interaction_id      INT8		 NULL 
     
     ,PRIMARY KEY (meet_id, change_stamp)
     
@@ -391,6 +712,26 @@ CREATE INDEX idx_meetids_createdby
   ON rangley.tb_meet_ids (created_by_user_id);
 
 
+-- =====================================================================
+-- END - RANGLEY Meet Related Tables (coordinates, meet_ids)
+-- =====================================================================
+
+
+
+
+
+
+-- =====================================================================
+-- RANGLEY User Tables
+-- =====================================================================
+-- Purpose: Tables store personal information for users, as well as a 
+-- notification tracking system and user privacy settings
+-- tb_users
+-- tb_user_privacy_settings
+-- tb_user_inboxes
+-- tb_change_stamps
+-- =====================================================================
+
 CREATE TABLE rangley.tb_users
 (
     user_id             BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY
@@ -411,6 +752,8 @@ CREATE TABLE rangley.tb_users
    ,dttm_created_utc     TIMESTAMPTZ NOT NULL DEFAULT now()
    ,dttm_modified_utc    TIMESTAMPTZ
    ,uuid                 UUID        NOT NULL DEFAULT gen_random_uuid()
+   
+   ,rate_limit_tier_id   INT2		 NOT NULL DEFAULT 1
 
    -- At least one contact method must be present
   ,CONSTRAINT users_contact_one
@@ -426,6 +769,9 @@ CREATE TABLE rangley.tb_users
   ,CONSTRAINT chk_users_dob_reasonable
        CHECK (dob <= CURRENT_DATE AND dob >= DATE '1900-01-01')
 );
+
+ALTER TABLE tb_user ADD COLUMN rate_limit_tier_id INT DEFAULT 1;
+
 
 -- Case-insensitive uniqueness for username (matches proc lower(...))
 -- (Keeps column UNIQUE too; this prevents duplicates that differ only by case.)
@@ -476,8 +822,23 @@ CREATE INDEX IF NOT EXISTS ix_inbox_user_received_desc
 CREATE INDEX IF NOT EXISTS ix_inbox_notification
   ON rangley.tb_user_inboxes (notification_id);
 
+-- =====================================================================
+-- END - RANGLEY User Tables
+-- =====================================================================
 
 
+
+
+
+
+-- =====================================================================
+-- RANGLEY Friends Tables
+-- =====================================================================
+-- Purpose: Contains logic for friendships inside of rangley
+-- Features: TODO currently missing ability to block users
+-- tb_friend_requests
+-- tb_friendships
+-- =====================================================================
 CREATE TABLE rangley.tb_friend_requests
 (
      friend_request_id          INT8        GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY
@@ -527,8 +888,24 @@ CREATE TABLE rangley.tb_friendships
 CREATE INDEX idx_friendship_user_a ON rangley.tb_friendships (user_id_a);
 CREATE INDEX idx_friendship_user_b ON rangley.tb_friendships (user_id_b);
 
+-- =====================================================================
+-- END - RANGLEY Friends Tables
+-- =====================================================================
 
 
+
+
+
+
+-- =====================================================================
+-- RANGLEY Meet Groups Tables
+-- =====================================================================
+-- Purpose: Contains logic for creating meet groups and tracking meeet group
+-- members
+-- tb_meet_groups
+-- tb_meet_group_members
+-- tb_meet_group_invitations
+-- =====================================================================
 CREATE TABLE rangley.tb_meet_groups
 (
     meet_group_id INT8 GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
@@ -576,6 +953,9 @@ CREATE TABLE rangley.tb_meet_group_invitations
 CREATE INDEX idx_meet_group_inv_user ON rangley.tb_meet_group_invitations (invited_user_id, status);
 CREATE INDEX idx_meet_group_inv_group ON rangley.tb_meet_group_invitations (meet_group_id, status);
 
+-- =====================================================================
+-- END - RANGLEY Meet Groups Tables
+-- =====================================================================
 
 
 -- #################################################

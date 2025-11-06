@@ -177,3 +177,23 @@ INSERT INTO rangley.te_version_statuses VALUES
     (3, 'deprecated');
 
 
+
+
+
+
+-- Insert default rate limit tiers (idempotent)
+INSERT INTO rangley.td_rate_limit_tier
+(
+	rate_limit_tier_id, tier_name, requests_per_hour, requests_per_day
+) 
+VALUES
+    (1, 'free', 10, 50),
+    (2, 'premium', 50, 200),
+    (3, 'enterprise', 200, 1000)
+ON CONFLICT (rate_limit_tier_id) DO UPDATE SET
+    tier_name = EXCLUDED.tier_name,
+    requests_per_hour = EXCLUDED.requests_per_hour,
+    requests_per_day = EXCLUDED.requests_per_day,
+    dttm_modified_utc = now(),
+    modified_by = CURRENT_USER;
+
