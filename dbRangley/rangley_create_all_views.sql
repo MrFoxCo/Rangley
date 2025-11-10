@@ -41,8 +41,26 @@ DROP VIEW IF EXISTS rangley.vw_meet_groups CASCADE;
 DROP VIEW IF EXISTS rangley.vw_meet_group_members CASCADE;
 DROP VIEW IF EXISTS rangley.vw_meet_group_invitations CASCADE;
 
+DROP VIEW IF EXISTS rangley.vw_rate_limit_tier CASCADE;
+DROP VIEW IF EXISTS rangley.vw_llm_model CASCADE;
+DROP VIEW IF EXISTS rangley.vw_ai_conversation CASCADE;
+DROP VIEW IF EXISTS rangley.vw_ai_interaction CASCADE;
 
 
+DROP VIEW IF EXISTS rangley.vw_ai_created_meets CASCADE;
+DROP VIEW IF EXISTS rangley.vw_prompt_version_performance CASCADE;
+DROP VIEW IF EXISTS rangley.vw_daily_ai_usage CASCADE;
+DROP VIEW IF EXISTS rangley.vw_user_ai_costs CASCADE;
+
+
+
+-- =====================================================================
+-- RANGLEY BASE VIEWS (1:1 Table Mirrors)
+-- =====================================================================
+-- Purpose: Create base views that mirror tables exactly
+-- Pattern: Always query views, never query tables directly
+-- Benefits: Consistent access layer, easier schema evolution, security
+-- =====================================================================
 
 CREATE OR REPLACE VIEW rangley.vw_version_statuses AS
 SELECT
@@ -80,6 +98,8 @@ SELECT
     ,dttm_start_utc
     ,dttm_end_utc
     ,uuid
+    ,created_by_ai
+    ,ai_interaction_id
 FROM rangley.tb_meets;
 
 
@@ -126,6 +146,7 @@ SELECT
     ,dttm_created_utc
     ,dttm_modified_utc
     ,uuid
+    ,rate_limit_tier_id
 FROM rangley.tb_users;
 
 
@@ -326,6 +347,16 @@ SELECT version, feature_id
 FROM rangley.te_version_features;
 
 
+
+-- =====================================================================
+-- END - RANGLEY BASE VIEWS (1:1 Table Mirrors)
+-- =====================================================================
+
+
+
+
+
+
 -- ============================================
 -- COMPUTED/AGGREGATE VIEWS
 -- ============================================
@@ -522,44 +553,335 @@ JOIN rangley.vw_users rec ON rec.user_id = fr.recipient_user_id
 JOIN rangley.vw_friend_request_status frs ON frs.friend_request_status_id = fr.friend_request_status_id;
 
 
+-- Mirror: td_rate_limit_tier
+CREATE OR REPLACE VIEW rangley.vw_rate_limit_tier AS
+SELECT 
+     rate_limit_tier_id
+    ,tier_name
+    ,requests_per_hour
+    ,requests_per_day
+    ,dttm_created_utc
+    ,created_by
+    ,dttm_modified_utc
+    ,modified_by
+FROM rangley.td_rate_limit_tier;
 
+COMMENT ON VIEW rangley.vw_rate_limit_tier IS 
+'Base view mirroring td_rate_limit_tier. Always query this view instead of the table directly.';
+
+
+-- Mirror: td_llm_model
+CREATE OR REPLACE VIEW rangley.vw_llm_model AS
+SELECT 
+     llm_model_id
+    ,provider
+    ,model_name
+    ,cost_per_1k_input_tokens
+    ,cost_per_1k_output_tokens
+    ,dttm_created_utc
+    ,created_by
+    ,dttm_modified_utc
+    ,modified_by
+FROM rangley.td_llm_model;
+
+COMMENT ON VIEW rangley.vw_llm_model IS 
+'Base view mirroring td_llm_model. Always query this view instead of the table directly.';
+
+
+-- =====================================================================
+-- MAIN AI TABLE VIEWS
+-- =====================================================================
+
+-- Mirror: tb_ai_conversation
+CREATE OR REPLACE VIEW rangley.vw_ai_conversation AS
+SELECT 
+     conversation_id
+    ,user_id
+    ,feature_name
+    ,title
+    ,status
+    ,dttm_created_utc
+    ,dttm_modified_utc
+    ,dttm_closed_utc
+FROM rangley.tb_ai_conversation;
+
+COMMENT ON VIEW rangley.vw_ai_conversation IS 
+'Base view mirroring tb_ai_conversation. Always query this view instead of the table directly.';
+
+
+-- Mirror: tb_ai_interaction
+CREATE OR REPLACE VIEW rangley.vw_ai_interaction AS
+SELECT 
+     ai_interaction_id
+    ,user_id
+    ,conversation_id
+    ,llm_model_id
+    ,prompt_version
+    ,feature_name
+    ,conversation_turn
+    ,prompt
+    ,response
+    ,prompt_tokens
+    ,response_tokens
+    ,total_tokens
+    ,cost_usd
+    ,duration_ms
+    ,status
+    ,error_message
+    ,metadata
+    ,dttm_created_utc
+FROM rangley.tb_ai_interaction;
+
+COMMENT ON VIEW rangley.vw_ai_interaction IS 
+'Base view mirroring tb_ai_interaction. Always query this view instead of the table directly.';
+
+
+-- =====================================================================
+-- STEP 8: ANALYTICS VIEWS
+-- =====================================================================
+
+-- User AI cost summary view
+CREATE OR REPLACE VIEW rangley.vw_user_ai_costs AS
+SELECT 
+     user_id
+    ,COUNT(*) AS total_requests
+    ,SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS successful_requests
+    ,SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) AS failed_requests
+    ,SUM(CASE WHEN status = 'rate_limited' THEN 1 ELSE 0 END) AS rate_limited_requests
+    ,SUM(prompt_tokens) AS total_prompt_tokens
+    ,SUM(response_tokens) AS total_response_tokens
+    ,SUM(total_tokens) AS total_tokens
+    ,SUM(cost_usd) AS total_cost_usd
+    ,AVG(duration_ms) AS avg_duration_ms
+    ,MIN(dttm_created_utc) AS first_request
+    ,MAX(dttm_created_utc) AS last_request
+FROM rangley.tb_ai_interaction
+GROUP BY user_id;
+
+-- Daily AI usage summary view
+CREATE OR REPLACE VIEW rangley.vw_daily_ai_usage AS
+SELECT 
+     DATE(dttm_created_utc) AS usage_date
+    ,COUNT(*) AS total_requests
+    ,COUNT(DISTINCT user_id) AS unique_users
+    ,SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS successful_requests
+    ,SUM(total_tokens) AS total_tokens
+    ,SUM(cost_usd) AS total_cost_usd
+    ,AVG(duration_ms) AS avg_duration_ms
+    ,AVG(conversation_turn) AS avg_conversation_turns
+FROM rangley.tb_ai_interaction
+GROUP BY DATE(dttm_created_utc)
+ORDER BY usage_date DESC;
+
+-- Prompt version performance view (for A/B testing)
+CREATE OR REPLACE VIEW rangley.vw_prompt_version_performance AS
+SELECT 
+     prompt_version
+    ,COUNT(*) AS total_requests
+    ,COUNT(DISTINCT user_id) AS unique_users
+    ,SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS successful_requests
+    ,ROUND(100.0 * SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) / COUNT(*), 2) AS success_rate_pct
+    ,AVG(conversation_turn) AS avg_conversation_turns
+    ,AVG(duration_ms) AS avg_duration_ms
+    ,SUM(cost_usd) AS total_cost_usd
+    ,MIN(dttm_created_utc) AS first_used
+    ,MAX(dttm_created_utc) AS last_used
+FROM rangley.tb_ai_interaction
+GROUP BY prompt_version
+ORDER BY prompt_version DESC;
+
+-- AI-created meets analysis view
+CREATE OR REPLACE VIEW rangley.vw_ai_created_meets AS
+SELECT 
+     m.meet_id
+    ,m.name
+    ,m.dttm_start_utc
+    ,m.meet_category_id
+    ,mc.name AS category_name
+    ,mi.created_by_user_id
+    ,u.username AS creator_username
+    ,ai.conversation_turn
+    ,ai.cost_usd
+    ,ai.dttm_created_utc AS ai_interaction_time
+FROM rangley.tb_meets m
+JOIN rangley.tb_meet_ids mi ON m.meet_id = mi.meet_id
+JOIN rangley.tb_users u ON mi.created_by_user_id = u.user_id
+LEFT JOIN rangley.td_meet_category mc ON m.meet_category_id = mc.meet_category_id
+LEFT JOIN rangley.tb_ai_interaction ai ON m.ai_interaction_id = ai.ai_interaction_id
+WHERE m.created_by_ai = TRUE
+  AND m.change_stamp = (
+      SELECT MAX(change_stamp) 
+      FROM rangley.tb_meets 
+      WHERE meet_id = m.meet_id
+  )
+ORDER BY m.dttm_start_utc DESC;
+
+
+-- =====================================================================
+-- RANGLEY AI BASE VIEWS (1:1 Table Mirrors)
+-- =====================================================================
+-- Purpose: Create base views that mirror AI tables exactly
+-- Pattern: Always query views, never query tables directly
+-- Benefits: Consistent access layer, easier schema evolution, security
+-- =====================================================================
+
+-- =====================================================================
+-- LOOKUP TABLE VIEWS
+-- =====================================================================
+
+-- Mirror: td_rate_limit_tier
+CREATE OR REPLACE VIEW rangley.vw_rate_limit_tier AS
+SELECT 
+     rate_limit_tier_id
+    ,tier_name
+    ,requests_per_hour
+    ,requests_per_day
+    ,dttm_created_utc
+    ,created_by
+    ,dttm_modified_utc
+    ,modified_by
+FROM rangley.td_rate_limit_tier;
+
+COMMENT ON VIEW rangley.vw_rate_limit_tier IS 
+'Base view mirroring td_rate_limit_tier. Always query this view instead of the table directly.';
+
+
+-- Mirror: td_llm_model
+CREATE OR REPLACE VIEW rangley.vw_llm_model AS
+SELECT 
+     llm_model_id
+    ,provider
+    ,model_name
+    ,cost_per_1k_input_tokens
+    ,cost_per_1k_output_tokens
+    ,dttm_created_utc
+    ,created_by
+    ,dttm_modified_utc
+    ,modified_by
+FROM rangley.td_llm_model;
+
+COMMENT ON VIEW rangley.vw_llm_model IS 
+'Base view mirroring td_llm_model. Always query this view instead of the table directly.';
+
+
+-- =====================================================================
+-- MAIN AI TABLE VIEWS
+-- =====================================================================
+
+-- Mirror: tb_ai_conversation
+CREATE OR REPLACE VIEW rangley.vw_ai_conversation AS
+SELECT 
+     conversation_id
+    ,user_id
+    ,feature_name
+    ,title
+    ,status
+    ,dttm_created_utc
+    ,dttm_modified_utc
+    ,dttm_closed_utc
+FROM rangley.tb_ai_conversation;
+
+COMMENT ON VIEW rangley.vw_ai_conversation IS 
+'Base view mirroring tb_ai_conversation. Always query this view instead of the table directly.';
+
+
+-- Mirror: tb_ai_interaction
+CREATE OR REPLACE VIEW rangley.vw_ai_interaction AS
+SELECT 
+     ai_interaction_id
+    ,user_id
+    ,conversation_id
+    ,llm_model_id
+    ,prompt_version
+    ,feature_name
+    ,conversation_turn
+    ,prompt
+    ,response
+    ,prompt_tokens
+    ,response_tokens
+    ,total_tokens
+    ,cost_usd
+    ,duration_ms
+    ,status
+    ,error_message
+    ,metadata
+    ,dttm_created_utc
+FROM rangley.tb_ai_interaction;
+
+COMMENT ON VIEW rangley.vw_ai_interaction IS 
+'Base view mirroring tb_ai_interaction. Always query this view instead of the table directly.';
+
+
+-- =====================================================================
+-- VALIDATION
+-- =====================================================================
+
+-- Verify all base views exist
+DO $$
+DECLARE
+    missing_views TEXT[];
+BEGIN
+    SELECT ARRAY_AGG(view_name)
+    INTO missing_views
+    FROM (VALUES 
+        ('vw_rate_limit_tier'),
+        ('vw_llm_model'),
+        ('vw_ai_conversation'),
+        ('vw_ai_interaction')
+    ) AS expected(view_name)
+    WHERE NOT EXISTS (
+        SELECT 1 FROM information_schema.views
+        WHERE table_schema = 'rangley'
+        AND table_name = expected.view_name
+    );
+    
+    IF missing_views IS NOT NULL THEN
+        RAISE EXCEPTION 'Missing base views: %', array_to_string(missing_views, ', ');
+    END IF;
+    
+    RAISE NOTICE '✅ All AI base views created successfully';
+END $$;
+
+-- Test queries to ensure views work
+SELECT 'Base Views Row Counts:' AS test_section;
+
+SELECT 
+    'vw_rate_limit_tier' AS view_name,
+    COUNT(*) AS row_count
+FROM rangley.vw_rate_limit_tier
+UNION ALL
+SELECT 
+    'vw_llm_model' AS view_name,
+    COUNT(*) AS row_count
+FROM rangley.vw_llm_model
+UNION ALL
+SELECT 
+    'vw_ai_conversation' AS view_name,
+    COUNT(*) AS row_count
+FROM rangley.vw_ai_conversation
+UNION ALL
+SELECT 
+    'vw_ai_interaction' AS view_name,
+    COUNT(*) AS row_count
+FROM rangley.vw_ai_interaction;
+
+-- =====================================================================
+-- USAGE EXAMPLES
+-- =====================================================================
 
 /*
--- this grabs us every single meet that is live?? might be a little
--- overkill
-CREATE OR REPLACE VIEW rangley.vw_meets_accessible AS
-SELECT
-  m.uuid as meet_uuid,
-  m.change_stamp,
-  COALESCE(m.meet_status_id, 0) AS meet_status_id,
-  coord.latitude,
-  coord.longitude,
-  coord.region_latitude,
-  coord.region_longitude,
-  coord.region_radius,
-  m.dttm_start_utc,
-  m.dttm_end_utc,
-  m.name,
-  cat.name AS category_name,
-  m.description,
-  m.max_capacity,
-  u.uuid as created_by_user_uuid,
-  u.display_name
-FROM rangley.vw_meet_changestamps_desc mcd
-JOIN rangley.tb_meets m
-  USING (meet_id, change_stamp)      -- guarantees exact latest row
-JOIN rangley.vw_meet_ids mi
-  ON mi.meet_id = m.meet_id
-JOIN rangley.vw_meet_coordinates coord
-  ON coord.meet_coordinate_id = m.meet_coordinate_id
-JOIN rangley.vw_users u
-  ON u.user_id = mi.created_by_user_id
-JOIN rangley.vw_meet_category cat
-  ON cat.meet_category_id = m.meet_category_id
-WHERE
-  -- exclude only the hard states you said you store
-  m.meet_status_id IS DISTINCT FROM 2   -- Cancelled
-  AND m.meet_status_id IS DISTINCT FROM 3   -- Postponed
-  AND m.meet_status_id IS DISTINCT FROM 7   -- Deleted
-  AND m.dttm_end_utc >= now();              -- not ended yet
+-- DON'T DO THIS (querying tables directly):
+SELECT * FROM rangley.tb_ai_interaction WHERE user_id = 123;
+SELECT * FROM rangley.td_rate_limit_tier WHERE tier_name = 'premium';
+
+-- DO THIS (querying views):
+SELECT * FROM rangley.vw_ai_interaction WHERE user_id = 123;
+SELECT * FROM rangley.vw_rate_limit_tier WHERE tier_name = 'premium';
+
+-- Benefits:
+-- 1. Consistent access pattern across entire codebase
+-- 2. Can add computed columns to views without changing table
+-- 3. Can swap underlying table structure without breaking queries
+-- 4. Grant permissions to views only, not tables (better security)
+-- 5. Views can join related data transparently if needed later
 */
