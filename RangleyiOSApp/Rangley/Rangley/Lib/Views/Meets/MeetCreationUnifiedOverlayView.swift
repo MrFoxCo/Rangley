@@ -213,6 +213,7 @@ struct CreateMeetConfirmationPopup: View
     
     @State private var isAnimating = false
     @State private var locationName: String = "Loading location..."
+    @State private var showComingSoonAlert = false
     
     private var title: String {
         switch entryMode {
@@ -260,7 +261,7 @@ struct CreateMeetConfirmationPopup: View
             VStack(spacing: 10)
             {
                 // AI Assistant Button
-                Button(action: onConfirmWithAI)
+                Button(action: { showComingSoonAlert = true })
                 {
                     HStack(spacing: 8) {
                         Image(systemName: "sparkles")
@@ -329,6 +330,11 @@ struct CreateMeetConfirmationPopup: View
                 isAnimating = true
             }
             loadLocationNameIfExists()
+        }
+        .alert("Coming Soon", isPresented: $showComingSoonAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("AI Assistant is coming in the next beta release. Stay tuned!")
         }
     }
     

@@ -94,7 +94,7 @@ struct AiChatFullScreenView: View
                     
                     // Title
                     VStack(spacing: 2) {
-                        Text("Claude")
+                        Text("Beta AI Agent - Claude")
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundColor(AppPalette.Text.primary)
                     }

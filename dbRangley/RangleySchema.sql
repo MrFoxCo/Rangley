@@ -213,10 +213,7 @@ CREATE TABLE rangley.td_notification_type
 
 
 
-update rangley.te_version_features
-set version = 10000
-where version = 10002;
-
+select * from rangley.td_notification_type;
 
 -- =====================================================================
 -- RANGLEY AI INTEGRATION MIGRATION
@@ -720,7 +717,10 @@ CREATE INDEX idx_meetids_createdby
 
 
 
+select * from rangley.te_version_features;
+select * from rangley.te_version_statuses;
 
+select * from rangley.tb_users;
 -- =====================================================================
 -- RANGLEY User Tables
 -- =====================================================================
@@ -769,9 +769,6 @@ CREATE TABLE rangley.tb_users
   ,CONSTRAINT chk_users_dob_reasonable
        CHECK (dob <= CURRENT_DATE AND dob >= DATE '1900-01-01')
 );
-
-ALTER TABLE tb_user ADD COLUMN rate_limit_tier_id INT DEFAULT 1;
-
 
 -- Case-insensitive uniqueness for username (matches proc lower(...))
 -- (Keeps column UNIQUE too; this prevents duplicates that differ only by case.)

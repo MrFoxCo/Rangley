@@ -50,7 +50,7 @@ struct RootGate: View
                 VStack {
                     Spacer()
                     
-                    VStack(spacing: -8) { // negative spacing pulls them closer
+                    VStack(spacing: -8) {
                         Image("RangleySticker")
                             .resizable()
                             .scaledToFit()
@@ -60,15 +60,20 @@ struct RootGate: View
                             .font(.system(size: 36, weight: .bold))
                             .foregroundStyle(.white)
                     }
-
                     
                     Spacer()
                     
-                    Image("MrFoxOrange")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 540, height:180)
-                        .padding(.bottom, 40)
+                    VStack(spacing: 8) {
+                        Image("MrFoxSittingLite")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(height: 80)
+                        
+                        Text("Mr. Fox, LLC")
+                            .font(.caption)
+                            .foregroundColor(Color(red: 1.0, green: 0.6, blue: 0.0))
+                    }
+                    .padding(.bottom, 32)
                 }
             }
             .transition(.opacity)

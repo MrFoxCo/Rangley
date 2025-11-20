@@ -48,48 +48,50 @@ struct StartScreenView: View
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Main Content Area
-                VStack(spacing: 32) {
-                    Spacer()
-
-                    // Logo
-                    Image("RangleySticker")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(maxWidth: 200, maxHeight: 200)
-                        .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
-
-                    // Buttons
-                    VStack(spacing: 16) {
-                        NavigationLink {
-                            UserRegisterFlow()
-                        } label: {
-                            Text("Create new account")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(CreateNewAccountCapsuleButton(font: FontStyles.headline))
-
-                        NavigationLink {
-                            LogInPageView()
-                        } label: {
-                            Text("Log In")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(OutlineCapsuleButton(font: FontStyles.title1))
-                    }
-                    .padding(.horizontal, 32) // Consistent, safe padding
-
-                    Spacer()
-                }
-                .padding(.vertical, 40) // Give breathing room top/bottom
-
-                // Bottom Branding – RESPONSIVE
-                Image("MrFoxOrange")
+                Spacer()
+                
+                // Logo
+                Image("RangleySticker")
                     .resizable()
                     .scaledToFit()
-                    .frame(maxWidth: .infinity, maxHeight: 120)
-                    .padding(.horizontal, 40)
+                    .frame(maxWidth: 200, maxHeight: 200)
+                    .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
                     .padding(.bottom, 32)
+
+                // Buttons
+                VStack(spacing: 16) {
+                    NavigationLink {
+                        UserRegisterFlow()
+                    } label: {
+                        Text("Create new account")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(CreateNewAccountCapsuleButton(font: FontStyles.headline))
+
+                    NavigationLink {
+                        LogInPageView()
+                    } label: {
+                        Text("Log In")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(OutlineCapsuleButton(font: FontStyles.title1))
+                }
+                .padding(.horizontal, 32)
+                
+                Spacer()
+                
+                // Bottom Branding
+                VStack(spacing: 8) {
+                    Image("MrFoxSittingLite")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(height: 80)
+                    
+                    Text("Mr. Fox, LLC")
+                        .font(.caption)
+                        .foregroundColor(Color(red: 1.0, green: 0.6, blue: 0.0))
+                }
+                .padding(.bottom, 32)
             }
             .background(AppPalette.bgGradient.ignoresSafeArea())
         }
