@@ -170,26 +170,6 @@ All Group Members Invited Automatically
 
 ---
 
-
-## 🤝 Contributing
-
-Rangley is currently a private project, but contributions are welcome! If you'd like to contribute:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-### Development Guidelines
-- Follow Swift style conventions
-- Use SwiftUI best practices
-- Add comments for complex logic
-- Test on multiple iOS versions and device sizes
-- Ensure accessibility features work correctly
-
----
-
 ## 📄 License
 
 This project is proprietary software created by Anthony Guzzardo / Mr. Fox, LLC.
