@@ -118,17 +118,6 @@ CREATE TABLE rangley.td_features
 );
 
 
--- Add a versions master table
-CREATE TABLE rangley.td_versions
-(
-    version  		INT4 NOT NULLL,  -- "1.0.0", "2.0.0"
-    status 			VARCHAR(20) NOT NULL DEFAULT 'active',  -- 'active', 'pending', 'deprecated'
-    released_at 	TIMESTAMPTZ,
-    deprecated_at 	TIMESTAMPTZ,
-    
-
-);
-
 
 CREATE TABLE rangley.td_participant_status
 (
@@ -158,8 +147,6 @@ CREATE TABLE rangley.td_stock_assets
 );
 
 CREATE INDEX idx_stock_assets_category ON rangley.td_stock_assets (asset_category, is_active);
-
-
 
 
 

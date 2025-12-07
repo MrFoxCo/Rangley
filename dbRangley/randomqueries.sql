@@ -9,7 +9,7 @@ select * from rangley.te_version_features;
 INSERT INTO rangley.td_features (feature_id, name) VALUES (13, 'meet groups');
 INSERT INTO rangley.te_version_features (version, feature_id) VALUES (20000, 13);
 
-INSERT INTO rangley.td_versions (version, status_id) VALUES (20001, 2);
+INSERT INTO rangley.td_versions (version, status_id) VALUES (20002, 2);
 
 
 select * from rangley.te_version_statuses;
@@ -17,9 +17,16 @@ select * from rangley.te_version_statuses;
 select * from rangley.td_features;
 select * from rangley.td_versions;
 
-UPDATE rangley.td_versions 
-SET dttm_created_utc = '2025-09-01'::TIMESTAMPTZ 
-WHERE version = 10000;
+UPDATE rangley.td_versions
+set   dttm_deprecated_utc = NOW()
+WHERE version = 20000;
+
+
+SELECT version, status_id, dttm_released_utc, dttm_deprecated_utc 
+   FROM rangley.td_versions 
+   WHERE version = 20001;
+
+SELECT * FROM rangley.rangley_fn_v_app_version(20001);
 
 
 select * from rangley.vw_meet_ids;
